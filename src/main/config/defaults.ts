@@ -1,0 +1,60 @@
+import type { AppConfig } from '@shared/config';
+
+export function createDefaultConfig(appVersion: string): AppConfig {
+  return {
+    version: appVersion,
+    language: 'ru',
+    window: {
+      width: 1280,
+      height: 800,
+      maximized: false
+    },
+    onboarding: {
+      completed: false
+    },
+    ui: {
+      expertMode: false,
+      hints: {
+        commandCatalog: true,
+        outputTooltips: true,
+        errorPanel: true,
+        connectionDialog: true
+      },
+      theme: 'dark',
+      notifications: {
+        systemToasts: true,
+        longCommandThresholdSec: 30
+      },
+      dashboardVisible: true,
+      catalogPanelOpen: true,
+      leftPanelWidth: 220,
+      rightPanelWidth: 320
+    },
+    terminal: {
+      font: 'JetBrains Mono',
+      fontSize: 13,
+      opacity: 1,
+      bell: 'off',
+      brightBold: true,
+      selectToCopy: false,
+      rightClickPaste: false
+    },
+    connection: {
+      autoreconnect: true,
+      keepaliveIntervalSec: 30,
+      connectTimeoutSec: 15
+    },
+    guard: {
+      globalEnabled: true
+    },
+    history: {
+      enabled: true,
+      perHostDisabled: []
+    },
+    shownCounts: {},
+    updates: {
+      autoCheck: true,
+      source: ''
+    }
+  };
+}

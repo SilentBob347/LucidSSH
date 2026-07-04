@@ -1,0 +1,157 @@
+import { contextBridge, ipcRenderer } from 'electron';
+import { IPC, type AppInfo } from '@shared/ipc';
+import type { Host, HostGroup, HostInput, ImportPreview } from '@shared/hosts';
+import type { ConnectionLogEntry, HostKeyPrompt, SessionInfo, SessionStatus } from '@shared/ssh';
+import type { AppConfig } from '@shared/config';
+import type { SubmitResult } from '@shared/guard';
+import type { Breadcrumb } from '@shared/breadcrumb';
+import type { DashboardMetrics } from '@shared/dashboard';
+
+/**
+ * Минимальный preload (SEC-05): только конкретные операции,
+ * никаких универсальных send/invoke, никакого доступа к Node из renderer.
+ */
+
+const api = {
+  // --- Приложение ---
+  getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke(IPC.appGetInfo),
+
+  // --- Буфер обмена ---
+  clipboardRead: (): Promise<string> => ipcRenderer.invoke(IPC.clipboardRead),
+  clipboardWrite: (text: string): void => ipcRenderer.send(IPC.clipboardWrite, text),
+
+  // --- Настройки ---
+  getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.configGet),
+  updateConfig: (path: string, value: string | number | boolean): Promise<AppConfig> =>
+    ipcRenderer.invoke(IPC.configUpdate, path, value),
+
+  // --- i18n ---
+  i18nGetResource: (lng: string, ns: string): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke(IPC.i18nGetResource, lng, ns),
+  i18nListLanguages: (): Promise<string[]> => ipcRenderer.invoke(IPC.i18nListLanguages),
+  i18nGetLanguage: (): Promise<string> => ipcRenderer.invoke(IPC.i18nGetLanguage),
+  i18nSetLanguage: (lng: string): Promise<void> => ipcRenderer.invoke(IPC.i18nSetLanguage, lng),
+
+  // --- Хосты и группы (HM-01…HM-06) ---
+  listHosts: (): Promise<Host[]> => ipcRenderer.invoke(IPC.hostsList),
+  listGroups: (): Promise<HostGroup[]> => ipcRenderer.invoke(IPC.groupsList),
+  // secret сразу уходит в keychain в main и не возвращается (SEC-01)
+  createHost: (input: HostInput, secret?: string): Promise<{ id: number }> =>
+    ipcRenderer.invoke(IPC.hostCreate, input, secret),
+  updateHost: (id: number, input: HostInput, secret?: string): Promise<void> =>
+    ipcRenderer.invoke(IPC.hostUpdate, id, input, secret),
+  deleteHost: (id: number): Promise<void> => ipcRenderer.invoke(IPC.hostDelete, id),
+  hostHasSecret: (id: number): Promise<boolean> => ipcRenderer.invoke(IPC.hostHasSecret, id),
+  hostDeleteSecret: (id: number): Promise<void> => ipcRenderer.invoke(IPC.hostDeleteSecret, id),
+  pickKeyFile: (): Promise<string | null> => ipcRenderer.invoke(IPC.hostPickKeyFile),
+  createGroup: (name: string): Promise<{ id: number }> => ipcRenderer.invoke(IPC.groupCreate, name),
+  renameGroup: (id: number, name: string): Promise<void> =>
+    ipcRenderer.invoke(IPC.groupRename, id, name),
+  setGroupCollapsed: (id: number, collapsed: boolean): Promise<void> =>
+    ipcRenderer.invoke(IPC.groupSetCollapsed, id, collapsed),
+  deleteGroup: (id: number): Promise<void> => ipcRenderer.invoke(IPC.groupDelete, id),
+
+  // --- Экспорт / импорт (EXP-01…04) ---
+  exportHosts: (): Promise<{ saved: boolean }> => ipcRenderer.invoke(IPC.hostsExport),
+  pickImportHosts: (): Promise<{ json: string; preview: ImportPreview } | null> =>
+    ipcRenderer.invoke(IPC.hostsImportPick),
+  applyImportHosts: (
+    json: string,
+    strategy: 'skip' | 'rename'
+  ): Promise<{ imported: number; skipped: number }> =>
+    ipcRenderer.invoke(IPC.hostsImportApply, json, strategy),
+
+  // --- SSH-сессии (SSH-01…07, CLOG) ---
+  connectHost: (hostId: number): Promise<{ sessionId: string }> =>
+    ipcRenderer.invoke(IPC.sessionConnect, hostId),
+  disconnectSession: (sessionId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC.sessionDisconnect, sessionId),
+  destroySession: (sessionId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC.sessionDestroy, sessionId),
+  listSessions: (): Promise<SessionInfo[]> => ipcRenderer.invoke(IPC.sessionList),
+  getConnectionLog: (sessionId: string): Promise<ConnectionLogEntry[]> =>
+    ipcRenderer.invoke(IPC.sessionGetLog, sessionId),
+  confirmHostKey: (requestId: string, decision: 'accept' | 'reject'): Promise<void> =>
+    ipcRenderer.invoke(IPC.hostKeyConfirm, requestId, decision),
+
+  // --- Страж (команда идёт на сервер только через эту проверку) ---
+  submitCommand: (sessionId: string, command: string): Promise<SubmitResult> =>
+    ipcRenderer.invoke(IPC.guardSubmit, sessionId, command),
+  confirmDangerousCommand: (requestId: string, confirmationText: string): Promise<{ allowed: boolean }> =>
+    ipcRenderer.invoke(IPC.guardConfirm, requestId, confirmationText),
+  cancelDangerousCommand: (requestId: string): void => ipcRenderer.send(IPC.guardCancel, requestId),
+  sendTerminalInput: (sessionId: string, data: string): void =>
+    ipcRenderer.send(IPC.sessionSendInput, sessionId, data),
+  resizeSession: (sessionId: string, cols: number, rows: number): void =>
+    ipcRenderer.send(IPC.sessionResize, sessionId, cols, rows),
+  onTerminalData: (cb: (sessionId: string, data: string) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, sessionId: string, data: string): void =>
+      cb(sessionId, data);
+    ipcRenderer.on(IPC.evTerminalData, listener);
+    return () => ipcRenderer.removeListener(IPC.evTerminalData, listener);
+  },
+  onSessionStatus: (cb: (sessionId: string, status: SessionStatus) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, sessionId: string, status: SessionStatus): void =>
+      cb(sessionId, status);
+    ipcRenderer.on(IPC.evSessionStatus, listener);
+    return () => ipcRenderer.removeListener(IPC.evSessionStatus, listener);
+  },
+  onHostKeyPrompt: (cb: (prompt: HostKeyPrompt) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, prompt: HostKeyPrompt): void => cb(prompt);
+    ipcRenderer.on(IPC.evHostKeyPrompt, listener);
+    return () => ipcRenderer.removeListener(IPC.evHostKeyPrompt, listener);
+  },
+  onConnectionLog: (
+    cb: (sessionId: string, entry: ConnectionLogEntry) => void
+  ): (() => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      sessionId: string,
+      entry: ConnectionLogEntry
+    ): void => cb(sessionId, entry);
+    ipcRenderer.on(IPC.evConnectionLog, listener);
+    return () => ipcRenderer.removeListener(IPC.evConnectionLog, listener);
+  },
+  onBreadcrumb: (cb: (sessionId: string, crumb: Breadcrumb) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, sessionId: string, crumb: Breadcrumb): void =>
+      cb(sessionId, crumb);
+    ipcRenderer.on(IPC.evBreadcrumb, listener);
+    return () => ipcRenderer.removeListener(IPC.evBreadcrumb, listener);
+  },
+  onDashboard: (cb: (sessionId: string, metrics: DashboardMetrics) => void): (() => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      sessionId: string,
+      metrics: DashboardMetrics
+    ): void => cb(sessionId, metrics);
+    ipcRenderer.on(IPC.evDashboard, listener);
+    return () => ipcRenderer.removeListener(IPC.evDashboard, listener);
+  },
+
+  // --- Onboarding (OB-01…03) ---
+  puttySessionsCount: (): Promise<number> => ipcRenderer.invoke(IPC.puttySessionsCount),
+  onboardingComplete: (): Promise<void> => ipcRenderer.invoke(IPC.onboardingComplete),
+  onboardingStatus: (): Promise<boolean> => ipcRenderer.invoke(IPC.onboardingStatus),
+
+  // --- Окно (кастомный тайтл-бар) ---
+  windowMinimize: (): void => ipcRenderer.send(IPC.windowMinimize),
+  windowToggleMaximize: (): void => ipcRenderer.send(IPC.windowToggleMaximize),
+  windowClose: (): void => ipcRenderer.send(IPC.windowClose),
+  windowConfirmClose: (): void => ipcRenderer.send(IPC.windowConfirmClose),
+  onConfirmWindowClose: (cb: (activeCount: number) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, activeCount: number): void => cb(activeCount);
+    ipcRenderer.on(IPC.evConfirmWindowClose, listener);
+    return () => ipcRenderer.removeListener(IPC.evConfirmWindowClose, listener);
+  },
+  onWindowMaximized: (cb: (maximized: boolean) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, maximized: boolean): void => {
+      cb(maximized === true);
+    };
+    ipcRenderer.on(IPC.evWindowMaximized, listener);
+    return () => ipcRenderer.removeListener(IPC.evWindowMaximized, listener);
+  }
+} as const;
+
+export type LucidSSHBridge = typeof api;
+
+contextBridge.exposeInMainWorld('lucidSSH', api);
