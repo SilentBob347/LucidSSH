@@ -55,6 +55,9 @@ export const IPC = {
   guardConfirm: 'guard:confirm',
   guardCancel: 'guard:cancel',
 
+  // --- Каталог команд / детектор ошибок (встроенные базы) ---
+  catalogGet: 'catalog:get',
+
   // --- Onboarding (OB-01…03) ---
   puttySessionsCount: 'onboarding:putty-count',
   onboardingComplete: 'onboarding:complete',
@@ -74,7 +77,8 @@ export const IPC = {
   evTerminalData: 'ev:terminal-data',
   evConfirmWindowClose: 'ev:confirm-window-close',
   evBreadcrumb: 'ev:breadcrumb',
-  evDashboard: 'ev:dashboard'
+  evDashboard: 'ev:dashboard',
+  evError: 'ev:error'
 } as const;
 
 export interface AppInfo {

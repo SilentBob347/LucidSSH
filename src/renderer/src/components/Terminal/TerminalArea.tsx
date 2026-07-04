@@ -12,7 +12,9 @@ import { TerminalSearchBar } from './TerminalSearchBar';
 import { BottomInputBar } from './BottomInputBar';
 import { DangerGuardModal } from '@/components/Guard/DangerGuardModal';
 import { BreadcrumbBar } from '@/components/Breadcrumb/BreadcrumbBar';
+import { ErrorDetector } from './ErrorDetector';
 import { insertIntoComposer } from '@/stores/composerBus';
+import { useConfig } from '@/stores/config';
 
 /**
  * Центральная область (Design_Brief §3.3): таб-бар, xterm.js, контекстное меню
@@ -21,7 +23,9 @@ import { insertIntoComposer } from '@/stores/composerBus';
  */
 export function TerminalArea(): JSX.Element {
   const { t } = useTranslation();
-  const { sessions, activeSessionId, reconnect, breadcrumbs, dashboards } = useSessions();
+  const { sessions, activeSessionId, reconnect, breadcrumbs, dashboards, errors, dismissError } =
+    useSessions();
+  const { config, update } = useConfig();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(
     null
@@ -136,6 +140,14 @@ export function TerminalArea(): JSX.Element {
         {active && detailsOpen && (
           <ConnectionLogPanel sessionId={active.sessionId} onClose={() => setDetailsOpen(false)} />
         )}
+        {/* Детектор ошибок выезжает снизу, не перекрывая строку ввода (ERR-03) */}
+        {active && errors[active.sessionId] && (
+          <ErrorDetector
+            sessionId={active.sessionId}
+            explanation={errors[active.sessionId]!}
+            onClose={() => dismissError(active.sessionId)}
+          />
+        )}
       </div>
 
       {/* Композер команд — перехватывается Стражем (GUARD-02). Показан для живой сессии. */}
@@ -146,9 +158,7 @@ export function TerminalArea(): JSX.Element {
           onOpenHistory={() => {
             /* Панель истории — Этап 7 */
           }}
-          onToggleCatalog={() => {
-            /* Переключение каталога — Этап 6 */
-          }}
+          onToggleCatalog={() => void update('ui.catalogPanelOpen', !(config?.ui.catalogPanelOpen ?? false))}
         />
       )}
 

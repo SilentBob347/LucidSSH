@@ -1,0 +1,106 @@
+{
+  "version": "1.0.0",
+  "patterns": [
+    {
+      "id": "permission-denied",
+      "match": "(?i)permission denied",
+      "category": "filesystem",
+      "scope": "command",
+      "checks": [
+        { "command": "sudo {original}" },
+        { "command": "ls -la {target}" },
+        { "command": "whoami" }
+      ]
+    },
+    {
+      "id": "no-such-file",
+      "match": "(?i)no such file or directory",
+      "category": "filesystem",
+      "scope": "command",
+      "checks": [
+        { "command": "ls -la {target}" },
+        { "command": "pwd" }
+      ]
+    },
+    {
+      "id": "command-not-found",
+      "match": "(?i)(command not found|not found$|: not found)",
+      "category": "shell",
+      "scope": "command",
+      "checks": [
+        { "command": "which {target}" },
+        { "command": "apt list --installed 2>/dev/null | grep -i {target}" }
+      ]
+    },
+    {
+      "id": "disk-full",
+      "match": "(?i)(no space left on device|disk full)",
+      "category": "system",
+      "scope": "command",
+      "checks": [
+        { "command": "df -h" },
+        { "command": "du -sh * | sort -rh | head" }
+      ]
+    },
+    {
+      "id": "out-of-memory",
+      "match": "(?i)(out of memory|cannot allocate memory|oom)",
+      "category": "system",
+      "scope": "command",
+      "checks": [
+        { "command": "free -h" },
+        { "command": "ps aux --sort=-%mem | head" }
+      ]
+    },
+    {
+      "id": "segfault",
+      "match": "(?i)segmentation fault|core dumped",
+      "category": "process",
+      "scope": "command",
+      "checks": [
+        { "command": "dmesg | tail" }
+      ]
+    },
+    {
+      "id": "syntax-error",
+      "match": "(?i)syntax error",
+      "category": "shell",
+      "scope": "command",
+      "checks": []
+    },
+    {
+      "id": "ssh-connection-refused",
+      "match": "(?i)connection refused",
+      "category": "network",
+      "scope": "ssh-connection",
+      "checks": [
+        { "command": "ping -c 3 {target}" }
+      ]
+    },
+    {
+      "id": "ssh-permission-denied-publickey",
+      "match": "(?i)permission denied \\(publickey",
+      "category": "auth",
+      "scope": "ssh-connection",
+      "checks": [
+        { "command": "ssh-add -l" }
+      ]
+    },
+    {
+      "id": "ssh-host-key-verification-failed",
+      "match": "(?i)host key verification failed",
+      "category": "auth",
+      "scope": "ssh-connection",
+      "checks": []
+    },
+    {
+      "id": "ssh-connection-timed-out",
+      "match": "(?i)(connection timed out|operation timed out)",
+      "category": "network",
+      "scope": "ssh-connection",
+      "checks": [
+        { "command": "ping -c 3 {target}" }
+      ]
+    }
+  ]
+}

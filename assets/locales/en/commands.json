@@ -1,0 +1,63 @@
+{
+  "categories": {
+    "files": "Files",
+    "processes": "Processes",
+    "network": "Network",
+    "system": "System",
+    "text": "Text"
+  },
+  "commands": {
+    "ls": { "summary": "List directory contents", "keywords": ["list", "files", "directory", "show"], "flags": {
+      "-l": "Detailed list with permissions and size", "-la": "Detailed and with hidden files", "-h": "Human-readable sizes", "-R": "Recurse into subdirectories" } },
+    "cd": { "summary": "Change directory", "keywords": ["change", "folder", "directory"], "flags": {} },
+    "cp": { "summary": "Copy files or folders", "keywords": ["copy", "duplicate"], "flags": {
+      "-r": "Recursive (for folders)", "-p": "Preserve permissions and time", "-v": "Show what is copied" } },
+    "mv": { "summary": "Move or rename", "keywords": ["move", "rename"], "flags": {
+      "-i": "Ask before overwrite", "-v": "Show what is moved" } },
+    "rm": { "summary": "Remove files or folders", "keywords": ["delete", "remove", "erase"], "flags": {
+      "-r": "Recursive (folders and contents)", "-f": "No confirmations", "-i": "Ask per file" } },
+    "mkdir": { "summary": "Create a directory", "keywords": ["create", "folder", "directory"], "flags": {
+      "-p": "Create parent folders", "-v": "Show what is created" } },
+    "chmod": { "summary": "Change permissions", "keywords": ["permissions", "access", "rights"], "flags": {
+      "+x": "Make executable", "-R": "Recursive", "755": "rwx for owner, rx for others", "644": "rw for owner, r for others" } },
+    "chown": { "summary": "Change owner", "keywords": ["owner", "rights"], "flags": { "-R": "Recursive" } },
+    "find": { "summary": "Find files by criteria", "keywords": ["find", "search"], "flags": {
+      "-name": "By name", "-type f": "Files only", "-mtime": "By modification time" } },
+    "du": { "summary": "Show folder sizes", "keywords": ["size", "usage", "space"], "flags": {
+      "-sh": "Total and human-readable", "-h": "Human-readable" } },
+
+    "ps": { "summary": "List processes", "keywords": ["processes", "running", "programs"], "flags": {
+      "aux": "All processes of all users", "-ef": "Full list" } },
+    "top": { "summary": "Real-time process monitor", "keywords": ["monitor", "load", "processes"], "flags": {} },
+    "kill": { "summary": "Send a signal to a process", "keywords": ["kill", "terminate", "stop"], "flags": {
+      "-9": "Force (KILL)", "-15": "Graceful (TERM)" } },
+    "killall": { "summary": "Kill processes by name", "keywords": ["kill", "terminate", "all"], "flags": { "-9": "Force" } },
+    "systemctl": { "summary": "Manage services", "keywords": ["service", "daemon"], "flags": {
+      "status": "Service status", "restart": "Restart", "start": "Start", "stop": "Stop" } },
+
+    "ping": { "summary": "Check host reachability", "keywords": ["ping", "reachability"], "flags": { "-c 4": "Send 4 packets" } },
+    "curl": { "summary": "HTTP request from the terminal", "keywords": ["request", "download", "http"], "flags": {
+      "-I": "Headers only", "-L": "Follow redirects", "-o": "Save to file" } },
+    "wget": { "summary": "Download a file", "keywords": ["download"], "flags": { "-O": "Output file name", "-c": "Resume" } },
+    "netstat": { "summary": "Network connections and ports", "keywords": ["ports", "connections", "network"], "flags": {
+      "-tulpn": "Listening ports with processes" } },
+    "ss": { "summary": "Sockets and ports (faster than netstat)", "keywords": ["ports", "sockets", "connections"], "flags": {
+      "-tulpn": "Listening ports with processes" } },
+
+    "df": { "summary": "Free disk space", "keywords": ["disk", "space", "free"], "flags": { "-h": "Human-readable" } },
+    "free": { "summary": "Memory usage", "keywords": ["memory", "ram"], "flags": { "-h": "Human-readable" } },
+    "uptime": { "summary": "Uptime and load", "keywords": ["uptime", "load"], "flags": {} },
+    "uname": { "summary": "System and kernel info", "keywords": ["system", "kernel", "version"], "flags": { "-a": "All info" } },
+    "journalctl": { "summary": "System log (systemd)", "keywords": ["logs", "journal"], "flags": {
+      "-u": "By service", "-f": "Follow in real time", "-n 100": "Last 100 lines" } },
+
+    "cat": { "summary": "Print file contents", "keywords": ["show", "contents", "file"], "flags": { "-n": "With line numbers" } },
+    "grep": { "summary": "Search text by pattern", "keywords": ["find", "search", "text", "filter"], "flags": {
+      "-i": "Case-insensitive", "-r": "Recursive", "-n": "With line numbers", "-v": "Invert (non-matching)" } },
+    "tail": { "summary": "Last lines of a file", "keywords": ["end", "last", "logs"], "flags": {
+      "-f": "Follow new lines", "-n 100": "Last 100 lines" } },
+    "head": { "summary": "First lines of a file", "keywords": ["start", "first"], "flags": { "-n 20": "First 20 lines" } },
+    "less": { "summary": "Paged file viewer", "keywords": ["view", "read"], "flags": {} },
+    "sed": { "summary": "Stream text editing", "keywords": ["replace", "edit"], "flags": { "-i": "Edit file in place" } }
+  }
+}

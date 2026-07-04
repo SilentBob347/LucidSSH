@@ -1,0 +1,57 @@
+{
+  "permission-denied": {
+    "title": "Permission denied",
+    "explanation": "The current user is not allowed to do this. The file or directory belongs to another user (often root).",
+    "checks": ["Run with sudo", "Check the owner and permissions", "Check who you are now"]
+  },
+  "no-such-file": {
+    "title": "No such file or directory",
+    "explanation": "The path is wrong or the object does not exist. Check the spelling and your current directory.",
+    "checks": ["List the directory contents", "Check the current directory"]
+  },
+  "command-not-found": {
+    "title": "Command not found",
+    "explanation": "No such program in PATH. It may not be installed, or the name has a typo.",
+    "checks": ["Check where the command is", "Search installed packages"]
+  },
+  "disk-full": {
+    "title": "No space left on device",
+    "explanation": "The partition is out of free space. Free some space or grow the disk.",
+    "checks": ["Show disk usage", "Find the largest folders"]
+  },
+  "out-of-memory": {
+    "title": "Out of memory",
+    "explanation": "The system ran out of RAM for the operation. The process may have been killed by the OOM killer.",
+    "checks": ["Show free memory", "Find memory-hungry processes"]
+  },
+  "segfault": {
+    "title": "Segmentation fault",
+    "explanation": "The program accessed invalid memory and crashed. This is often a bug in the program itself.",
+    "checks": ["Check the kernel log"]
+  },
+  "syntax-error": {
+    "title": "Syntax error",
+    "explanation": "The shell or interpreter could not parse the command. Check quotes, brackets and special characters.",
+    "checks": []
+  },
+  "ssh-connection-refused": {
+    "title": "Connection refused",
+    "explanation": "The server is reachable, but nothing listens on that port. The SSH service may be down or the port differs.",
+    "checks": ["Check network reachability"]
+  },
+  "ssh-permission-denied-publickey": {
+    "title": "Key was rejected",
+    "explanation": "The server rejected key authentication. The public key is not on the server, the wrong key is used, or key file permissions are wrong.",
+    "checks": ["List keys in the agent"]
+  },
+  "ssh-host-key-verification-failed": {
+    "title": "Host key verification failed",
+    "explanation": "The server fingerprint does not match the one saved in known_hosts. The server may have been reinstalled — or this is an interception attempt. Do not connect until you are sure it is your server.",
+    "checks": []
+  },
+  "ssh-connection-timed-out": {
+    "title": "Connection timed out",
+    "explanation": "The server did not respond in time. It may be off, unreachable, or blocked by a firewall.",
+    "checks": ["Check network reachability"]
+  }
+}

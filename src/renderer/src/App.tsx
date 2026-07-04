@@ -31,6 +31,7 @@ function AppBody(): JSX.Element {
   const showWelcome = loaded && hosts.length === 0;
   const leftWidth = config?.ui.leftPanelWidth ?? 220;
   const rightWidth = config?.ui.rightPanelWidth ?? 320;
+  const catalogOpen = config?.ui.catalogPanelOpen ?? false;
 
   return (
     <div className="flex h-full flex-col">
@@ -50,14 +51,22 @@ function AppBody(): JSX.Element {
             onCommit={(w) => void update('ui.leftPanelWidth', w)}
           />
           <TerminalArea />
-          <ResizeDivider
-            side="right"
-            targetRef={rightRef}
-            min={200}
-            max={480}
-            onCommit={(w) => void update('ui.rightPanelWidth', w)}
-          />
-          <CatalogPanel ref={rightRef} width={rightWidth} />
+          {catalogOpen && (
+            <>
+              <ResizeDivider
+                side="right"
+                targetRef={rightRef}
+                min={200}
+                max={480}
+                onCommit={(w) => void update('ui.rightPanelWidth', w)}
+              />
+              <CatalogPanel
+                ref={rightRef}
+                width={rightWidth}
+                onClose={() => void update('ui.catalogPanelOpen', false)}
+              />
+            </>
+          )}
         </div>
       )}
       <StatusBar />

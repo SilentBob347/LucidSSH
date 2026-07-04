@@ -28,8 +28,9 @@ const APC_END = '\x1b\\';
  * историю при HISTCONTROL=ignorespace.
  */
 export const SHELL_INTEGRATION_SETUP =
-  ` __lucidssh_mark() { printf '\\033_lucidssh${US}%s${US}%s${US}%s${US}%s\\033\\\\' ` +
-  `"\${USER:-$(id -un 2>/dev/null)}" "\${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD" "$(id -u 2>/dev/null)"; }; ` +
+  // __lc=$? — код возврата последней команды снимается ПЕРВЫМ, до любых операций (ERR-01)
+  ` __lucidssh_mark() { __lc=$?; printf '\\033_lucidssh${US}%s${US}%s${US}%s${US}%s${US}%s\\033\\\\' ` +
+  `"\${USER:-$(id -un 2>/dev/null)}" "\${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD" "$(id -u 2>/dev/null)" "$__lc"; }; ` +
   `if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __lucidssh_mark 2>/dev/null || precmd_functions+=(__lucidssh_mark); ` +
   `else case "$PROMPT_COMMAND" in *__lucidssh_mark*) ;; *) PROMPT_COMMAND="__lucidssh_mark;$PROMPT_COMMAND";; esac; fi; ` +
   `printf '\\033[H\\033[2J'; __lucidssh_mark\n`;
@@ -37,17 +38,23 @@ export const SHELL_INTEGRATION_SETUP =
 // eslint-disable-next-line no-control-regex
 const MARKER_RE = /\x1b_lucidssh([\s\S]*?)\x1b\\/;
 
+/** Результат одного маркера: breadcrumb + код возврата последней команды. */
+export interface ShellMark {
+  crumb: Breadcrumb;
+  exitCode: number | null;
+}
+
 /**
  * Потоковый парсер маркеров: удерживает «хвост» на случай, если APC-маркер
- * разрезан между чанками. Возвращает очищенный вывод и распознанные breadcrumb.
+ * разрезан между чанками. Возвращает очищенный вывод и распознанные маркеры.
  */
 export class BreadcrumbParser {
   private pending = '';
 
-  push(chunk: string): { cleaned: string; crumbs: Breadcrumb[] } {
+  push(chunk: string): { cleaned: string; marks: ShellMark[] } {
     let buf = this.pending + chunk;
     this.pending = '';
-    const crumbs: Breadcrumb[] = [];
+    const marks: ShellMark[] = [];
     let cleaned = '';
 
     for (;;) {
@@ -63,12 +70,12 @@ export class BreadcrumbParser {
           cleaned += this.pending;
           this.pending = '';
         }
-        return { cleaned, crumbs };
+        return { cleaned, marks };
       }
       cleaned += buf.slice(0, startIdx);
       const marker = buf.slice(startIdx, endIdx + APC_END.length);
-      const crumb = parseMarker(marker);
-      if (crumb) crumbs.push(crumb);
+      const mark = parseMarker(marker);
+      if (mark) marks.push(mark);
       buf = buf.slice(endIdx + APC_END.length);
     }
 
@@ -81,22 +88,23 @@ export class BreadcrumbParser {
     } else {
       cleaned += buf;
     }
-    return { cleaned, crumbs };
+    return { cleaned, marks };
   }
 }
 
-function parseMarker(marker: string): Breadcrumb | null {
+function parseMarker(marker: string): ShellMark | null {
   const m = marker.match(MARKER_RE);
   if (!m || !m[1]) return null;
-  // Формат содержимого: US u US h US p US e → split даёт ['', u, h, p, e].
+  // Формат содержимого: US u US h US p US euid US exit → split даёт ['', u, h, p, euid, exit].
   const parts = m[1].split(US);
   const fields = parts[0] === '' ? parts.slice(1) : parts;
   if (fields.length < 4) return null;
-  const [username, host, path, euidStr] = fields;
+  const [username, host, path, euidStr, exitStr] = fields;
   const euid = Number(euidStr);
+  const exitNum = exitStr === undefined ? NaN : Number(exitStr);
   const privilege: Breadcrumb['privilege'] =
     euid === 0 ? 'root' : process.env['SUDO_USER'] ? 'sudo' : 'normal';
-  return {
+  const crumb: Breadcrumb = {
     username: (username ?? '').slice(0, 64),
     host: (host ?? '').slice(0, 128),
     path: (path ?? '').slice(0, 4096),
@@ -104,6 +112,7 @@ function parseMarker(marker: string): Breadcrumb | null {
     // без euid считаем normal
     privilege: Number.isFinite(euid) ? privilege : 'normal'
   };
+  return { crumb, exitCode: Number.isInteger(exitNum) ? exitNum : null };
 }
 
 /**

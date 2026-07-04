@@ -6,6 +6,7 @@ import type { AppConfig } from '@shared/config';
 import type { SubmitResult } from '@shared/guard';
 import type { Breadcrumb } from '@shared/breadcrumb';
 import type { DashboardMetrics } from '@shared/dashboard';
+import type { CommandsDatabase, ErrorExplanation } from '@shared/content';
 
 /**
  * Минимальный preload (SEC-05): только конкретные операции,
@@ -127,6 +128,18 @@ const api = {
     ipcRenderer.on(IPC.evDashboard, listener);
     return () => ipcRenderer.removeListener(IPC.evDashboard, listener);
   },
+  onError: (cb: (sessionId: string, explanation: ErrorExplanation) => void): (() => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      sessionId: string,
+      explanation: ErrorExplanation
+    ): void => cb(sessionId, explanation);
+    ipcRenderer.on(IPC.evError, listener);
+    return () => ipcRenderer.removeListener(IPC.evError, listener);
+  },
+
+  // --- Каталог команд ---
+  getCommandCatalog: (): Promise<CommandsDatabase> => ipcRenderer.invoke(IPC.catalogGet),
 
   // --- Onboarding (OB-01…03) ---
   puttySessionsCount: (): Promise<number> => ipcRenderer.invoke(IPC.puttySessionsCount),

@@ -1,0 +1,95 @@
+{
+  "version": "1.0.0",
+  "categories": ["files", "processes", "network", "system", "text"],
+  "commands": [
+    { "name": "ls", "category": "files", "dangerous": false, "flags": [
+      { "flag": "-l" }, { "flag": "-la" }, { "flag": "-h" }, { "flag": "-R" }
+    ] },
+    { "name": "cd", "category": "files", "dangerous": false, "flags": [] },
+    { "name": "cp", "category": "files", "dangerous": false, "flags": [
+      { "flag": "-r" }, { "flag": "-p" }, { "flag": "-v" }
+    ] },
+    { "name": "mv", "category": "files", "dangerous": false, "flags": [
+      { "flag": "-i" }, { "flag": "-v" }
+    ] },
+    { "name": "rm", "category": "files", "dangerous": true, "flags": [
+      { "flag": "-r" }, { "flag": "-f" }, { "flag": "-i" }
+    ] },
+    { "name": "mkdir", "category": "files", "dangerous": false, "flags": [
+      { "flag": "-p" }, { "flag": "-v" }
+    ] },
+    { "name": "chmod", "category": "files", "dangerous": true, "flags": [
+      { "flag": "+x" }, { "flag": "-R" }, { "flag": "755" }, { "flag": "644" }
+    ] },
+    { "name": "chown", "category": "files", "dangerous": true, "flags": [
+      { "flag": "-R" }
+    ] },
+    { "name": "find", "category": "files", "dangerous": false, "flags": [
+      { "flag": "-name" }, { "flag": "-type f" }, { "flag": "-mtime" }
+    ] },
+    { "name": "du", "category": "files", "dangerous": false, "flags": [
+      { "flag": "-sh" }, { "flag": "-h" }
+    ] },
+
+    { "name": "ps", "category": "processes", "dangerous": false, "flags": [
+      { "flag": "aux" }, { "flag": "-ef" }
+    ] },
+    { "name": "top", "category": "processes", "dangerous": false, "flags": [] },
+    { "name": "kill", "category": "processes", "dangerous": true, "flags": [
+      { "flag": "-9" }, { "flag": "-15" }
+    ] },
+    { "name": "killall", "category": "processes", "dangerous": true, "flags": [
+      { "flag": "-9" }
+    ] },
+    { "name": "systemctl", "category": "processes", "dangerous": false, "flags": [
+      { "flag": "status" }, { "flag": "restart" }, { "flag": "start" }, { "flag": "stop" }
+    ] },
+
+    { "name": "ping", "category": "network", "dangerous": false, "flags": [
+      { "flag": "-c 4" }
+    ] },
+    { "name": "curl", "category": "network", "dangerous": false, "flags": [
+      { "flag": "-I" }, { "flag": "-L" }, { "flag": "-o" }
+    ] },
+    { "name": "wget", "category": "network", "dangerous": false, "flags": [
+      { "flag": "-O" }, { "flag": "-c" }
+    ] },
+    { "name": "netstat", "category": "network", "dangerous": false, "flags": [
+      { "flag": "-tulpn" }
+    ] },
+    { "name": "ss", "category": "network", "dangerous": false, "flags": [
+      { "flag": "-tulpn" }
+    ] },
+
+    { "name": "df", "category": "system", "dangerous": false, "flags": [
+      { "flag": "-h" }
+    ] },
+    { "name": "free", "category": "system", "dangerous": false, "flags": [
+      { "flag": "-h" }
+    ] },
+    { "name": "uptime", "category": "system", "dangerous": false, "flags": [] },
+    { "name": "uname", "category": "system", "dangerous": false, "flags": [
+      { "flag": "-a" }
+    ] },
+    { "name": "journalctl", "category": "system", "dangerous": false, "flags": [
+      { "flag": "-u" }, { "flag": "-f" }, { "flag": "-n 100" }
+    ] },
+
+    { "name": "cat", "category": "text", "dangerous": false, "flags": [
+      { "flag": "-n" }
+    ] },
+    { "name": "grep", "category": "text", "dangerous": false, "flags": [
+      { "flag": "-i" }, { "flag": "-r" }, { "flag": "-n" }, { "flag": "-v" }
+    ] },
+    { "name": "tail", "category": "text", "dangerous": false, "flags": [
+      { "flag": "-f" }, { "flag": "-n 100" }
+    ] },
+    { "name": "head", "category": "text", "dangerous": false, "flags": [
+      { "flag": "-n 20" }
+    ] },
+    { "name": "less", "category": "text", "dangerous": false, "flags": [] },
+    { "name": "sed", "category": "text", "dangerous": false, "flags": [
+      { "flag": "-i" }
+    ] }
+  ]
+}

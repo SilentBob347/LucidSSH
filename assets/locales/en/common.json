@@ -190,6 +190,16 @@
     "saveSnippet": "Save as snippet",
     "find": "Find in terminal"
   },
+  "errDetector": {
+    "whatToCheck": "What to check",
+    "close": "Close",
+    "copy": "Copy command",
+    "insert": "Insert into input",
+    "fallbackTitle": "Unknown error",
+    "fallbackExplain": "The command exited with an error (code {{code}}). No exact explanation found in the built-in database.",
+    "emptyOutput": "The command exited with code {{code}} without an error message. Try running it again with -v or check the service logs.",
+    "docSearch": "Search the docs"
+  },
   "paste": {
     "title": "Paste multiple lines",
     "body": "You are pasting {{count}} lines. Review the text before sending it to the server — it will run as is.",

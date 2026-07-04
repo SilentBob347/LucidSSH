@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { HostKeyPrompt, SessionInfo, SessionStatus } from '@shared/ssh';
 import type { Breadcrumb } from '@shared/breadcrumb';
 import type { DashboardMetrics } from '@shared/dashboard';
+import type { ErrorExplanation } from '@shared/content';
 
 /**
  * Стор SSH-сессий: список вкладок, активная сессия, ожидающие подтверждения
@@ -16,6 +17,8 @@ interface SessionsStore {
   hostKeyPrompt: HostKeyPrompt | null;
   breadcrumbs: Record<string, Breadcrumb>;
   dashboards: Record<string, DashboardMetrics>;
+  errors: Record<string, ErrorExplanation>;
+  dismissError: (sessionId: string) => void;
   connect: (hostId: number) => Promise<void>;
   select: (sessionId: string) => void;
   closeTab: (sessionId: string) => Promise<void>;
@@ -35,6 +38,7 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
   const [hostKeyPrompt, setHostKeyPrompt] = useState<HostKeyPrompt | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<Record<string, Breadcrumb>>({});
   const [dashboards, setDashboards] = useState<Record<string, DashboardMetrics>>({});
+  const [errors, setErrors] = useState<Record<string, ErrorExplanation>>({});
 
   useEffect(() => {
     const offStatus = window.lucidSSH.onSessionStatus(
@@ -51,12 +55,24 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
     const offDash = window.lucidSSH.onDashboard((sessionId, metrics) => {
       setDashboards((prev) => ({ ...prev, [sessionId]: metrics }));
     });
+    const offError = window.lucidSSH.onError((sessionId, explanation) => {
+      setErrors((prev) => ({ ...prev, [sessionId]: explanation }));
+    });
     return () => {
       offStatus();
       offPrompt();
       offCrumb();
       offDash();
+      offError();
     };
+  }, []);
+
+  const dismissError = useCallback((sessionId: string) => {
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[sessionId];
+      return next;
+    });
   }, []);
 
   const [labels, setLabels] = useState<Record<string, string>>({});
@@ -118,6 +134,11 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
         delete next[sessionId];
         return next;
       });
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
     },
     []
   );
@@ -146,6 +167,8 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       hostKeyPrompt,
       breadcrumbs,
       dashboards,
+      errors,
+      dismissError,
       connect,
       select: setActiveSessionId,
       closeTab,
@@ -160,6 +183,8 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       hostKeyPrompt,
       breadcrumbs,
       dashboards,
+      errors,
+      dismissError,
       connect,
       closeTab,
       reconnect,

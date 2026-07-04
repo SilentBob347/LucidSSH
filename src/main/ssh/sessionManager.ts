@@ -16,6 +16,10 @@ import {
 } from './knownHosts';
 import { BreadcrumbParser, SHELL_INTEGRATION_SETUP } from './shellIntegration';
 import { startDashboard, stopDashboard } from './dashboard';
+import { loadErrorPatterns } from '../content/loader';
+import { detectError, isEmptyOutput } from '../errors/detector';
+import { t } from '../i18n';
+import type { ErrorExplanation } from '@shared/content';
 
 /**
  * SSH-сессии (SSH-01…SSH-07, §9 Security_Guide).
@@ -39,6 +43,12 @@ interface ManagedSession {
   reconnectAttempts: number;
   connectStartedAt: number;
   breadcrumbParser: BreadcrumbParser;
+  /** Вывод с момента предыдущего маркера — для детектора ошибок (ERR-01). */
+  outputSinceMark: string;
+  /** Последняя команда, отправленная через композер/Стража (для {original}). */
+  lastCommand: string;
+  /** Первый маркер после подключения — приветствие, не результат команды. */
+  firstMarkSeen: boolean;
 }
 
 interface PendingHostKey {
@@ -138,7 +148,10 @@ export async function connectHost(hostId: number): Promise<{ sessionId: string }
     userClosed: false,
     reconnectAttempts: 0,
     connectStartedAt: Date.now(),
-    breadcrumbParser: new BreadcrumbParser()
+    breadcrumbParser: new BreadcrumbParser(),
+    outputSinceMark: '',
+    lastCommand: '',
+    firstMarkSeen: false
   };
   sessions.set(session.id, session);
   setStatus(session, 'connecting');
@@ -349,12 +362,22 @@ function openShell(session: ManagedSession, client: Client): void {
       setStatus(session, 'connected');
       log(session, 'info', 'clog.shellOpen', undefined, 'session');
 
-      // Вывод сервера проходит через парсер breadcrumb: APC-маркеры пути
-      // вырезаются (в xterm не попадают), из них формируется breadcrumb (BRD-04).
+      // Вывод сервера проходит через парсер breadcrumb: APC-маркеры вырезаются
+      // (в xterm не попадают), из них формируется breadcrumb (BRD-04) и
+      // отслеживается exit code для детектора ошибок (ERR-01).
       stream.on('data', (data: Buffer) => {
-        const { cleaned, crumbs } = session.breadcrumbParser.push(data.toString('utf8'));
-        if (cleaned) send(IPC.evTerminalData, session.id, cleaned);
-        for (const crumb of crumbs) send(IPC.evBreadcrumb, session.id, crumb);
+        const { cleaned, marks } = session.breadcrumbParser.push(data.toString('utf8'));
+        if (cleaned) {
+          send(IPC.evTerminalData, session.id, cleaned);
+          session.outputSinceMark += cleaned;
+          if (session.outputSinceMark.length > 65536) {
+            session.outputSinceMark = session.outputSinceMark.slice(-65536);
+          }
+        }
+        for (const mark of marks) {
+          send(IPC.evBreadcrumb, session.id, mark.crumb);
+          handleCommandFinished(session, mark.exitCode);
+        }
       });
       stream.stderr?.on('data', (data: Buffer) => {
         send(IPC.evTerminalData, session.id, data.toString('utf8'));
@@ -372,6 +395,47 @@ function openShell(session: ManagedSession, client: Client): void {
       startDashboard(session.id, client);
     }
   );
+}
+
+/**
+ * Обработка завершения команды по маркеру (ERR-01). Первый маркер после
+ * подключения — приветствие/сам setup, не команда, поэтому пропускается.
+ * При exit code ≠ 0 и включённой панели детектора (SET-05) — матч по базе.
+ */
+function handleCommandFinished(session: ManagedSession, exitCode: number | null): void {
+  const output = session.outputSinceMark;
+  session.outputSinceMark = '';
+
+  if (!session.firstMarkSeen) {
+    session.firstMarkSeen = true;
+    return;
+  }
+  if (exitCode === null || exitCode === 0) return;
+  if (!loadConfig().ui.hints.errorPanel) return; // отключено в «Интерфейсе»
+
+  const patterns = loadErrorPatterns(loadConfig().language);
+  const result = detectError(patterns, 'command', output, exitCode, session.lastCommand);
+
+  let explanation: ErrorExplanation;
+  if (result.matched) {
+    explanation = result.explanation;
+  } else {
+    // Fallback-шаблон (ERR-06): пустой stderr → осмысленный текст
+    const explainKey = isEmptyOutput(output) ? 'errDetector.emptyOutput' : 'errDetector.fallbackExplain';
+    explanation = {
+      title: t('errDetector.fallbackTitle'),
+      explanation: t(explainKey, { code: exitCode }),
+      checks: [],
+      source: 'fallback'
+    };
+  }
+  send(IPC.evError, session.id, explanation);
+}
+
+/** Запомнить последнюю отправленную команду (для {original} в подсказках). */
+export function setLastCommand(sessionId: string, command: string): void {
+  const session = sessions.get(sessionId);
+  if (session) session.lastCommand = command.trim();
 }
 
 /** Отправка ввода пользователя в сессию (SEC: проверка через Стража — Этап 4). */

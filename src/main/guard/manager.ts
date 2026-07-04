@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DangerousCommandPrompt, SubmitResult } from '@shared/guard';
 import { getHost } from '../hosts/repository';
 import { loadConfig } from '../config/store';
-import { getSession, sendInput } from '../ssh/sessionManager';
+import { getSession, sendInput, setLastCommand } from '../ssh/sessionManager';
 import { analyzeCommand } from './patterns';
 
 /**
@@ -60,6 +60,7 @@ export function submitCommand(sessionId: string, command: string): SubmitResult 
     }
   }
 
+  setLastCommand(sessionId, command); // для {original} в детекторе ошибок
   sendInput(sessionId, command + '\n');
   return { status: 'sent' };
 }
@@ -74,6 +75,7 @@ export function confirmDangerousCommand(requestId: string, confirmationText: str
   if (!p) return false;
   pending.delete(requestId);
   if (confirmationText !== p.confirmationText) return false;
+  setLastCommand(p.sessionId, p.command);
   sendInput(p.sessionId, p.command + '\n');
   return true;
 }
