@@ -11,9 +11,12 @@ import { WelcomeScreen } from './components/Onboarding/WelcomeScreen';
 import { FeatureGuide } from './components/Onboarding/FeatureGuide';
 import { WindowCloseGuard } from './components/Terminal/WindowCloseGuard';
 import { ResizeDivider } from './components/common/ResizeDivider';
+import { HistoryDrawer } from './components/History/HistoryDrawer';
+import { SnippetSaveDialog } from './components/Snippets/SnippetSaveDialog';
 import { HostsProvider, useHosts } from './stores/hosts';
 import { SessionsProvider, useSessions } from './stores/sessions';
 import { ConfigProvider, useConfig } from './stores/config';
+import { PanelsProvider, usePanels } from './stores/panels';
 
 /**
  * Welcome-экран показывается вместо основного UI, пока нет ни одного хоста
@@ -22,9 +25,12 @@ import { ConfigProvider, useConfig } from './stores/config';
  */
 function AppBody(): JSX.Element {
   const { hosts, loaded, openDrawer } = useHosts();
-  const { hostKeyPrompt, answerHostKey } = useSessions();
+  const { hostKeyPrompt, answerHostKey, sessions, activeSessionId } = useSessions();
   const { config, update } = useConfig();
+  const { historyOpen, snippetDialog, closeSnippetDialog, bumpSnippets } = usePanels();
   const [guideOpen, setGuideOpen] = useState(false);
+
+  const activeSession = sessions.find((s) => s.sessionId === activeSessionId);
   const leftRef = useRef<HTMLElement>(null);
   const rightRef = useRef<HTMLElement>(null);
 
@@ -79,6 +85,20 @@ function AppBody(): JSX.Element {
         />
       )}
       <WindowCloseGuard />
+      {historyOpen && <HistoryDrawer activeHostId={activeSession?.hostId} />}
+      {snippetDialog && (
+        <SnippetSaveDialog
+          command={snippetDialog.command}
+          editSnippet={snippetDialog.editSnippet}
+          hostId={activeSession?.hostId}
+          hostName={activeSession?.hostName}
+          onSaved={() => {
+            bumpSnippets();
+            closeSnippetDialog();
+          }}
+          onClose={closeSnippetDialog}
+        />
+      )}
     </div>
   );
 }
@@ -88,7 +108,9 @@ export default function App(): JSX.Element {
     <ConfigProvider>
       <HostsProvider>
         <SessionsProvider>
-          <AppBody />
+          <PanelsProvider>
+            <AppBody />
+          </PanelsProvider>
         </SessionsProvider>
       </HostsProvider>
     </ConfigProvider>

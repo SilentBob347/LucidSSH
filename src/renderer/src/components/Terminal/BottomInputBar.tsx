@@ -2,7 +2,7 @@ import type { JSX } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DangerousCommandPrompt } from '@shared/guard';
-import { setComposerInsertHandler } from '@/stores/composerBus';
+import { setComposerInsertHandler, setComposerValueGetter } from '@/stores/composerBus';
 
 /**
  * Композер команд (BottomInputBar, Design_Brief §3.3): `~$` + ввод + История +
@@ -27,12 +27,19 @@ export function BottomInputBar({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Каталог/история/сниппеты вставляют команду сюда (GUARD-04)
+  const valueRef = useRef('');
+  valueRef.current = value;
+
   useEffect(() => {
     setComposerInsertHandler((text) => {
       setValue(text);
       inputRef.current?.focus();
     });
-    return () => setComposerInsertHandler(null);
+    setComposerValueGetter(() => valueRef.current);
+    return () => {
+      setComposerInsertHandler(null);
+      setComposerValueGetter(null);
+    };
   }, []);
 
   const submit = async (): Promise<void> => {

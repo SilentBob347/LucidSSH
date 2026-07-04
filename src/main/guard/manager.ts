@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type { DangerousCommandPrompt, SubmitResult } from '@shared/guard';
 import { getHost } from '../hosts/repository';
 import { loadConfig } from '../config/store';
-import { getSession, sendInput, setLastCommand } from '../ssh/sessionManager';
+import {
+  getSession,
+  recordBlockedCommand,
+  sendInput,
+  setLastCommand
+} from '../ssh/sessionManager';
 import { analyzeCommand } from './patterns';
 
 /**
@@ -75,12 +80,15 @@ export function confirmDangerousCommand(requestId: string, confirmationText: str
   if (!p) return false;
   pending.delete(requestId);
   if (confirmationText !== p.confirmationText) return false;
-  setLastCommand(p.sessionId, p.command);
+  // Подтверждённая опасная команда попадёт в историю со статусом confirmed (HIST-05)
+  setLastCommand(p.sessionId, p.command, 'confirmed');
   sendInput(p.sessionId, p.command + '\n');
   return true;
 }
 
-/** Отмена опасной команды пользователем (в историю попадёт как «заблокировано»). */
+/** Отмена опасной команды пользователем — в историю как «заблокировано» (HIST-05). */
 export function cancelDangerousCommand(requestId: string): void {
+  const p = pending.get(requestId);
   pending.delete(requestId);
+  if (p) recordBlockedCommand(p.sessionId, p.command);
 }

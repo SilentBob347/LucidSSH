@@ -12,6 +12,7 @@ export function TerminalContextMenu({
   hasSelection,
   onCopy,
   onPaste,
+  onSaveSnippet,
   onFind,
   onClose
 }: {
@@ -20,6 +21,7 @@ export function TerminalContextMenu({
   hasSelection: boolean;
   onCopy: () => void;
   onPaste: () => void;
+  onSaveSnippet: () => void;
   onFind: () => void;
   onClose: () => void;
 }): JSX.Element {
@@ -78,6 +80,17 @@ export function TerminalContextMenu({
         {t('ctx.paste')}
       </button>
       <div className="my-1 h-px bg-border-hairline" />
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => {
+          onSaveSnippet();
+          onClose();
+        }}
+        className={item}
+      >
+        {t('ctx.saveSnippet')}
+      </button>
       <button
         type="button"
         role="menuitem"

@@ -20,6 +20,8 @@ import { loadErrorPatterns } from '../content/loader';
 import { detectError, isEmptyOutput } from '../errors/detector';
 import { t } from '../i18n';
 import type { ErrorExplanation } from '@shared/content';
+import type { GuardStatus } from '@shared/history';
+import { recordHistory } from '../history/repository';
 
 /**
  * SSH-сессии (SSH-01…SSH-07, §9 Security_Guide).
@@ -45,8 +47,10 @@ interface ManagedSession {
   breadcrumbParser: BreadcrumbParser;
   /** Вывод с момента предыдущего маркера — для детектора ошибок (ERR-01). */
   outputSinceMark: string;
-  /** Последняя команда, отправленная через композер/Стража (для {original}). */
+  /** Последняя команда, отправленная через композер/Стража (для {original} и истории). */
   lastCommand: string;
+  /** Статус Стража для последней команды (confirmed при подтверждении опасной). */
+  pendingGuardStatus?: GuardStatus;
   /** Первый маркер после подключения — приветствие, не результат команды. */
   firstMarkSeen: boolean;
 }
@@ -410,6 +414,16 @@ function handleCommandFinished(session: ManagedSession, exitCode: number | null)
     session.firstMarkSeen = true;
     return;
   }
+
+  // Запись в историю выполненной команды из композера (HIST-01). Прямой ввод в
+  // xterm не записывается — его текст main не знает. Маскирование секретов — в
+  // recordHistory (HIST-07).
+  if (session.lastCommand) {
+    recordCommand(session, session.lastCommand, exitCode, session.pendingGuardStatus);
+    session.lastCommand = '';
+    session.pendingGuardStatus = undefined;
+  }
+
   if (exitCode === null || exitCode === 0) return;
   if (!loadConfig().ui.hints.errorPanel) return; // отключено в «Интерфейсе»
 
@@ -432,10 +446,40 @@ function handleCommandFinished(session: ManagedSession, exitCode: number | null)
   send(IPC.evError, session.id, explanation);
 }
 
-/** Запомнить последнюю отправленную команду (для {original} в подсказках). */
-export function setLastCommand(sessionId: string, command: string): void {
+/** Запомнить последнюю отправленную команду (для {original} и истории). */
+export function setLastCommand(sessionId: string, command: string, guardStatus?: GuardStatus): void {
   const session = sessions.get(sessionId);
-  if (session) session.lastCommand = command.trim();
+  if (session) {
+    session.lastCommand = command.trim();
+    session.pendingGuardStatus = guardStatus;
+  }
+}
+
+/** Запись команды в историю с учётом отключения истории (HIST-07). */
+function recordCommand(
+  session: ManagedSession,
+  command: string,
+  exitCode: number | null | undefined,
+  guardStatus?: GuardStatus
+): void {
+  const cfg = loadConfig();
+  if (!cfg.history.enabled) return;
+  if (cfg.history.perHostDisabled.includes(session.hostId)) return;
+  const host = getHost(session.hostId);
+  recordHistory({
+    command,
+    hostId: session.hostId,
+    hostName: session.hostName,
+    username: host?.username ?? '',
+    exitCode: exitCode ?? undefined,
+    guardStatus
+  });
+}
+
+/** Прямая запись в историю (заблокированная стражем команда, HIST-05). */
+export function recordBlockedCommand(sessionId: string, command: string): void {
+  const session = sessions.get(sessionId);
+  if (session) recordCommand(session, command, undefined, 'blocked');
 }
 
 /** Отправка ввода пользователя в сессию (SEC: проверка через Стража — Этап 4). */

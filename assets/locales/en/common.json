@@ -303,5 +303,70 @@
   "statusBar": {
     "local": "All data is stored locally",
     "version": "v{{version}}"
+  },
+  "history": {
+    "title": "Command history",
+    "tabHistory": "History",
+    "tabFavorites": "Favorites",
+    "searchPlaceholder": "Search commands and notes…",
+    "filterAll": "All",
+    "filterSession": "This session",
+    "secretHidden": "SECRET HIDDEN",
+    "confirmed": "Confirmed",
+    "blocked": "Blocked",
+    "error": "Error",
+    "copy": "Copy",
+    "insert": "Insert into input",
+    "saveSnippet": "Save as snippet",
+    "addNote": "Add a note",
+    "notePlaceholder": "Note for the command…",
+    "delete": "Delete entry",
+    "clear": "Clear history",
+    "exit": "exit {{code}}",
+    "footer": "Showing {{shown}} of {{total}} commands",
+    "empty": {
+      "title": "History is empty",
+      "description": "Executed commands will appear here."
+    },
+    "noMatches": "Nothing found",
+    "time": {
+      "now": "just now",
+      "minutes": "{{count}} min ago",
+      "hours": "{{count}} h ago",
+      "days": "{{count}} d ago"
+    }
+  },
+  "snippet": {
+    "saveTitle": "Save as snippet",
+    "editTitle": "Edit snippet",
+    "dangerWarn": "Dangerous command — it will go to the “Dangerous” section and require confirmation to run",
+    "scopeLabel": "Where to save",
+    "scopeServer": "For this server",
+    "scopeGlobal": "Global",
+    "scopeHint": "“For this server” — visible only on this connection. “Global” — available everywhere.",
+    "name": "Name",
+    "namePlaceholder": "e.g. nginx logs",
+    "description": "Description",
+    "descriptionPlaceholder": "Optional",
+    "save": "Save",
+    "cancel": "Cancel",
+    "groupNormal": "Normal",
+    "groupDanger": "Dangerous",
+    "play": "Insert",
+    "edit": "Edit",
+    "delete": "Delete",
+    "searchPlaceholder": "Search saved",
+    "empty": {
+      "title": "No saved commands yet",
+      "description": "Right-click in the terminal → Save command"
+    },
+    "chipServer": "server",
+    "chipGlobal": "global"
+  },
+  "hostSnippets": {
+    "title": "This server has saved commands",
+    "body": "“{{name}}” has {{count}} server snippets. What should happen to them?",
+    "delete": "Delete snippets",
+    "makeGlobal": "Make global"
   }
 }

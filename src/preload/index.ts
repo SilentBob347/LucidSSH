@@ -7,6 +7,7 @@ import type { SubmitResult } from '@shared/guard';
 import type { Breadcrumb } from '@shared/breadcrumb';
 import type { DashboardMetrics } from '@shared/dashboard';
 import type { CommandsDatabase, ErrorExplanation } from '@shared/content';
+import type { HistoryEntry, HistoryQuery, Snippet } from '@shared/history';
 
 /**
  * Минимальный preload (SEC-05): только конкретные операции,
@@ -140,6 +141,34 @@ const api = {
 
   // --- Каталог команд ---
   getCommandCatalog: (): Promise<CommandsDatabase> => ipcRenderer.invoke(IPC.catalogGet),
+
+  // --- История команд ---
+  listHistory: (query?: HistoryQuery): Promise<HistoryEntry[]> =>
+    ipcRenderer.invoke(IPC.historyList, query),
+  historyCount: (): Promise<number> => ipcRenderer.invoke(IPC.historyCount),
+  addHistoryNote: (id: number, note: string): Promise<void> =>
+    ipcRenderer.invoke(IPC.historyAddNote, id, note),
+  deleteHistoryEntry: (id: number): Promise<void> => ipcRenderer.invoke(IPC.historyDelete, id),
+  clearHistory: (): Promise<void> => ipcRenderer.invoke(IPC.historyClear),
+
+  // --- Сниппеты / избранное ---
+  listSnippets: (hostId?: number): Promise<Snippet[]> =>
+    ipcRenderer.invoke(IPC.snippetsList, hostId),
+  createSnippet: (input: {
+    name: string;
+    command: string;
+    description?: string;
+    hostId?: number;
+  }): Promise<{ id: number }> => ipcRenderer.invoke(IPC.snippetCreate, input),
+  updateSnippet: (
+    id: number,
+    input: { name?: string; command?: string; description?: string; hostId?: number }
+  ): Promise<void> => ipcRenderer.invoke(IPC.snippetUpdate, id, input),
+  deleteSnippet: (id: number): Promise<void> => ipcRenderer.invoke(IPC.snippetDelete, id),
+  resolveHostSnippets: (hostId: number, action: 'delete' | 'make-global'): Promise<void> =>
+    ipcRenderer.invoke(IPC.snippetResolveHost, hostId, action),
+  hostHasSnippets: (hostId: number): Promise<boolean> =>
+    ipcRenderer.invoke(IPC.snippetHostHas, hostId),
 
   // --- Onboarding (OB-01…03) ---
   puttySessionsCount: (): Promise<number> => ipcRenderer.invoke(IPC.puttySessionsCount),

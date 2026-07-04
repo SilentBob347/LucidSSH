@@ -122,6 +122,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
   const [newGroupOpen, setNewGroupOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Host | null>(null);
+  const [snippetHostTarget, setSnippetHostTarget] = useState<Host | null>(null);
   const [importState, setImportState] = useState<{ json: string; preview: ImportPreview } | null>(
     null
   );
@@ -177,8 +178,21 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
   };
 
   const removeHost = async (host: Host): Promise<void> => {
+    // SNIP-07: серверные сниппеты нельзя удалять молча — спрашиваем пользователя
+    if (await window.lucidSSH.hostHasSnippets(host.id)) {
+      setDeleteTarget(null);
+      setSnippetHostTarget(host);
+      return;
+    }
     await window.lucidSSH.deleteHost(host.id);
     setDeleteTarget(null);
+    await refresh();
+  };
+
+  const resolveAndDelete = async (host: Host, action: 'delete' | 'make-global'): Promise<void> => {
+    await window.lucidSSH.resolveHostSnippets(host.id, action);
+    await window.lucidSSH.deleteHost(host.id);
+    setSnippetHostTarget(null);
     await refresh();
   };
 
@@ -398,6 +412,25 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
           onCancel={() => setDeleteTarget(null)}
         >
           {t('hosts.deleteConfirm.body', { name: deleteTarget.name })}
+        </ConfirmDialog>
+      )}
+
+      {/* SNIP-07: выбор судьбы серверных сниппетов при удалении хоста */}
+      {snippetHostTarget && (
+        <ConfirmDialog
+          title={t('hostSnippets.title')}
+          confirmLabel={t('hostSnippets.makeGlobal')}
+          onConfirm={() => void resolveAndDelete(snippetHostTarget, 'make-global')}
+          onCancel={() => setSnippetHostTarget(null)}
+        >
+          <div className="mb-3">{t('hostSnippets.body', { name: snippetHostTarget.name })}</div>
+          <button
+            type="button"
+            onClick={() => void resolveAndDelete(snippetHostTarget, 'delete')}
+            className="text-[12px] text-danger hover:underline"
+          >
+            {t('hostSnippets.delete')}
+          </button>
         </ConfirmDialog>
       )}
     </aside>

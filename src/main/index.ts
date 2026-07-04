@@ -6,6 +6,7 @@ import { registerHostIpcHandlers } from './ipc/hosts';
 import { registerSessionIpcHandlers } from './ipc/sessions';
 import { registerConfigIpcHandlers } from './ipc/config';
 import { registerContentIpcHandlers } from './ipc/content';
+import { registerHistoryIpcHandlers } from './ipc/history';
 import { initMainI18n } from './i18n';
 import { loadConfig } from './config/store';
 
@@ -39,6 +40,7 @@ if (!gotLock) {
     registerSessionIpcHandlers();
     registerConfigIpcHandlers();
     registerContentIpcHandlers();
+    registerHistoryIpcHandlers();
     createMainWindow();
   });
 

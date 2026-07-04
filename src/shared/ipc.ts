@@ -58,6 +58,21 @@ export const IPC = {
   // --- Каталог команд / детектор ошибок (встроенные базы) ---
   catalogGet: 'catalog:get',
 
+  // --- История команд (HIST-01…07) ---
+  historyList: 'history:list',
+  historyCount: 'history:count',
+  historyAddNote: 'history:add-note',
+  historyDelete: 'history:delete',
+  historyClear: 'history:clear',
+
+  // --- Сниппеты / избранное (SNIP-01…08) ---
+  snippetsList: 'snippets:list',
+  snippetCreate: 'snippets:create',
+  snippetUpdate: 'snippets:update',
+  snippetDelete: 'snippets:delete',
+  snippetResolveHost: 'snippets:resolve-host',
+  snippetHostHas: 'snippets:host-has',
+
   // --- Onboarding (OB-01…03) ---
   puttySessionsCount: 'onboarding:putty-count',
   onboardingComplete: 'onboarding:complete',

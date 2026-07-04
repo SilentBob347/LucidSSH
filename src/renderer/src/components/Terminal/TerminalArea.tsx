@@ -13,8 +13,9 @@ import { BottomInputBar } from './BottomInputBar';
 import { DangerGuardModal } from '@/components/Guard/DangerGuardModal';
 import { BreadcrumbBar } from '@/components/Breadcrumb/BreadcrumbBar';
 import { ErrorDetector } from './ErrorDetector';
-import { insertIntoComposer } from '@/stores/composerBus';
+import { insertIntoComposer, getComposerValue } from '@/stores/composerBus';
 import { useConfig } from '@/stores/config';
+import { usePanels } from '@/stores/panels';
 
 /**
  * Центральная область (Design_Brief §3.3): таб-бар, xterm.js, контекстное меню
@@ -26,6 +27,7 @@ export function TerminalArea(): JSX.Element {
   const { sessions, activeSessionId, reconnect, breadcrumbs, dashboards, errors, dismissError } =
     useSessions();
   const { config, update } = useConfig();
+  const { openHistory, openSnippetDialog } = usePanels();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(
     null
@@ -155,9 +157,7 @@ export function TerminalArea(): JSX.Element {
         <BottomInputBar
           sessionId={active.sessionId}
           onDanger={setDangerPrompt}
-          onOpenHistory={() => {
-            /* Панель истории — Этап 7 */
-          }}
+          onOpenHistory={openHistory}
           onToggleCatalog={() => void update('ui.catalogPanelOpen', !(config?.ui.catalogPanelOpen ?? false))}
         />
       )}
@@ -169,6 +169,11 @@ export function TerminalArea(): JSX.Element {
           hasSelection={ctxMenu.hasSelection}
           onCopy={() => copySelection(active.sessionId)}
           onPaste={() => handlePaste(active.sessionId)}
+          onSaveSnippet={() => {
+            // Сохраняем выделение терминала или текущий ввод композера (SNIP-02)
+            const text = getSelection(active.sessionId) || getComposerValue();
+            if (text.trim()) openSnippetDialog(text.trim());
+          }}
           onFind={() => setSearchOpen(true)}
           onClose={() => setCtxMenu(null)}
         />
