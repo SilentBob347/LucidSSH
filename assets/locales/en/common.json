@@ -1,0 +1,297 @@
+{
+  "app": {
+    "name": "LucidSSH"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "close": "Close",
+    "error": "Error"
+  },
+  "titleBar": {
+    "help": "Help",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
+  },
+  "hosts": {
+    "title": "Servers",
+    "searchPlaceholder": "Search servers",
+    "addServer": "Add server",
+    "addGroup": "Create group",
+    "groupCount": "{{count}} srv.",
+    "noGroup": "No group",
+    "empty": {
+      "title": "No servers yet",
+      "description": "Add your first connection to get started.",
+      "cta": "Add server"
+    },
+    "noMatches": {
+      "title": "Nothing found",
+      "description": "Try a different query."
+    },
+    "newGroup": {
+      "placeholder": "Group name",
+      "hint": "↵ Enter — create · Esc — cancel"
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "deleteConfirm": {
+      "title": "Delete server?",
+      "body": "“{{name}}” will be removed from the list. The saved password will be deleted from Windows Credential Manager.",
+      "confirm": "Delete"
+    },
+    "footer": {
+      "settings": "Settings",
+      "importPutty": "Import PuTTY"
+    },
+    "export": {
+      "button": "Export hosts",
+      "dialogTitle": "Export hosts"
+    },
+    "import": {
+      "button": "Import hosts",
+      "dialogTitle": "Import hosts",
+      "invalidFile": "This file does not look like a LucidSSH hosts export or is corrupted. Nothing was applied.",
+      "previewTitle": "Import hosts",
+      "previewBody": "To add: {{toAdd}} · conflicts (same address and user): {{toSkip}}",
+      "conflictHint": "Conflicting hosts can be skipped or imported under a new name.",
+      "applySkip": "Skip duplicates",
+      "applyRename": "Rename duplicates",
+      "resultTitle": "Import finished",
+      "resultBody": "Imported: {{imported}} · skipped: {{skipped}}",
+      "ok": "Done"
+    }
+  },
+  "conn": {
+    "titleNew": "New connection",
+    "titleEdit": "Edit connection",
+    "name": "Name",
+    "namePlaceholder": "My server",
+    "nameHelper": "How it will appear in the list",
+    "address": "Server address",
+    "addressPlaceholder": "192.168.1.1 or myserver.com",
+    "addressHelper": "IP address or domain",
+    "port": "Port",
+    "username": "Username",
+    "usernamePlaceholder": "root",
+    "usernameHelper": "Ubuntu → ubuntu · AWS → ec2-user · Debian → root",
+    "auth": "Authentication",
+    "authPassword": "Password",
+    "authKey": "Key",
+    "password": "Server password",
+    "passwordHelper": "Stored in Windows Credential Manager, not in app files",
+    "passwordSavedHelper": "Password is saved. Leave empty to keep it",
+    "keyPath": "Key file",
+    "keyPathHelper": "Private key file (usually id_rsa or id_ed25519). The public key must be added to the server",
+    "browse": "Browse…",
+    "passphrase": "Key passphrase",
+    "passphraseHelper": "The passphrase you set when creating the key. Not the server password",
+    "group": "Group",
+    "groupNone": "No group",
+    "saveError": "Could not save the connection. Check the fields and try again."
+  },
+  "welcome": {
+    "title": "Welcome to LucidSSH",
+    "subtitle": "A simple SSH client for managing servers. Add your first server to connect and start working in the terminal.",
+    "addFirst": "Add first server",
+    "importPutty": "Import from PuTTY",
+    "how": "How it works",
+    "footer": "LucidSSH v{{version}} · All data is stored locally on your computer"
+  },
+  "guide": {
+    "title": "LucidSSH features",
+    "ok": "Got it",
+    "cards": {
+      "navigation": {
+        "title": "Navigation",
+        "items": [
+          "Click a path segment at the top — a cd command is inserted automatically",
+          "Drag a server from the list onto the tab bar — a new session opens"
+        ]
+      },
+      "security": {
+        "title": "Security",
+        "items": [
+          "Before rm -rf, kill -9 and similar, a confirmation appears: type the object name",
+          "If the server fingerprint changes — a warning before connecting"
+        ]
+      },
+      "tools": {
+        "title": "Tools",
+        "items": [
+          "On errors, a panel slides up with an explanation and “what to check” steps",
+          "History keeps commands with filters and notes; passwords and tokens are masked",
+          "The button to the right of the input opens the command catalog by category"
+        ]
+      },
+      "terminal": {
+        "title": "Terminal",
+        "items": [
+          "A root session is highlighted in red in the path bar",
+          "Settings → Terminal lets you type commands directly in the output area"
+        ]
+      }
+    }
+  },
+  "terminal": {
+    "empty": {
+      "title": "No active session",
+      "description": "Select a server on the left to connect."
+    }
+  },
+  "breadcrumb": {
+    "sudoBadge": "sudo",
+    "rootBadge": "root",
+    "insertCd": "Insert cd into the input"
+  },
+  "dashboard": {
+    "cpu": "CPU",
+    "ram": "RAM",
+    "disk": "Disk",
+    "uptime": "Uptime",
+    "na": "—",
+    "toggle": "Hide/show metrics",
+    "uptimeDays": "{{days}}d {{hours}}h",
+    "uptimeHours": "{{hours}}h {{mins}}m"
+  },
+  "tabs": {
+    "details": "Connection details",
+    "close": "Close tab",
+    "rename": "Rename",
+    "duplicate": "Duplicate",
+    "renamePlaceholder": "Tab name",
+    "closeConfirm": {
+      "title": "Close tab?",
+      "body": "The session with “{{name}}” is active. Close the tab and drop the connection?",
+      "confirm": "Close"
+    },
+    "windowCloseConfirm": {
+      "title": "Close the app?",
+      "body": "Active connections: {{count}}. Close and drop them all?",
+      "confirm": "Close"
+    },
+    "status": {
+      "connecting": "Connecting…",
+      "connected": "Connected",
+      "reconnecting": "Reconnecting…",
+      "disconnected": "Disconnected"
+    },
+    "reconnect": "Reconnect",
+    "disconnectedNote": "Connection to “{{name}}” was lost."
+  },
+  "ctx": {
+    "copy": "Copy",
+    "paste": "Paste",
+    "saveSnippet": "Save as snippet",
+    "find": "Find in terminal"
+  },
+  "paste": {
+    "title": "Paste multiple lines",
+    "body": "You are pasting {{count}} lines. Review the text before sending it to the server — it will run as is.",
+    "dangerNote": "Warning: some lines look like dangerous commands (highlighted).",
+    "confirm": "Paste and run",
+    "cancel": "Cancel"
+  },
+  "find": {
+    "placeholder": "Find in terminal",
+    "caseSensitive": "Match case",
+    "regex": "Regular expression",
+    "prev": "Previous",
+    "next": "Next",
+    "close": "Close search"
+  },
+  "fp": {
+    "titleFirst": "First connection to this server",
+    "bodyFirst": "Make sure the fingerprint matches what your hosting provider shows.",
+    "explain": "A fingerprint is the server's digital thumbprint. It confirms you are connecting to your own server.",
+    "copy": "Copy",
+    "copied": "Copied ✓",
+    "confirm": "Confirm and connect",
+    "titleChanged": "Server fingerprint has changed",
+    "bodyChanged": "The saved fingerprint of “{{host}}” does not match the new one. This happens after a server reinstall or update, but may also mean a man-in-the-middle attack. Verify the new fingerprint via an independent source: hosting panel or server console.",
+    "previous": "Was",
+    "current": "Now",
+    "ackChanged": "I verified the new fingerprint via an independent source",
+    "confirmChanged": "Replace key and connect"
+  },
+  "clog": {
+    "title": "Connection details",
+    "tcpConnecting": "Connecting to {{address}}:{{port}}…",
+    "greeting": "Server sent a greeting",
+    "handshake": "Handshake in {{ms}} ms · kex {{kex}} · cipher {{cipher}} · mac {{mac}}",
+    "hostkeyReceived": "Server key {{keyType}} · {{fingerprint}}",
+    "hostkeyKnown": "Fingerprint matches the one saved in known_hosts",
+    "hostkeyNew": "Server is not known yet — fingerprint confirmation required",
+    "hostkeyChanged": "Fingerprint changed — connection blocked until you decide",
+    "hostkeyAccepted": "Fingerprint confirmed and saved to known_hosts",
+    "hostkeyReplaced": "Server key replaced in known_hosts by user decision",
+    "hostkeyRejected": "Connection rejected by user",
+    "hostkeyTimeout": "No fingerprint decision — connection aborted",
+    "ready": "Authentication succeeded ({{method}}) · total {{ms}} ms",
+    "reconnecting": "Reconnecting, attempt {{attempt}}…",
+    "reconnectGiveUp": "Failed to reconnect",
+    "shellOpen": "Terminal channel opened",
+    "shellError": "Failed to open terminal channel",
+    "closed": "Connection closed",
+    "error": {
+      "auth": "Authentication error — the server rejected the password or key",
+      "timeout": "Connection timeout — the server did not respond in time",
+      "socket": "Network error — server unreachable or port closed"
+    },
+    "keyError": {
+      "not-found": "Private key file not found",
+      "not-a-file": "The key path is not a file",
+      "too-large": "Key file is too large — this is not a private key",
+      "unparsable": "Could not parse the key: unsupported format or corrupted file",
+      "needs-passphrase": "The key is encrypted — set a passphrase in the connection settings"
+    }
+  },
+  "catalog": {
+    "title": "Commands",
+    "tabCatalog": "Catalog",
+    "searchPlaceholder": "Search commands",
+    "close": "Close panel"
+  },
+  "input": {
+    "placeholder": "Type a command…",
+    "history": "History",
+    "toggleCatalog": "Command catalog"
+  },
+  "guard": {
+    "title": "Dangerous command",
+    "targetLabel": "Affected object:",
+    "confirmPrompt": {
+      "directory": "Type the folder name to confirm:",
+      "file": "Type the file name to confirm:",
+      "disk": "Type the device name to confirm:",
+      "other": "Type the object name to confirm:",
+      "word": "Type the word ПОДТВЕРЖДАЮ to confirm:"
+    },
+    "cancel": "Cancel",
+    "confirmDelete": "Delete",
+    "confirmRun": "Run",
+    "explain": {
+      "rm-recursive": "This command deletes “{{target}}” with all its contents. This action is irreversible.",
+      "dd-write": "dd will overwrite “{{target}}” — all data on it will be lost beyond recovery.",
+      "mkfs": "mkfs will create a new filesystem on “{{target}}”, erasing all data on the device.",
+      "chmod-777": "chmod -R 777 makes “{{target}}” and everything inside readable and writable by everyone — a serious security hole.",
+      "truncate": "truncate will empty the file “{{target}}”, erasing its contents.",
+      "redirect-device": "Writing directly to device “{{target}}” will corrupt its filesystem.",
+      "shred": "shred overwrites “{{target}}” repeatedly, making the data unrecoverable.",
+      "wipefs": "wipefs erases the filesystem signatures on “{{target}}” — the device becomes unreadable.",
+      "fork-bomb": "This is a fork bomb: it spawns processes exponentially and freezes the server.",
+      "drop-database": "This command irreversibly drops the database or table “{{target}}”.",
+      "kill-init": "Signaling process 1 (init/systemd) will crash the whole system.",
+      "generic": "This command is recognized as potentially destructive. Review it before running."
+    }
+  },
+  "statusBar": {
+    "local": "All data is stored locally",
+    "version": "v{{version}}"
+  }
+}

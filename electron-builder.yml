@@ -1,0 +1,17 @@
+# Базовая конфигурация упаковки. Финализируется на Этапе 9
+# (подпись, каналы обновлений — см. Release_and_Update_Strategy.md).
+appId: app.lucidssh
+productName: LucidSSH
+directories:
+  output: release
+files:
+  - out/**
+  - assets/**
+  - package.json
+win:
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
