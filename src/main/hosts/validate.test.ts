@@ -1,0 +1,84 @@
+import { describe, expect, it } from 'vitest';
+import { validateGroupName, validateHostInput, validateId, validateSecret } from './validate';
+
+const valid = {
+  name: 'web-01',
+  address: '203.0.113.10',
+  port: 22,
+  username: 'root',
+  authMethod: 'password',
+  guardEnabled: true
+};
+
+describe('validateHostInput', () => {
+  it('принимает корректный минимальный ввод', () => {
+    const out = validateHostInput(valid);
+    expect(out.name).toBe('web-01');
+    expect(out.port).toBe(22);
+  });
+
+  it('отклоняет не-объект', () => {
+    expect(() => validateHostInput(null)).toThrow();
+    expect(() => validateHostInput('x')).toThrow();
+    expect(() => validateHostInput([valid])).toThrow();
+  });
+
+  it('отклоняет некорректный порт', () => {
+    for (const port of [0, -1, 65536, 1.5, '22', NaN]) {
+      expect(() => validateHostInput({ ...valid, port })).toThrow();
+    }
+  });
+
+  it('отклоняет слишком длинные строки', () => {
+    expect(() => validateHostInput({ ...valid, name: 'a'.repeat(101) })).toThrow();
+    expect(() => validateHostInput({ ...valid, address: 'a'.repeat(256) })).toThrow();
+  });
+
+  it('отклоняет опасные символы в адресе и имени пользователя', () => {
+    expect(() => validateHostInput({ ...valid, address: 'host;rm -rf /' })).toThrow();
+    expect(() => validateHostInput({ ...valid, address: 'host `x`' })).toThrow();
+    expect(() => validateHostInput({ ...valid, username: 'root; whoami' })).toThrow();
+  });
+
+  it('требует keyPath при authMethod=key', () => {
+    expect(() => validateHostInput({ ...valid, authMethod: 'key' })).toThrow();
+    const out = validateHostInput({ ...valid, authMethod: 'key', keyPath: 'C:\\keys\\id_ed25519' });
+    expect(out.keyPath).toContain('id_ed25519');
+  });
+
+  it('отклоняет неизвестный authMethod', () => {
+    expect(() => validateHostInput({ ...valid, authMethod: 'agent' })).toThrow();
+  });
+
+  it('groupId — только положительное целое', () => {
+    for (const groupId of [0, -5, 1.2, 'x']) {
+      expect(() => validateHostInput({ ...valid, groupId })).toThrow();
+    }
+    expect(validateHostInput({ ...valid, groupId: 3 }).groupId).toBe(3);
+  });
+});
+
+describe('validateSecret', () => {
+  it('пустое значение → undefined', () => {
+    expect(validateSecret(undefined)).toBeUndefined();
+    expect(validateSecret('')).toBeUndefined();
+  });
+  it('не-строка и сверхдлинное → ошибка', () => {
+    expect(() => validateSecret(42)).toThrow();
+    expect(() => validateSecret('a'.repeat(1025))).toThrow();
+  });
+});
+
+describe('validateGroupName / validateId', () => {
+  it('групповое имя обрезается и не может быть пустым', () => {
+    expect(validateGroupName('  Prod  ')).toBe('Prod');
+    expect(() => validateGroupName('   ')).toThrow();
+    expect(() => validateGroupName('a'.repeat(61))).toThrow();
+  });
+  it('id — только положительное целое', () => {
+    expect(validateId(7)).toBe(7);
+    for (const bad of [0, -1, 1.5, '7', null]) {
+      expect(() => validateId(bad)).toThrow();
+    }
+  });
+});
