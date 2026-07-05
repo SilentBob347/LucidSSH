@@ -8,6 +8,7 @@ import { useSessions } from '@/stores/sessions';
 import { usePanels } from '@/stores/panels';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ImportDialog } from './ImportDialog';
+import { ExternalImportDialog } from './ExternalImportDialog';
 
 /**
  * Левая панель — менеджер хостов (HM-01, HM-02, HM-05; Design_Brief §3.2):
@@ -129,6 +130,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
     null
   );
   const [importError, setImportError] = useState(false);
+  const [extImportOpen, setExtImportOpen] = useState(false);
 
   const pickImport = async (): Promise<void> => {
     setImportError(false);
@@ -392,6 +394,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
         </button>
         <button
           type="button"
+          onClick={() => setExtImportOpen(true)}
           className="h-7 flex-1 rounded-[4px] text-[12px] text-text-muted hover:bg-bg-elevated hover:text-text-strong"
         >
           {t('hosts.footer.importPutty')}
@@ -405,6 +408,8 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
           onClose={() => setImportState(null)}
         />
       )}
+
+      {extImportOpen && <ExternalImportDialog onClose={() => setExtImportOpen(false)} />}
 
       {deleteTarget && (
         <ConfirmDialog

@@ -470,5 +470,30 @@
     "updateTitle": "Доступно обновление",
     "updateBody": "Версия {{version}} готова к установке.",
     "clear": "Очистить"
+  },
+  "import": {
+    "title": "Импорт хостов",
+    "tabPutty": "PuTTY",
+    "tabSshConfig": "SSH config",
+    "loading": "Чтение…",
+    "empty": "Записей для импорта не найдено",
+    "authKey": "ключ",
+    "authPassword": "пароль",
+    "unsupported": "Не будут импортированы (не выполняются):",
+    "dupes": "Дубликаты:",
+    "dupeSkip": "Пропустить",
+    "dupeRename": "Переименовать",
+    "importBtn": "Импортировать ({{count}})",
+    "resultBody": "Импортировано: {{imported}} · пропущено: {{skipped}}",
+    "ok": "Готово",
+    "putty": {
+      "none": "Сессии PuTTY в реестре не найдены"
+    },
+    "ssh": {
+      "hint": "Выберите файл ~/.ssh/config для импорта хостов.",
+      "pickBtn": "Выбрать файл конфигурации…",
+      "pickTitle": "Выберите файл ssh config",
+      "none": "Файл не выбран или пуст"
+    }
   }
 }

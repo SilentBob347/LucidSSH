@@ -470,5 +470,30 @@
     "updateTitle": "Update available",
     "updateBody": "Version {{version}} is ready to install.",
     "clear": "Clear"
+  },
+  "import": {
+    "title": "Import hosts",
+    "tabPutty": "PuTTY",
+    "tabSshConfig": "SSH config",
+    "loading": "Reading…",
+    "empty": "No entries to import",
+    "authKey": "key",
+    "authPassword": "password",
+    "unsupported": "Will not be imported (not executed):",
+    "dupes": "Duplicates:",
+    "dupeSkip": "Skip",
+    "dupeRename": "Rename",
+    "importBtn": "Import ({{count}})",
+    "resultBody": "Imported: {{imported}} · skipped: {{skipped}}",
+    "ok": "Done",
+    "putty": {
+      "none": "No PuTTY sessions found in the registry"
+    },
+    "ssh": {
+      "hint": "Choose a ~/.ssh/config file to import hosts.",
+      "pickBtn": "Choose config file…",
+      "pickTitle": "Choose ssh config file",
+      "none": "No file selected or it is empty"
+    }
   }
 }

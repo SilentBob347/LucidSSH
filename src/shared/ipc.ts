@@ -43,6 +43,11 @@ export const IPC = {
   hostsImportPick: 'hosts:import-pick',
   hostsImportApply: 'hosts:import-apply',
 
+  // --- Импорт из внешних источников (HM-03 PuTTY, HM-04 ssh_config) ---
+  importPuttyPreview: 'import:putty-preview',
+  importSshConfigPreview: 'import:ssh-config-preview',
+  importExternalApply: 'import:external-apply',
+
   // --- SSH-сессии (SSH-01…07, CLOG) ---
   sessionConnect: 'session:connect',
   sessionDisconnect: 'session:disconnect',

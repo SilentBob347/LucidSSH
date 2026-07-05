@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC, type AppInfo } from '@shared/ipc';
 import type { Host, HostGroup, HostInput, ImportPreview } from '@shared/hosts';
+import type { ExternalImportResult, ImportedHost } from '@shared/import';
 import type {
   ConnectionLogEntry,
   HostKeyPrompt,
@@ -71,6 +72,15 @@ const api = {
     strategy: 'skip' | 'rename'
   ): Promise<{ imported: number; skipped: number }> =>
     ipcRenderer.invoke(IPC.hostsImportApply, json, strategy),
+  importPuttyPreview: (): Promise<ExternalImportResult> =>
+    ipcRenderer.invoke(IPC.importPuttyPreview),
+  importSshConfigPreview: (): Promise<ExternalImportResult | null> =>
+    ipcRenderer.invoke(IPC.importSshConfigPreview),
+  applyExternalImport: (
+    hosts: ImportedHost[],
+    strategy: 'skip' | 'rename'
+  ): Promise<{ imported: number; skipped: number }> =>
+    ipcRenderer.invoke(IPC.importExternalApply, hosts, strategy),
 
   // --- SSH-сессии (SSH-01…07, CLOG) ---
   connectHost: (hostId: number): Promise<{ sessionId: string }> =>
