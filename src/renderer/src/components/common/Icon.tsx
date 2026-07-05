@@ -34,7 +34,9 @@ export type IconName =
   | 'file'
   | 'shield'
   | 'key'
-  | 'download';
+  | 'download'
+  | 'upload'
+  | 'folder-plus';
 
 // Пути взяты из дизайна (или стандартный Lucide для недостающих). Всё в 0 0 24 24.
 const PATHS: Record<IconName, JSX.Element> = {
@@ -167,6 +169,19 @@ const PATHS: Record<IconName, JSX.Element> = {
       <path d="M12 3v12" />
       <path d="m8 11 4 4 4-4" />
       <path d="M8 21h8a2 2 0 0 0 2-2v-3M6 16v3a2 2 0 0 0 2 2" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M12 15V3" />
+      <path d="m8 7 4-4 4 4" />
+      <path d="M8 21h8a2 2 0 0 0 2-2v-3M6 16v3a2 2 0 0 0 2 2" />
+    </>
+  ),
+  'folder-plus': (
+    <>
+      <path d="M12 10v6M9 13h6" />
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
     </>
   )
 };

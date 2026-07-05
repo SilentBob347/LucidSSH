@@ -99,6 +99,7 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
             </TabButton>
           )}
           <TabButton active={tab === 'global'} onClick={() => setTab('global')}>
+            <Icon name="globe" size={12} className="mr-[5px] inline-block align-[-1px]" />
             {t('catalog.tabGlobal')}
           </TabButton>
         </div>

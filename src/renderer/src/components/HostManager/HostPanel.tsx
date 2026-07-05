@@ -223,7 +223,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
             onClick={() => openDrawer()}
             className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
           >
-            +
+            <Icon name="plus" size={15} />
           </button>
           <button
             type="button"
@@ -232,7 +232,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
             onClick={() => setNewGroupOpen(true)}
             className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
           >
-            ⊞
+            <Icon name="folder-plus" size={14} />
           </button>
           <button
             type="button"
@@ -241,7 +241,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
             onClick={() => void window.lucidSSH.exportHosts()}
             className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
           >
-            ⤒
+            <Icon name="upload" size={14} />
           </button>
           <button
             type="button"
@@ -250,7 +250,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
             onClick={() => void pickImport()}
             className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
           >
-            ⤓
+            <Icon name="download" size={14} />
           </button>
         </div>
       </div>
@@ -332,10 +332,10 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
                       aria-expanded={!collapsed}
                     >
                       <span
-                        className="inline-block text-[9px] text-text-dim transition-transform duration-[120ms]"
+                        className="inline-flex text-text-dim transition-transform duration-[120ms]"
                         style={{ transform: collapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}
                       >
-                        ▶
+                        <Icon name="chevron-right" size={11} strokeWidth={2.5} />
                       </span>
                       <span className="truncate text-[11px] font-semibold tracking-[0.04em] text-text-muted uppercase">
                         {g.name}
@@ -351,7 +351,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
                       onClick={() => openDrawer({ presetGroupId: g.id })}
                       className="hidden size-[18px] items-center justify-center rounded-[4px] text-text-dim group-hover:flex hover:bg-bg-elevated-2 hover:text-text-strong"
                     >
-                      +
+                      <Icon name="plus" size={13} />
                     </button>
                   </div>
                   {!collapsed &&

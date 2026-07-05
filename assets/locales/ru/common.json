@@ -152,7 +152,7 @@
   "dashboard": {
     "cpu": "CPU",
     "ram": "RAM",
-    "disk": "Диск",
+    "disk": "Disk",
     "uptime": "Аптайм",
     "na": "—",
     "toggle": "Скрыть/показать метрики",
