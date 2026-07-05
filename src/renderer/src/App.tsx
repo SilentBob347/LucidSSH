@@ -18,6 +18,7 @@ import { HostsProvider, useHosts } from './stores/hosts';
 import { SessionsProvider, useSessions } from './stores/sessions';
 import { ConfigProvider, useConfig } from './stores/config';
 import { PanelsProvider, usePanels } from './stores/panels';
+import { EventsProvider, useEvents } from './stores/events';
 
 /**
  * Welcome-экран показывается вместо основного UI, пока нет ни одного хоста
@@ -30,7 +31,13 @@ function AppBody(): JSX.Element {
   const { config, update } = useConfig();
   const { historyOpen, snippetDialog, closeSnippetDialog, bumpSnippets, settingsOpen, openSettings, openHistory } =
     usePanels();
+  const { addFingerprintEvent } = useEvents();
   const [guideOpen, setGuideOpen] = useState(false);
+
+  // NOTIF-03: изменение отпечатка сервера попадает в ленту событий шапки.
+  useEffect(() => {
+    if (hostKeyPrompt?.isChanged) addFingerprintEvent(hostKeyPrompt.hostName);
+  }, [hostKeyPrompt, addFingerprintEvent]);
 
   // Глобальные хоткеи (SET-01 Ctrl+, · SET-06). Ctrl+F/поиск живёт в TerminalArea.
   useEffect(() => {
@@ -130,7 +137,9 @@ export default function App(): JSX.Element {
       <HostsProvider>
         <SessionsProvider>
           <PanelsProvider>
-            <AppBody />
+            <EventsProvider>
+              <AppBody />
+            </EventsProvider>
           </PanelsProvider>
         </SessionsProvider>
       </HostsProvider>

@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { EventsMenu } from './EventsMenu';
 
 /**
  * Кастомный тайтл-бар 32px (Design_Brief §3.1): лого + имя + справка слева,
@@ -29,6 +30,7 @@ export function TitleBar(): JSX.Element {
         >
           ?
         </button>
+        <EventsMenu />
       </div>
       <div className="flex-1" />
       <div className="app-no-drag flex h-full">

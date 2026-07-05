@@ -456,5 +456,19 @@
       "resetBtn": "Reset settings to defaults",
       "resetConfirm": "Yes, reset"
     }
+  },
+  "notif": {
+    "disconnect": "Connection lost. Click to return and reconnect.",
+    "commandFailed": "Command finished with an error (code {{code}}).",
+    "commandLong": "A long command finished ({{sec}}s)."
+  },
+  "events": {
+    "title": "Events",
+    "empty": "No events yet",
+    "fingerprintTitle": "Server fingerprint changed",
+    "fingerprintBody": "“{{host}}” needs verification before connecting.",
+    "updateTitle": "Update available",
+    "updateBody": "Version {{version}} is ready to install.",
+    "clear": "Clear"
   }
 }

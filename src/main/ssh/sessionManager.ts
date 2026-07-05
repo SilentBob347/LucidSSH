@@ -22,6 +22,7 @@ import { t } from '../i18n';
 import type { ErrorExplanation } from '@shared/content';
 import type { GuardStatus } from '@shared/history';
 import { recordHistory } from '../history/repository';
+import { notifyDisconnect, notifyCommandDone } from '../notifications/notifier';
 
 /**
  * SSH-сессии (SSH-01…SSH-07, §9 Security_Guide).
@@ -49,6 +50,10 @@ interface ManagedSession {
   outputSinceMark: string;
   /** Последняя команда, отправленная через композер/Стража (для {original} и истории). */
   lastCommand: string;
+  /** Момент отправки последней команды — для порога долгой команды (NOTIF-02). */
+  lastCommandStartedAt: number;
+  /** Была ли сессия хоть раз подключена — чтобы уведомлять о потере, не о неудаче (NOTIF-01). */
+  everConnected: boolean;
   /** Статус Стража для последней команды (confirmed при подтверждении опасной). */
   pendingGuardStatus?: GuardStatus;
   /** Первый маркер после подключения — приветствие, не результат команды. */
@@ -155,6 +160,8 @@ export async function connectHost(hostId: number): Promise<{ sessionId: string }
     breadcrumbParser: new BreadcrumbParser(),
     outputSinceMark: '',
     lastCommand: '',
+    lastCommandStartedAt: 0,
+    everConnected: false,
     firstMarkSeen: false
   };
   sessions.set(session.id, session);
@@ -363,6 +370,7 @@ function openShell(session: ManagedSession, client: Client): void {
         return;
       }
       session.shell = stream;
+      session.everConnected = true;
       setStatus(session, 'connected');
       log(session, 'info', 'clog.shellOpen', undefined, 'session');
 
@@ -420,6 +428,8 @@ function handleCommandFinished(session: ManagedSession, exitCode: number | null)
   // recordHistory (HIST-07).
   if (session.lastCommand) {
     recordCommand(session, session.lastCommand, exitCode, session.pendingGuardStatus);
+    // NOTIF-02: тост о долгой/упавшей команде, если окно не в фокусе
+    notifyCommandDone(session.hostName, exitCode, Date.now() - session.lastCommandStartedAt);
     session.lastCommand = '';
     session.pendingGuardStatus = undefined;
   }
@@ -451,6 +461,7 @@ export function setLastCommand(sessionId: string, command: string, guardStatus?:
   const session = sessions.get(sessionId);
   if (session) {
     session.lastCommand = command.trim();
+    session.lastCommandStartedAt = Date.now();
     session.pendingGuardStatus = guardStatus;
   }
 }
@@ -550,6 +561,11 @@ function finishDisconnected(session: ManagedSession): void {
   setStatus(session, 'disconnected');
   stopDashboard(session.id);
   session.client = null;
+  // NOTIF-01: уведомить о потере уже установленного соединения (не о неудаче входа
+  // и не о закрытии пользователем).
+  if (session.everConnected && !session.userClosed) {
+    notifyDisconnect(session.hostName);
+  }
 }
 
 export function disconnectSession(sessionId: string): void {

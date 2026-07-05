@@ -33,6 +33,8 @@ if (!gotLock) {
 
   void app.whenReady().then(async () => {
     Menu.setApplicationMenu(null);
+    // AppUserModelID — чтобы системные тосты Windows атрибутировались приложению (NOTIF-01/02).
+    app.setAppUserModelId('com.lucidssh.app');
     hardenApp();
     loadConfig();
     await initMainI18n();
