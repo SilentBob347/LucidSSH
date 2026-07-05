@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Экран первого запуска (OB-01…OB-02; скриншот 14-Firstrun):
@@ -39,24 +40,24 @@ export function WelcomeScreen({
       <button
         type="button"
         onClick={onAddFirst}
-        className="mt-8 h-10 rounded-[8px] bg-accent px-6 text-[14px] font-semibold text-white hover:bg-accent-hover"
+        className="mt-8 flex h-10 items-center gap-2 rounded-[8px] bg-accent px-6 text-[14px] font-semibold text-white hover:bg-accent-hover"
       >
-        + {t('welcome.addFirst')}
+        <Icon name="plus" size={16} /> {t('welcome.addFirst')}
       </button>
       {puttyCount > 0 && (
         <button
           type="button"
-          className="mt-5 text-[12.5px] text-text-body hover:text-text-strong hover:underline"
+          className="mt-5 flex items-center gap-[6px] text-[12.5px] text-text-body hover:text-text-strong hover:underline"
         >
-          ⤓ {t('welcome.importPutty')}
+          <Icon name="download" size={14} /> {t('welcome.importPutty')}
         </button>
       )}
       <button
         type="button"
         onClick={onOpenGuide}
-        className="mt-4 text-[12.5px] text-lavender hover:text-lavender-light hover:underline"
+        className="mt-4 flex items-center gap-[6px] text-[12.5px] text-lavender hover:text-lavender-light hover:underline"
       >
-        ? {t('welcome.how')}
+        <Icon name="help" size={14} /> {t('welcome.how')}
       </button>
       <div className="absolute bottom-8 text-[11.5px] text-text-faint">
         {version ? t('welcome.footer', { version }) : ''}

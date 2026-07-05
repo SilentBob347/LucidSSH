@@ -90,9 +90,9 @@ function Group({
   return (
     <div className="mb-2">
       <div
-        className={`px-2 py-1 text-[10.5px] font-semibold tracking-[0.05em] uppercase ${danger ? 'text-warning' : 'text-text-dim'}`}
+        className={`flex items-center gap-1 px-2 py-1 text-[10.5px] font-semibold tracking-[0.05em] uppercase ${danger ? 'text-warning' : 'text-text-dim'}`}
       >
-        {danger && '⚠ '}
+        {danger && <Icon name="alert" size={11} />}
         {label}
       </div>
       {children}
