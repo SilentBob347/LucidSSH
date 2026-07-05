@@ -23,6 +23,13 @@ export interface HostKeyPrompt {
   previousFingerprint?: string;
 }
 
+/** Результат пробного подключения (кнопка «Проверить соединение»). */
+export interface TestConnectionResult {
+  ok: boolean;
+  /** Ключ i18n причины при ok=false (без секретов). */
+  errorKey?: string;
+}
+
 /** Запись known_hosts для показа в Настройки → Безопасность (SET-04). Без сырого ключа. */
 export interface KnownHostView {
   line: number;

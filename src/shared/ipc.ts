@@ -57,6 +57,7 @@ export const IPC = {
   sessionGetLog: 'session:get-log',
   sessionSendInput: 'session:send-input',
   sessionResize: 'session:resize',
+  sessionTestConnection: 'session:test-connection',
   hostKeyConfirm: 'session:host-key-confirm',
 
   // --- Страж опасных команд (GUARD-01…06) ---

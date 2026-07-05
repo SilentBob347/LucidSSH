@@ -7,7 +7,8 @@ import type {
   HostKeyPrompt,
   KnownHostView,
   SessionInfo,
-  SessionStatus
+  SessionStatus,
+  TestConnectionResult
 } from '@shared/ssh';
 import type { AppConfig } from '@shared/config';
 import type { SubmitResult } from '@shared/guard';
@@ -96,6 +97,12 @@ const api = {
     ipcRenderer.invoke(IPC.sessionGetLog, sessionId),
   confirmHostKey: (requestId: string, decision: 'accept' | 'reject'): Promise<void> =>
     ipcRenderer.invoke(IPC.hostKeyConfirm, requestId, decision),
+  testConnection: (
+    input: HostInput,
+    secret?: string,
+    hostId?: number
+  ): Promise<TestConnectionResult> =>
+    ipcRenderer.invoke(IPC.sessionTestConnection, input, secret, hostId),
 
   // --- Страж (команда идёт на сервер только через эту проверку) ---
   submitCommand: (sessionId: string, command: string): Promise<SubmitResult> =>

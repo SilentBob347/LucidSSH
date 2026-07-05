@@ -2,7 +2,9 @@ import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AuthMethod, HostInput } from '@shared/hosts';
+import type { TestConnectionResult } from '@shared/ssh';
 import { useHosts } from '@/stores/hosts';
+import { useSessions } from '@/stores/sessions';
 import { Icon } from '@/components/common/Icon';
 
 /**
@@ -26,10 +28,13 @@ interface FormState {
 export function NewConnectionDrawer(): JSX.Element | null {
   const { t } = useTranslation();
   const { drawer, closeDrawer, groups, refresh } = useHosts();
+  const { connect } = useSessions();
   const [form, setForm] = useState<FormState | null>(null);
   const [hasSavedSecret, setHasSavedSecret] = useState(false);
   const [error, setError] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
 
   const editHost = drawer.editHost;
 
@@ -40,6 +45,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
     }
     setError(false);
     setHasSavedSecret(false);
+    setTestResult(null);
     if (editHost) {
       setForm({
         name: editHost.name,
@@ -89,35 +95,58 @@ export function NewConnectionDrawer(): JSX.Element | null {
     portNum <= 65535 &&
     (form.authMethod === 'password' || form.keyPath.trim().length > 0);
 
-  const submit = async (): Promise<void> => {
+  const buildInput = (): HostInput => ({
+    name: form.name.trim(),
+    address: form.address.trim(),
+    port: portNum,
+    username: form.username.trim(),
+    authMethod: form.authMethod,
+    keyPath: form.authMethod === 'key' ? form.keyPath.trim() : undefined,
+    groupId: form.groupId !== '' ? Number(form.groupId) : undefined,
+    guardEnabled: editHost?.guardEnabled ?? true,
+    proxyJump: editHost?.proxyJump,
+    note: editHost?.note
+  });
+
+  const secretOrUndef = (): string | undefined =>
+    form.secret.length > 0 ? form.secret : undefined;
+
+  /** Сохранить хост; при connect=true — сразу подключиться (кнопка «Подключить»). */
+  const save = async (doConnect: boolean): Promise<void> => {
     if (!valid || saving) return;
     setSaving(true);
     setError(false);
-    const input: HostInput = {
-      name: form.name.trim(),
-      address: form.address.trim(),
-      port: portNum,
-      username: form.username.trim(),
-      authMethod: form.authMethod,
-      keyPath: form.authMethod === 'key' ? form.keyPath.trim() : undefined,
-      groupId: form.groupId !== '' ? Number(form.groupId) : undefined,
-      guardEnabled: editHost?.guardEnabled ?? true,
-      proxyJump: editHost?.proxyJump,
-      note: editHost?.note
-    };
-    const secret = form.secret.length > 0 ? form.secret : undefined;
+    const secret = secretOrUndef();
     try {
+      let hostId: number;
       if (editHost) {
-        await window.lucidSSH.updateHost(editHost.id, input, secret);
+        await window.lucidSSH.updateHost(editHost.id, buildInput(), secret);
+        hostId = editHost.id;
       } else {
-        await window.lucidSSH.createHost(input, secret);
+        hostId = (await window.lucidSSH.createHost(buildInput(), secret)).id;
       }
       await refresh();
       closeDrawer();
+      if (doConnect) await connect(hostId);
     } catch {
       setError(true);
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** Проверить соединение без сохранения (кнопка «Проверить соединение»). */
+  const test = async (): Promise<void> => {
+    if (!valid || testing) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await window.lucidSSH.testConnection(buildInput(), secretOrUndef(), editHost?.id);
+      setTestResult(res);
+    } catch {
+      setTestResult({ ok: false, errorKey: 'clog.error.socket' });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -329,13 +358,34 @@ export function NewConnectionDrawer(): JSX.Element | null {
         </div>
 
         <div className="shrink-0 space-y-2 border-t border-border-hairline px-5 py-4">
+          {testResult && (
+            <div
+              className={`rounded-[6px] px-3 py-2 text-[12px] ${
+                testResult.ok
+                  ? 'bg-success/10 text-success-bright'
+                  : 'bg-danger/10 text-danger-text'
+              }`}
+            >
+              {testResult.ok
+                ? t('conn.testOk')
+                : t(testResult.errorKey ?? 'clog.error.socket')}
+            </div>
+          )}
+          <button
+            type="button"
+            disabled={!valid || testing || saving}
+            onClick={() => void test()}
+            className="h-9 w-full rounded-[6px] border border-border-strong bg-bg-base text-[13px] text-text-body hover:text-text-strong disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {testing ? t('conn.testing') : t('conn.test')}
+          </button>
           <button
             type="button"
             disabled={!valid || saving}
-            onClick={() => void submit()}
+            onClick={() => void save(!editHost)}
             className="h-9 w-full rounded-[6px] bg-accent text-[13px] font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {t('common.save')}
+            {editHost ? t('common.save') : t('conn.connect')}
           </button>
         </div>
       </aside>

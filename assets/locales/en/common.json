@@ -93,7 +93,11 @@
     "passphraseHelper": "The passphrase you set when creating the key. Not the server password",
     "group": "Group",
     "groupNone": "No group",
-    "saveError": "Could not save the connection. Check the fields and try again."
+    "saveError": "Could not save the connection. Check the fields and try again.",
+    "test": "Test connection",
+    "testing": "Testing…",
+    "testOk": "Connection successful",
+    "connect": "Connect"
   },
   "welcome": {
     "title": "Welcome to LucidSSH",

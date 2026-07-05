@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
-import type { ConnectionLogEntry, SessionStatus } from '@shared/ssh';
+import type { ConnectionLogEntry, SessionStatus, TestConnectionResult } from '@shared/ssh';
 import {
   confirmHostKey,
   connectHost,
@@ -18,7 +18,9 @@ import {
   submitCommand
 } from '../guard/manager';
 import type { SubmitResult } from '@shared/guard';
-import { validateId } from '../hosts/validate';
+import { validateHostInput, validateId, validateSecret } from '../hosts/validate';
+import { testConnection } from '../ssh/testConnection';
+import { getSecretForConnection } from '../keychain';
 import { assertSenderIsMainWindow, assertString, IpcValidationError } from './validate';
 
 /**
@@ -88,6 +90,32 @@ export function registerSessionIpcHandlers(): void {
         throw new IpcValidationError('size: invalid');
       }
       resizeSession(id, cols, rows);
+    }
+  );
+
+  // Пробное подключение из формы (кнопка «Проверить соединение»): проверяет
+  // достижимость + аутентификацию, сессию не создаёт (§9.9). При редактировании
+  // без нового секрета берём сохранённый из keychain.
+  ipcMain.handle(
+    IPC.sessionTestConnection,
+    async (
+      event,
+      rawInput: unknown,
+      rawSecret: unknown,
+      rawHostId: unknown
+    ): Promise<TestConnectionResult> => {
+      assertSenderIsMainWindow(event);
+      const input = validateHostInput(rawInput);
+      let secret = validateSecret(rawSecret);
+      if (secret === undefined && rawHostId !== undefined && rawHostId !== null) {
+        const hostId = validateId(rawHostId, 'hostId');
+        try {
+          secret = (await getSecretForConnection(hostId)) ?? undefined;
+        } catch {
+          secret = undefined;
+        }
+      }
+      return testConnection(input, secret);
     }
   );
 
