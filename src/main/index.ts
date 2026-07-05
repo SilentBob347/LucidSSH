@@ -8,6 +8,8 @@ import { registerConfigIpcHandlers } from './ipc/config';
 import { registerContentIpcHandlers } from './ipc/content';
 import { registerHistoryIpcHandlers } from './ipc/history';
 import { registerSecurityIpcHandlers } from './ipc/security';
+import { registerUpdateIpcHandlers } from './ipc/updates';
+import { initUpdater, checkForUpdates } from './updates/updater';
 import { initMainI18n } from './i18n';
 import { loadConfig } from './config/store';
 
@@ -45,7 +47,13 @@ if (!gotLock) {
     registerContentIpcHandlers();
     registerHistoryIpcHandlers();
     registerSecurityIpcHandlers();
+    registerUpdateIpcHandlers();
     createMainWindow();
+
+    // Автообновление (UPD-01): инициализация + неблокирующая проверка при запуске,
+    // если она включена. Ошибки/офлайн глотаются молча внутри checkForUpdates.
+    initUpdater();
+    setTimeout(() => void checkForUpdates(false), 4000);
   });
 
   app.on('window-all-closed', () => {

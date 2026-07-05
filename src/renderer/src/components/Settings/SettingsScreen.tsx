@@ -5,6 +5,8 @@ import type { AppConfig } from '@shared/config';
 import type { KnownHostView } from '@shared/ssh';
 import { useConfig, getCurrentConfig } from '@/stores/config';
 import { usePanels } from '@/stores/panels';
+import { useUpdates } from '@/stores/updates';
+import { useSessions } from '@/stores/sessions';
 import { applyTerminalConfig } from '@/components/Terminal/XtermView';
 import { Card, Segment, SectionTitle, Toggle, ToggleRow } from './controls';
 
@@ -511,6 +513,118 @@ function HotkeysSection(): JSX.Element {
   );
 }
 
+function UpdatesCard(): JSX.Element {
+  const { t } = useTranslation();
+  const { config, update } = useConfig();
+  const { status, check, download, install } = useUpdates();
+  const { sessions } = useSessions();
+  const [confirmInstall, setConfirmInstall] = useState(false);
+
+  const activeCount = sessions.filter(
+    (s) => s.status === 'connected' || s.status === 'connecting' || s.status === 'reconnecting'
+  ).length;
+  const state = status?.state ?? 'idle';
+  const busy = state === 'checking' || state === 'downloading';
+
+  const statusLine = (): string => {
+    if (status?.notConfigured) return t('settings.updates.notConfigured');
+    switch (state) {
+      case 'checking':
+        return t('settings.updates.checking');
+      case 'available':
+        return t('settings.updates.available', { version: status?.info?.version ?? '' });
+      case 'not-available':
+        return t('settings.updates.upToDate');
+      case 'downloading':
+        return t('settings.updates.downloading', { percent: Math.round(status?.progress?.percent ?? 0) });
+      case 'downloaded':
+        return t('settings.updates.downloaded', { version: status?.info?.version ?? '' });
+      case 'error':
+        return t('settings.updates.error');
+      default:
+        return t('settings.updates.idle');
+    }
+  };
+
+  return (
+    <div className="rounded-[8px] border border-border-hairline bg-bg-panel px-4 py-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-[13.5px] font-semibold text-text-strong">
+            {t('settings.updates.title')}
+          </div>
+          <div className="mt-[2px] text-[12px] text-text-dim">{statusLine()}</div>
+        </div>
+        {state === 'available' ? (
+          <button
+            type="button"
+            onClick={() => void download()}
+            className="h-[32px] shrink-0 rounded-[6px] bg-accent px-4 text-[12.5px] font-medium text-white hover:bg-accent-hover"
+          >
+            {t('settings.updates.download')}
+          </button>
+        ) : state === 'downloaded' ? (
+          <button
+            type="button"
+            onClick={() => setConfirmInstall(true)}
+            className="h-[32px] shrink-0 rounded-[6px] bg-accent px-4 text-[12.5px] font-medium text-white hover:bg-accent-hover"
+          >
+            {t('settings.updates.install')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void check()}
+            className="h-[32px] shrink-0 rounded-[6px] border border-border-strong bg-bg-base px-4 text-[12.5px] text-text-body hover:text-text-strong disabled:opacity-50"
+          >
+            {t('settings.updates.check')}
+          </button>
+        )}
+      </div>
+
+      {/* Согласие на установку с предупреждением о живых SSH-сессиях (UPD-02) */}
+      {confirmInstall && (
+        <div className="mt-3 rounded-[6px] border border-warning/25 bg-warning/10 px-3 py-2">
+          <div className="text-[11.5px] text-warning-text">
+            {activeCount > 0
+              ? t('settings.updates.installWarnSessions', { count: activeCount })
+              : t('settings.updates.installWarn')}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => void install()}
+              className="h-[30px] rounded-[6px] bg-accent px-3 text-[12px] font-medium text-white hover:bg-accent-hover"
+            >
+              {t('settings.updates.installNow')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmInstall(false)}
+              className="h-[30px] rounded-[6px] bg-bg-tab-active px-3 text-[12px] text-text-body hover:text-text-strong"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center justify-between border-t border-border-hairline pt-3">
+        <div className="min-w-0">
+          <div className="text-[12.5px] text-text-body">{t('settings.updates.autoCheck')}</div>
+          <div className="text-[11px] text-text-dim">{t('settings.updates.autoCheckDesc')}</div>
+        </div>
+        <Toggle
+          on={config?.updates.autoCheck ?? true}
+          onChange={(v) => void update('updates.autoCheck', v)}
+          label={t('settings.updates.autoCheck')}
+        />
+      </div>
+    </div>
+  );
+}
+
 function AboutSection({ onOpenGuide }: { onOpenGuide: () => void }): JSX.Element {
   const { t } = useTranslation();
   const { config } = useConfig();
@@ -545,6 +659,8 @@ function AboutSection({ onOpenGuide }: { onOpenGuide: () => void }): JSX.Element
             {t('settings.about.tagline')}
           </p>
         </Card>
+
+        <UpdatesCard />
 
         <Card title={t('settings.about.help')}>
           <button

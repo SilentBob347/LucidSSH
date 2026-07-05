@@ -15,6 +15,7 @@ import type { Breadcrumb } from '@shared/breadcrumb';
 import type { DashboardMetrics } from '@shared/dashboard';
 import type { CommandsDatabase, ErrorExplanation } from '@shared/content';
 import type { HistoryEntry, HistoryQuery, Snippet } from '@shared/history';
+import type { UpdateStatus } from '@shared/updates';
 
 /**
  * Минимальный preload (SEC-05): только конкретные операции,
@@ -160,6 +161,17 @@ const api = {
 
   // --- Каталог команд ---
   getCommandCatalog: (): Promise<CommandsDatabase> => ipcRenderer.invoke(IPC.catalogGet),
+
+  // --- Автообновление (UPD-01…04) ---
+  checkForUpdates: (): Promise<void> => ipcRenderer.invoke(IPC.updateCheck),
+  downloadUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.updateDownload),
+  installUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.updateInstall),
+  getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC.updateGetStatus),
+  onUpdateStatus: (cb: (status: UpdateStatus) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, status: UpdateStatus): void => cb(status);
+    ipcRenderer.on(IPC.evUpdateStatus, listener);
+    return () => ipcRenderer.removeListener(IPC.evUpdateStatus, listener);
+  },
 
   // --- История команд ---
   listHistory: (query?: HistoryQuery): Promise<HistoryEntry[]> =>

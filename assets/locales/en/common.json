@@ -455,6 +455,25 @@
       "resetDesc": "Restore settings to defaults. Does not touch servers, keys or command history.",
       "resetBtn": "Reset settings to defaults",
       "resetConfirm": "Yes, reset"
+    },
+    "updates": {
+      "title": "Updates",
+      "check": "Check for updates",
+      "checking": "Checking…",
+      "upToDate": "You are on the latest version",
+      "available": "Version {{version}} available",
+      "download": "Download",
+      "downloading": "Downloading… {{percent}}%",
+      "downloaded": "Version {{version}} ready to install",
+      "install": "Install",
+      "installNow": "Install and restart",
+      "installWarn": "The app will restart to install the update.",
+      "installWarnSessions": "Active SSH sessions: {{count}}. They will be closed on restart.",
+      "error": "Could not check for updates",
+      "idle": "Check for updates",
+      "notConfigured": "Update source is not configured",
+      "autoCheck": "Auto-check for updates",
+      "autoCheckDesc": "Check for new versions on launch (HTTPS to the update source)."
     }
   },
   "notif": {

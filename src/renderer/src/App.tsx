@@ -19,6 +19,7 @@ import { SessionsProvider, useSessions } from './stores/sessions';
 import { ConfigProvider, useConfig } from './stores/config';
 import { PanelsProvider, usePanels } from './stores/panels';
 import { EventsProvider, useEvents } from './stores/events';
+import { UpdatesProvider } from './stores/updates';
 
 /**
  * Welcome-экран показывается вместо основного UI, пока нет ни одного хоста
@@ -138,7 +139,9 @@ export default function App(): JSX.Element {
         <SessionsProvider>
           <PanelsProvider>
             <EventsProvider>
-              <AppBody />
+              <UpdatesProvider>
+                <AppBody />
+              </UpdatesProvider>
             </EventsProvider>
           </PanelsProvider>
         </SessionsProvider>

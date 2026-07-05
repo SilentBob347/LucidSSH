@@ -1,5 +1,5 @@
-# Базовая конфигурация упаковки. Финализируется на Этапе 9
-# (подпись, каналы обновлений — см. Release_and_Update_Strategy.md).
+# Конфигурация упаковки и публикации. Подпись кода — блокер BLK-01
+# (сертификат ещё не приобретён; см. Release_and_Update_Strategy.md).
 appId: app.lucidssh
 productName: LucidSSH
 directories:
@@ -12,6 +12,17 @@ win:
   target:
     - nsis
     - portable
+  # BLK-01: при появлении сертификата задать signtoolOptions/certificateFile
+  # (ключ ВНЕ репозитория — SIGN-02) и publisherName ожидаемого издателя.
+  # electron-updater проверит подпись и издателя пакета перед установкой (UPD-03).
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+# Источник обновлений (OQ-08): публичный GitHub Releases, без токена (SIGN-02).
+# owner/repo — плейсхолдеры, подставляются перед первым релизом. Из этого блока
+# electron-builder генерирует app-update.yml, который читает electron-updater.
+publish:
+  provider: github
+  owner: PLACEHOLDER_OWNER
+  repo: PLACEHOLDER_REPO
+  releaseType: release

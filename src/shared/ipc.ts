@@ -66,6 +66,12 @@ export const IPC = {
   // --- Каталог команд / детектор ошибок (встроенные базы) ---
   catalogGet: 'catalog:get',
 
+  // --- Автообновление (UPD-01…04) ---
+  updateCheck: 'update:check',
+  updateDownload: 'update:download',
+  updateInstall: 'update:install',
+  updateGetStatus: 'update:get-status',
+
   // --- История команд (HIST-01…07) ---
   historyList: 'history:list',
   historyCount: 'history:count',
@@ -101,7 +107,8 @@ export const IPC = {
   evConfirmWindowClose: 'ev:confirm-window-close',
   evBreadcrumb: 'ev:breadcrumb',
   evDashboard: 'ev:dashboard',
-  evError: 'ev:error'
+  evError: 'ev:error',
+  evUpdateStatus: 'ev:update-status'
 } as const;
 
 export interface AppInfo {
