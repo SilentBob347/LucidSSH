@@ -17,12 +17,15 @@ export function BottomInputBar({
   onDanger,
   onOpenHistory,
   onToggleCatalog,
+  catalogOpen,
   onCommandSent
 }: {
   sessionId: string;
   onDanger: (prompt: DangerousCommandPrompt) => void;
   onOpenHistory: () => void;
   onToggleCatalog: () => void;
+  /** Панель каталога открыта — кнопка подсвечивается (дизайн catalogBtnStyle). */
+  catalogOpen?: boolean;
   /** Вызывается после успешной отправки команды на сервер (для SNIP-08). */
   onCommandSent?: () => void;
 }): JSX.Element {
@@ -83,7 +86,9 @@ export function BottomInputBar({
         title={t('input.toggleCatalog')}
         aria-label={t('input.toggleCatalog')}
         onClick={onToggleCatalog}
-        className="flex size-[26px] items-center justify-center rounded-[4px] bg-bg-elevated-2 text-text-muted hover:text-text-strong"
+        className={`flex size-[26px] items-center justify-center rounded-[4px] hover:bg-bg-elevated ${
+          catalogOpen ? 'bg-accent/15 text-lavender' : 'text-text-muted hover:text-text-strong'
+        }`}
       >
         <Icon name="catalog" size={15} />
       </button>

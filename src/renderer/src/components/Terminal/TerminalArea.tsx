@@ -216,6 +216,7 @@ export function TerminalArea(): JSX.Element {
           onDanger={setDangerPrompt}
           onOpenHistory={openHistory}
           onToggleCatalog={() => void update('ui.catalogPanelOpen', !(config?.ui.catalogPanelOpen ?? false))}
+          catalogOpen={config?.ui.catalogPanelOpen ?? false}
           onCommandSent={() => handleCommandSent(active.sessionId)}
         />
       )}
