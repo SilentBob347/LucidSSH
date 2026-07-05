@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DangerousCommandPrompt } from '@shared/guard';
 import { setComposerInsertHandler, setComposerValueGetter } from '@/stores/composerBus';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Композер команд (BottomInputBar, Design_Brief §3.3): `~$` + ввод + История +
@@ -73,9 +74,9 @@ export function BottomInputBar({
       <button
         type="button"
         onClick={onOpenHistory}
-        className="h-[26px] rounded-[4px] bg-bg-elevated-2 px-3 text-[11.5px] text-text-muted hover:text-text-strong"
+        className="flex h-[26px] items-center gap-[5px] rounded-[4px] bg-bg-elevated-2 px-3 text-[11.5px] text-text-muted hover:text-text-strong"
       >
-        ↻ {t('input.history')}
+        <Icon name="history" size={13} /> {t('input.history')}
       </button>
       <button
         type="button"
@@ -84,7 +85,7 @@ export function BottomInputBar({
         onClick={onToggleCatalog}
         className="flex size-[26px] items-center justify-center rounded-[4px] bg-bg-elevated-2 text-text-muted hover:text-text-strong"
       >
-        ▤
+        <Icon name="catalog" size={15} />
       </button>
     </div>
   );

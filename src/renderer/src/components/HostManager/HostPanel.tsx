@@ -7,6 +7,7 @@ import { useHosts } from '@/stores/hosts';
 import { useSessions } from '@/stores/sessions';
 import { usePanels } from '@/stores/panels';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { Icon } from '@/components/common/Icon';
 import { ImportDialog } from './ImportDialog';
 import { ExternalImportDialog } from './ExternalImportDialog';
 
@@ -88,7 +89,7 @@ function HostRow({
           }}
           className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-lavender"
         >
-          ✎
+          <Icon name="edit" size={13} />
         </button>
         <button
           type="button"
@@ -100,7 +101,7 @@ function HostRow({
           }}
           className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-danger"
         >
-          🗑
+          <Icon name="trash" size={13} />
         </button>
       </div>
     </div>
@@ -294,7 +295,8 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
 
         {noHostsAtAll && !newGroupOpen && groups.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-3 pt-10 text-center">
-            <div className="text-[26px] text-text-faint">▤</div>
+            <Icon name="server" size={30} className="text-text-faint" />
+
             <div className="text-[13px] font-semibold text-text-body">{t('hosts.empty.title')}</div>
             <div className="text-[12px] leading-relaxed text-text-dim">
               {t('hosts.empty.description')}

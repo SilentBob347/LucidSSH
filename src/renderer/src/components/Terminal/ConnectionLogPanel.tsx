@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ConnectionLogEntry } from '@shared/ssh';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Лог соединения SSH-уровня (CLOG-01…03): шаги tcp/handshake/hostkey/auth,
@@ -50,7 +51,7 @@ export function ConnectionLogPanel({
           onClick={onClose}
           className="flex size-[20px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
         >
-          ×
+          <Icon name="close" size={13} />
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2 font-mono text-[11px]">

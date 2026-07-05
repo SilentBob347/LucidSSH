@@ -7,6 +7,7 @@ import { insertIntoComposer } from '@/stores/composerBus';
 import { useSessions } from '@/stores/sessions';
 import { usePanels } from '@/stores/panels';
 import { SnippetList } from '@/components/Snippets/SnippetList';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Правая панель — каталог команд (CAT-01…05; Design_Brief §3.4).
@@ -83,7 +84,7 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
             onClick={onClose}
             className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
           >
-            ×
+            <Icon name="close" size={14} />
           </button>
         </div>
 
@@ -130,7 +131,7 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
               aria-label="‹"
               className="flex size-[20px] shrink-0 items-center justify-center rounded-[4px] text-text-dim hover:text-text-strong"
             >
-              ‹
+              <Icon name="chevron-left" size={14} />
             </button>
             <div
               ref={catStripRef}
@@ -157,7 +158,7 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
               aria-label="›"
               className="flex size-[20px] shrink-0 items-center justify-center rounded-[4px] text-text-dim hover:text-text-strong"
             >
-              ›
+              <Icon name="chevron-right" size={14} />
             </button>
           </div>
         )}
@@ -210,7 +211,7 @@ function CommandCard({ cmd }: { cmd: CatalogCommand }): JSX.Element {
           {cmd.name}
         </button>
         <span className="min-w-0 flex-1 truncate text-[12px] text-text-muted">{cmd.summary}</span>
-        {cmd.dangerous && <span className="shrink-0 text-warning">⚠</span>}
+        {cmd.dangerous && <Icon name="alert" size={14} className="shrink-0 text-warning" />}
       </div>
       {cmd.flags.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-[6px]">

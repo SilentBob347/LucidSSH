@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Snippet } from '@shared/history';
 import { insertIntoComposer } from '@/stores/composerBus';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Список сниппетов (SnippetRow, Design_Brief §3.4). Разбит на группы «Обычные» и
@@ -40,7 +41,7 @@ export function SnippetList({
   if (snippets.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-1 px-5 py-[44px] text-center">
-        <div className="text-[24px] text-text-faint">🔖</div>
+        <Icon name="bookmark" size={26} className="text-text-faint" />
         <div className="text-[13px] font-semibold text-text-body">{t('snippet.empty.title')}</div>
         <div className="text-[12px] text-text-dim">{t('snippet.empty.description')}</div>
       </div>
@@ -143,7 +144,7 @@ function SnippetRow({
           }}
           className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:text-success-bright"
         >
-          ▷
+          <Icon name="play" size={13} />
         </button>
         <button
           type="button"
@@ -155,7 +156,7 @@ function SnippetRow({
           }}
           className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:text-lavender"
         >
-          ✎
+          <Icon name="edit" size={13} />
         </button>
         <button
           type="button"
@@ -167,7 +168,7 @@ function SnippetRow({
           }}
           className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:text-danger"
         >
-          🗑
+          <Icon name="trash" size={13} />
         </button>
       </div>
     </div>

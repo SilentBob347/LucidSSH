@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ExternalImportResult, ImportSource } from '@shared/import';
 import { useHosts } from '@/stores/hosts';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Импорт хостов из внешних источников (HM-03 PuTTY, HM-04 ssh_config).
@@ -118,7 +119,7 @@ export function ExternalImportDialog({ onClose }: { onClose: () => void }): JSX.
             onClick={onClose}
             className="flex size-[24px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-text-strong"
           >
-            ×
+            <Icon name="close" size={15} />
           </button>
         </div>
 
@@ -187,8 +188,8 @@ export function ExternalImportDialog({ onClose }: { onClose: () => void }): JSX.
 
               {result.unsupported.length > 0 && (
                 <div className="mt-3 rounded-[6px] border border-warning/25 bg-warning/10 px-3 py-2">
-                  <div className="text-[11.5px] font-semibold text-warning-text">
-                    ⚠ {t('import.unsupported')}
+                  <div className="flex items-center gap-1 text-[11.5px] font-semibold text-warning-text">
+                    <Icon name="alert" size={13} /> {t('import.unsupported')}
                   </div>
                   <div className="mt-1 space-y-[2px]">
                     {result.unsupported.map((u, i) => (

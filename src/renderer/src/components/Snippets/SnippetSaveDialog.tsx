@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Snippet } from '@shared/history';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * SnippetSaveDialog (SNIP-01, SNIP-05; Design_Brief §3.5). Модалка 440px:
@@ -90,7 +91,7 @@ export function SnippetSaveDialog({
         aria-modal="true"
       >
         <div className="flex items-center gap-2 px-[18px] pt-[15px]">
-          <span className="text-[16px] text-lavender">🔖</span>
+          <Icon name="bookmark" size={16} className="text-lavender" />
           <span className="text-[14.5px] font-semibold text-text-strong">
             {editSnippet ? t('snippet.editTitle') : t('snippet.saveTitle')}
           </span>
@@ -103,8 +104,8 @@ export function SnippetSaveDialog({
           </div>
 
           {danger && (
-            <div className="rounded-[6px] border border-warning/25 bg-warning/10 px-3 py-2 text-[11.5px] text-warning-text">
-              ⚠ {t('snippet.dangerWarn')}
+            <div className="flex items-center gap-2 rounded-[6px] border border-warning/25 bg-warning/10 px-3 py-2 text-[11.5px] text-warning-text">
+              <Icon name="alert" size={14} className="shrink-0" /> {t('snippet.dangerWarn')}
             </div>
           )}
 

@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getSearchAddon } from './XtermView';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Поиск по буферу терминала (FIND-01/02): строка поверх терминала, не блокирует
@@ -100,7 +101,7 @@ export function TerminalSearchBar({
         onClick={onClose}
         className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-text-strong"
       >
-        ×
+        <Icon name="close" size={14} />
       </button>
     </div>
   );

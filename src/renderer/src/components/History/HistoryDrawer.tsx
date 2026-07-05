@@ -5,6 +5,7 @@ import type { HistoryEntry, Snippet } from '@shared/history';
 import { insertIntoComposer } from '@/stores/composerBus';
 import { usePanels } from '@/stores/panels';
 import { SnippetList } from '@/components/Snippets/SnippetList';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Панель истории и избранного (HistoryDrawer, Design_Brief §3.5; скриншот 06).
@@ -103,7 +104,7 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
             onClick={closeHistory}
             className="flex size-[24px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
           >
-            ×
+            <Icon name="close" size={15} />
           </button>
         </div>
 
@@ -168,19 +169,19 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
                         {e.command}
                       </button>
                       {e.hasSecret && (
-                        <span className="flex shrink-0 items-center gap-1 rounded-[3px] bg-bg-elevated-2 px-[5px] text-[9.5px] font-semibold text-text-dim">
-                          🔒 {t('history.secretHidden')}
+                        <span className="flex shrink-0 items-center gap-1 rounded-[3px] bg-bg-elevated-2 px-[5px] py-[2px] text-[9.5px] font-semibold text-text-dim">
+                          <Icon name="lock" size={10} /> {t('history.secretHidden')}
                         </span>
                       )}
                       <div className="flex shrink-0 gap-1">
-                        <IconBtn title={t('history.copy')} onClick={() => window.lucidSSH.clipboardWrite(e.command)}>⧉</IconBtn>
-                        <IconBtn title={t('history.insert')} onClick={() => insertIntoComposer(e.command)}>↵</IconBtn>
-                        <IconBtn title={t('history.saveSnippet')} onClick={() => openSnippetDialog(e.command)}>🔖</IconBtn>
+                        <IconBtn title={t('history.copy')} onClick={() => window.lucidSSH.clipboardWrite(e.command)}><Icon name="copy" size={13} /></IconBtn>
+                        <IconBtn title={t('history.insert')} onClick={() => insertIntoComposer(e.command)}><Icon name="insert" size={13} /></IconBtn>
+                        <IconBtn title={t('history.saveSnippet')} onClick={() => openSnippetDialog(e.command)}><Icon name="bookmark" size={13} /></IconBtn>
                         <IconBtn
                           title={t('history.delete')}
                           onClick={() => void window.lucidSSH.deleteHistoryEntry(e.id).then(refreshHistory)}
                         >
-                          🗑
+                          <Icon name="trash" size={13} />
                         </IconBtn>
                       </div>
                     </div>
@@ -210,7 +211,7 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
                     </div>
                     {e.note && (
                       <div className="mt-1 flex items-center gap-1 rounded-[4px] bg-warning/10 px-2 py-1 text-[11.5px] text-warning-text">
-                        ✎ {e.note}
+                        <Icon name="edit" size={11} className="shrink-0" /> {e.note}
                       </div>
                     )}
                     {noteEditing === e.id ? (

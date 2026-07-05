@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ErrorExplanation } from '@shared/content';
 import { insertIntoComposer } from '@/stores/composerBus';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Панель детектора ошибок (ERR-03; скриншот 02-Error). Выезжает снизу области
@@ -51,7 +52,7 @@ export function ErrorDetector({
           onClick={onClose}
           className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-text-strong"
         >
-          ×
+          <Icon name="close" size={14} />
         </button>
       </div>
 
@@ -84,7 +85,7 @@ export function ErrorDetector({
                         onClick={() => insertIntoComposer(check.command!)}
                         className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-lavender"
                       >
-                        ↵
+                        <Icon name="insert" size={13} />
                       </button>
                       <button
                         type="button"
@@ -93,7 +94,7 @@ export function ErrorDetector({
                         onClick={() => copy(check.command!, i)}
                         className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-text-strong"
                       >
-                        {copiedIdx === i ? '✓' : '⧉'}
+                        <Icon name={copiedIdx === i ? 'check' : 'copy'} size={13} />
                       </button>
                     </div>
                   )}

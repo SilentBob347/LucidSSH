@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EventsMenu } from './EventsMenu';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Кастомный тайтл-бар 32px (Design_Brief §3.1): лого + имя + справка слева,
@@ -26,9 +27,9 @@ export function TitleBar(): JSX.Element {
           type="button"
           title={t('titleBar.help')}
           aria-label={t('titleBar.help')}
-          className="app-no-drag ml-1 flex size-[22px] items-center justify-center rounded-full border border-border-default text-[11px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
+          className="app-no-drag ml-1 flex size-[22px] items-center justify-center rounded-full border border-border-default text-text-dim hover:bg-bg-elevated hover:text-text-strong"
         >
-          ?
+          <Icon name="help" size={13} />
         </button>
         <EventsMenu />
       </div>

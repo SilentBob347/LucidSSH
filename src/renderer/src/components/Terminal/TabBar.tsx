@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { SessionInfo } from '@shared/ssh';
 import { useSessions } from '@/stores/sessions';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Таб-бар сессий 38px (Design_Brief §3.3): статус-точка, имя, ×.
@@ -167,7 +168,7 @@ export function TabBar({
                 }}
                 className="flex size-[16px] shrink-0 items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-text-strong"
               >
-                ×
+                <Icon name="close" size={11} />
               </button>
             </div>
           );

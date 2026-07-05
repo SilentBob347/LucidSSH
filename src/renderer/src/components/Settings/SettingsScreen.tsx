@@ -9,6 +9,7 @@ import { useUpdates } from '@/stores/updates';
 import { useSessions } from '@/stores/sessions';
 import { applyTerminalConfig } from '@/components/Terminal/XtermView';
 import { Card, Segment, SectionTitle, Toggle, ToggleRow } from './controls';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Страница настроек (SET-01…08; Design_Brief §3.10; скриншот 08). Отдельная
@@ -67,7 +68,7 @@ export function SettingsScreen({ onOpenGuide }: { onOpenGuide: () => void }): JS
       {/* Шапка */}
       <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-border-default px-5">
         <div className="flex items-center gap-2">
-          <span className="text-[16px]">⚙</span>
+          <Icon name="settings" size={17} className="text-text-muted" />
           <span className="text-[15px] font-semibold text-text-primary">{t('settings.title')}</span>
           <span className="rounded-[4px] border border-border-strong px-[6px] py-[1px] font-mono text-[10.5px] text-text-dim">
             Ctrl + ,
@@ -79,7 +80,7 @@ export function SettingsScreen({ onOpenGuide }: { onOpenGuide: () => void }): JS
           onClick={closeSettings}
           className="flex size-[26px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
         >
-          ×
+          <Icon name="close" size={16} />
         </button>
       </div>
 
@@ -211,8 +212,9 @@ function TerminalSection({
             />
           </div>
           {config.terminal.inlineInput && guardOn && (
-            <div className="mt-3 rounded-[6px] border border-warning/25 bg-warning/10 px-3 py-2 text-[11.5px] text-warning-text">
-              ⚠ {t('settings.terminal.inlineInputGuardWarn')}
+            <div className="mt-3 flex items-start gap-2 rounded-[6px] border border-warning/25 bg-warning/10 px-3 py-2 text-[11.5px] text-warning-text">
+              <Icon name="alert" size={14} className="mt-[1px] shrink-0" />
+              <span>{t('settings.terminal.inlineInputGuardWarn')}</span>
             </div>
           )}
         </div>
@@ -356,7 +358,7 @@ function SecuritySection({ config, update }: { config: AppConfig; update: Update
                     onClick={() => void window.lucidSSH.deleteKnownHost(h.line).then(refresh)}
                     className="flex size-[26px] shrink-0 items-center justify-center rounded-[4px] text-text-dim hover:bg-danger/15 hover:text-danger-text"
                   >
-                    🗑
+                    <Icon name="trash" size={14} />
                   </button>
                 </div>
               ))}
@@ -645,8 +647,8 @@ function AboutSection({ onOpenGuide }: { onOpenGuide: () => void }): JSX.Element
       <div className="space-y-3">
         <Card>
           <div className="flex items-center gap-3">
-            <div className="flex size-[44px] items-center justify-center rounded-[10px] bg-accent/15 text-[22px]">
-              🖥
+            <div className="flex size-[44px] items-center justify-center rounded-[10px] bg-accent/15 text-lavender">
+              <Icon name="file" size={22} />
             </div>
             <div>
               <div className="text-[15px] font-semibold text-text-strong">LucidSSH</div>

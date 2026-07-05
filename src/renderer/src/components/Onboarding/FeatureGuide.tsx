@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * FeatureGuide — модалка «Возможности LucidSSH» (скриншот 15-Guide):
@@ -43,7 +44,7 @@ export function FeatureGuide({ onClose }: { onClose: () => void }): JSX.Element 
             onClick={onClose}
             className="flex size-[24px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
           >
-            ×
+            <Icon name="close" size={15} />
           </button>
         </div>
 

@@ -45,7 +45,7 @@ export function EventsMenu(): JSX.Element {
         </svg>
         {count > 0 && (
           <span
-            className={`absolute -top-[3px] -right-[3px] flex min-w-[13px] items-center justify-center rounded-full px-[3px] text-[8.5px] font-bold text-white ${
+            className={`absolute top-[1px] -right-[3px] flex h-[13px] min-w-[13px] items-center justify-center rounded-full px-[3px] text-[8.5px] leading-none font-bold text-white ${
               hasFingerprint ? 'bg-danger' : 'bg-accent'
             }`}
           >

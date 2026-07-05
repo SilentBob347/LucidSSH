@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AuthMethod, HostInput } from '@shared/hosts';
 import { useHosts } from '@/stores/hosts';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Drawer «Новое подключение» (скриншот 03-Newconn, Design_Brief §3.5):
@@ -148,7 +149,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
             onClick={closeDrawer}
             className="flex size-[24px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
           >
-            ×
+            <Icon name="close" size={15} />
           </button>
         </div>
 
