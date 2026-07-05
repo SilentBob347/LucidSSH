@@ -11,6 +11,7 @@ import { TerminalContextMenu } from './TerminalContextMenu';
 import { TerminalSearchBar } from './TerminalSearchBar';
 import { BottomInputBar } from './BottomInputBar';
 import { HintBar } from './HintBar';
+import { OnboardingHints } from './OnboardingHints';
 import { DangerGuardModal } from '@/components/Guard/DangerGuardModal';
 import { BreadcrumbBar } from '@/components/Breadcrumb/BreadcrumbBar';
 import { ErrorDetector } from './ErrorDetector';
@@ -37,6 +38,7 @@ export function TerminalArea(): JSX.Element {
   const [searchOpen, setSearchOpen] = useState(false);
   const [dangerPrompt, setDangerPrompt] = useState<DangerousCommandPrompt | null>(null);
   const [hintVisible, setHintVisible] = useState(false);
+  const [onboardingDone, setOnboardingDone] = useState(false);
   const commandCounts = useRef<Map<string, number>>(new Map());
   const knownIds = useRef<Set<string>>(new Set());
 
@@ -50,6 +52,11 @@ export function TerminalArea(): JSX.Element {
 
   const active = sessions.find((s) => s.sessionId === activeSessionId);
   const showTerminal = active && active.status !== 'disconnected' && active.status !== 'connecting';
+  // Онбординг-подсказки: до «Режима эксперта» и пока не пройдены (§5.1)
+  const showOnboarding =
+    !onboardingDone &&
+    !config?.ui.expertMode &&
+    (config?.shownCounts['onboardingTips'] ?? 0) < 1;
 
   // Хоткеи терминала (SET-06): Ctrl+F поиск, Ctrl+L каталог, Ctrl+W закрыть вкладку,
   // Ctrl+Shift+C/V копировать/вставить активной сессии.
@@ -186,8 +193,18 @@ export function TerminalArea(): JSX.Element {
         )}
       </div>
 
+      {/* Онбординг-подсказки «Совет N из 3» — над композером, до режима эксперта (§5.1) */}
+      {showOnboarding && showTerminal && active && !config?.terminal.inlineInput && (
+        <OnboardingHints
+          onDone={() => {
+            setOnboardingDone(true);
+            void markHint('onboardingTips');
+          }}
+        />
+      )}
+
       {/* Одноразовая подсказка о сниппетах (SNIP-08) — над композером */}
-      {hintVisible && showTerminal && active && !config?.terminal.inlineInput && (
+      {!showOnboarding && hintVisible && showTerminal && active && !config?.terminal.inlineInput && (
         <HintBar onClose={() => setHintVisible(false)} />
       )}
 

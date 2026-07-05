@@ -518,5 +518,13 @@
   },
   "hint": {
     "snippet": "Use this command often? Save it — 🔖 in history or right-click in the terminal."
+  },
+  "tips": {
+    "tip1": "Click a path segment in the breadcrumb above — it inserts “cd …” into the input.",
+    "tip2": "Dangerous commands (rm -rf, kill -9) are intercepted by the Guard before running.",
+    "tip3": "Open “History” to find a command by notes and filters.",
+    "counter": "Tip {{n}} of {{total}}",
+    "next": "Next",
+    "hide": "Hide"
   }
 }
