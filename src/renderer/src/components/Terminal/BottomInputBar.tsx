@@ -15,12 +15,15 @@ export function BottomInputBar({
   sessionId,
   onDanger,
   onOpenHistory,
-  onToggleCatalog
+  onToggleCatalog,
+  onCommandSent
 }: {
   sessionId: string;
   onDanger: (prompt: DangerousCommandPrompt) => void;
   onOpenHistory: () => void;
   onToggleCatalog: () => void;
+  /** Вызывается после успешной отправки команды на сервер (для SNIP-08). */
+  onCommandSent?: () => void;
 }): JSX.Element {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
@@ -50,6 +53,7 @@ export function BottomInputBar({
       onDanger(result.prompt); // опасная — ждём подтверждения, поле не чистим
     } else {
       setValue(''); // отправлена на сервер
+      onCommandSent?.(); // счётчик команд сессии (SNIP-08)
     }
   };
 

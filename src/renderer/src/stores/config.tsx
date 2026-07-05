@@ -16,6 +16,8 @@ export function getCurrentConfig(): AppConfig | null {
 interface ConfigStore {
   config: AppConfig | null;
   update: (path: string, value: string | number | boolean) => Promise<void>;
+  /** Отметить показ одноразовой подсказки (§5.1, SNIP-08). */
+  markHint: (hintId: string) => Promise<void>;
 }
 
 const Ctx = createContext<ConfigStore | null>(null);
@@ -36,7 +38,16 @@ export function ConfigProvider({ children }: { children: ReactNode }): JSX.Eleme
     setConfig(next);
   }, []);
 
-  const value = useMemo<ConfigStore>(() => ({ config, update }), [config, update]);
+  const markHint = useCallback(async (hintId: string) => {
+    const next = await window.lucidSSH.markHint(hintId);
+    currentConfig = next;
+    setConfig(next);
+  }, []);
+
+  const value = useMemo<ConfigStore>(
+    () => ({ config, update, markHint }),
+    [config, update, markHint]
+  );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

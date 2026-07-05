@@ -35,6 +35,7 @@ const api = {
   updateConfig: (path: string, value: string | number | boolean): Promise<AppConfig> =>
     ipcRenderer.invoke(IPC.configUpdate, path, value),
   resetConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.configReset),
+  markHint: (hintId: string): Promise<AppConfig> => ipcRenderer.invoke(IPC.configMarkHint, hintId),
   listKnownHosts: (): Promise<KnownHostView[]> => ipcRenderer.invoke(IPC.knownHostsList),
   deleteKnownHost: (line: number): Promise<void> => ipcRenderer.invoke(IPC.knownHostsDelete, line),
 

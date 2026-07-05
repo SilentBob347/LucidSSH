@@ -78,4 +78,17 @@ export function registerConfigIpcHandlers(): void {
     const setter = WRITABLE[rawPath]!;
     return updateConfig((cfg) => setter(value as Primitive, cfg));
   });
+
+  // Счётчик показов одноразовых подсказок (§5.1, SNIP-08). Только известные id.
+  ipcMain.handle(IPC.configMarkHint, (event, rawId: unknown): AppConfig => {
+    assertSenderIsMainWindow(event);
+    if (!KNOWN_HINTS.has(rawId as string)) throw new IpcValidationError('hintId: unknown');
+    const id = rawId as string;
+    return updateConfig((cfg) => {
+      cfg.shownCounts[id] = (cfg.shownCounts[id] ?? 0) + 1;
+    });
+  });
 }
+
+/** Разрешённые id подсказок (обучающие подсказки с лимитом показов). */
+const KNOWN_HINTS = new Set(['snippetHint']);

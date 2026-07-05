@@ -1,8 +1,12 @@
 import type { JSX } from 'react';
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CatalogCommand, CommandsDatabase } from '@shared/content';
+import type { Snippet } from '@shared/history';
 import { insertIntoComposer } from '@/stores/composerBus';
+import { useSessions } from '@/stores/sessions';
+import { usePanels } from '@/stores/panels';
+import { SnippetList } from '@/components/Snippets/SnippetList';
 
 /**
  * Правая панель — каталог команд (CAT-01…05; Design_Brief §3.4).
@@ -13,9 +17,14 @@ import { insertIntoComposer } from '@/stores/composerBus';
 export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: () => void }>(
   function CatalogPanel({ width, onClose }, ref): JSX.Element {
     const { t } = useTranslation();
+    const { sessions, activeSessionId } = useSessions();
+    const { openSnippetDialog, snippetsRevision } = usePanels();
+    const active = sessions.find((s) => s.sessionId === activeSessionId);
     const [db, setDb] = useState<CommandsDatabase | null>(null);
     const [category, setCategory] = useState<string | null>(null);
     const [query, setQuery] = useState('');
+    const [tab, setTab] = useState<'catalog' | 'server' | 'global'>('catalog');
+    const [snippets, setSnippets] = useState<Snippet[]>([]);
     const catStripRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -24,6 +33,22 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
         setCategory(d.categories[0] ?? null);
       });
     }, []);
+
+    // Сниппеты для вкладок [хост]/Глобальные; обновляются при сохранении (SNIP-05)
+    const refreshSnippets = useCallback(() => {
+      void window.lucidSSH.listSnippets(active?.hostId).then(setSnippets);
+    }, [active?.hostId]);
+    useEffect(() => {
+      refreshSnippets();
+    }, [refreshSnippets, snippetsRevision]);
+
+    // Если активный хост исчез, а открыта его вкладка — вернуться к каталогу
+    useEffect(() => {
+      if (tab === 'server' && !active) setTab('catalog');
+    }, [tab, active]);
+
+    const serverSnips = snippets.filter((s) => s.hostId != null && s.hostId === active?.hostId);
+    const globalSnips = snippets.filter((s) => s.hostId == null);
 
     const q = query.trim().toLowerCase();
     const filtered = useMemo(() => {
@@ -62,13 +87,30 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
           </button>
         </div>
 
-        {/* Вкладка «Каталог» (сниппет-вкладки — Этап 7) */}
-        <div className="flex h-[32px] shrink-0 items-end gap-[2px] border-b border-border-default px-3">
-          <div className="flex h-[32px] items-center rounded-t-[7px] border-b-2 border-accent bg-bg-tab-active px-[11px] text-[12px] font-medium text-text-strong">
+        {/* Вкладки: Каталог · [хост] · Глобальные (SNIP-05) */}
+        <div className="flex h-[32px] shrink-0 items-end gap-[2px] overflow-x-auto border-b border-border-default px-3 [scrollbar-width:none]">
+          <TabButton active={tab === 'catalog'} onClick={() => setTab('catalog')}>
             {t('catalog.tabCatalog')}
-          </div>
+          </TabButton>
+          {active && (
+            <TabButton active={tab === 'server'} onClick={() => setTab('server')}>
+              {active.hostName}
+            </TabButton>
+          )}
+          <TabButton active={tab === 'global'} onClick={() => setTab('global')}>
+            {t('catalog.tabGlobal')}
+          </TabButton>
         </div>
 
+        {tab !== 'catalog' ? (
+          <SnippetList
+            snippets={tab === 'server' ? serverSnips : globalSnips}
+            activeHostId={active?.hostId}
+            onChanged={refreshSnippets}
+            onEdit={(s) => openSnippetDialog(s.command, s)}
+          />
+        ) : (
+          <>
         <div className="px-3 pt-[10px] pb-2">
           <input
             type="text"
@@ -125,10 +167,36 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
             <CommandCard key={cmd.name} cmd={cmd} />
           ))}
         </div>
+          </>
+        )}
       </aside>
     );
   }
 );
+
+function TabButton({
+  active,
+  onClick,
+  children
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        active
+          ? 'flex h-[32px] shrink-0 items-center rounded-t-[7px] border-b-2 border-accent bg-bg-tab-active px-[11px] text-[12px] font-medium whitespace-nowrap text-text-strong'
+          : 'flex h-[32px] shrink-0 items-center rounded-t-[7px] border-b-2 border-transparent px-[11px] text-[12px] whitespace-nowrap text-text-dim hover:text-text-muted'
+      }
+    >
+      {children}
+    </button>
+  );
+}
 
 function CommandCard({ cmd }: { cmd: CatalogCommand }): JSX.Element {
   return (

@@ -10,11 +10,12 @@ import { PastePreviewDialog } from './PastePreviewDialog';
 import { TerminalContextMenu } from './TerminalContextMenu';
 import { TerminalSearchBar } from './TerminalSearchBar';
 import { BottomInputBar } from './BottomInputBar';
+import { HintBar } from './HintBar';
 import { DangerGuardModal } from '@/components/Guard/DangerGuardModal';
 import { BreadcrumbBar } from '@/components/Breadcrumb/BreadcrumbBar';
 import { ErrorDetector } from './ErrorDetector';
 import { insertIntoComposer, getComposerValue } from '@/stores/composerBus';
-import { useConfig } from '@/stores/config';
+import { useConfig, getCurrentConfig } from '@/stores/config';
 import { usePanels } from '@/stores/panels';
 
 /**
@@ -26,7 +27,7 @@ export function TerminalArea(): JSX.Element {
   const { t } = useTranslation();
   const { sessions, activeSessionId, reconnect, closeTab, breadcrumbs, dashboards, errors, dismissError } =
     useSessions();
-  const { config, update } = useConfig();
+  const { config, update, markHint } = useConfig();
   const { openHistory, openSnippetDialog } = usePanels();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(
@@ -35,6 +36,8 @@ export function TerminalArea(): JSX.Element {
   const [pastePreview, setPastePreview] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [dangerPrompt, setDangerPrompt] = useState<DangerousCommandPrompt | null>(null);
+  const [hintVisible, setHintVisible] = useState(false);
+  const commandCounts = useRef<Map<string, number>>(new Map());
   const knownIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -79,6 +82,21 @@ export function TerminalArea(): JSX.Element {
   useEffect(() => {
     setSearchOpen(false);
   }, [activeSessionId]);
+
+  // SNIP-08: после 5-й команды в сессии — одноразовая подсказка о сниппетах.
+  // Не более 2 показов суммарно (shownCounts) и никогда в «Режиме эксперта».
+  const handleCommandSent = useCallback(
+    (sessionId: string) => {
+      const n = (commandCounts.current.get(sessionId) ?? 0) + 1;
+      commandCounts.current.set(sessionId, n);
+      const cfg = getCurrentConfig();
+      if (n === 5 && cfg && !cfg.ui.expertMode && (cfg.shownCounts['snippetHint'] ?? 0) < 2) {
+        setHintVisible(true);
+        void markHint('snippetHint');
+      }
+    },
+    [markHint]
+  );
 
   const handlePaste = useCallback((sessionId: string) => {
     void window.lucidSSH.clipboardRead().then((text) => {
@@ -168,6 +186,11 @@ export function TerminalArea(): JSX.Element {
         )}
       </div>
 
+      {/* Одноразовая подсказка о сниппетах (SNIP-08) — над композером */}
+      {hintVisible && showTerminal && active && !config?.terminal.inlineInput && (
+        <HintBar onClose={() => setHintVisible(false)} />
+      )}
+
       {/* Композер команд — перехватывается Стражем (GUARD-02). Показан для живой
           сессии, кроме режима «ввод прямо в консоли» (тогда ввод идёт в pty). */}
       {showTerminal && active && !config?.terminal.inlineInput && (
@@ -176,6 +199,7 @@ export function TerminalArea(): JSX.Element {
           onDanger={setDangerPrompt}
           onOpenHistory={openHistory}
           onToggleCatalog={() => void update('ui.catalogPanelOpen', !(config?.ui.catalogPanelOpen ?? false))}
+          onCommandSent={() => handleCommandSent(active.sessionId)}
         />
       )}
 

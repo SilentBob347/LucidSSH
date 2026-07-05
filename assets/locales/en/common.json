@@ -264,6 +264,7 @@
   "catalog": {
     "title": "Commands",
     "tabCatalog": "Catalog",
+    "tabGlobal": "Global",
     "searchPlaceholder": "Search commands",
     "close": "Close panel"
   },
@@ -514,5 +515,8 @@
       "pickTitle": "Choose ssh config file",
       "none": "No file selected or it is empty"
     }
+  },
+  "hint": {
+    "snippet": "Use this command often? Save it — 🔖 in history or right-click in the terminal."
   }
 }

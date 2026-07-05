@@ -14,6 +14,7 @@ export const IPC = {
   // --- Настройки (config.json, без секретов) ---
   configGet: 'config:get',
   configUpdate: 'config:update',
+  configMarkHint: 'config:mark-hint', // счётчик показов подсказок (§5.1, SNIP-08)
   configReset: 'config:reset', // SET-08 сброс до заводских
   knownHostsList: 'security:known-hosts-list', // SET-04
   knownHostsDelete: 'security:known-hosts-delete',
