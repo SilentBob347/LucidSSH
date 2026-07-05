@@ -23,6 +23,14 @@ export interface HostKeyPrompt {
   previousFingerprint?: string;
 }
 
+/** Запись known_hosts для показа в Настройки → Безопасность (SET-04). Без сырого ключа. */
+export interface KnownHostView {
+  line: number;
+  host: string;
+  keyType: string;
+  fingerprint: string; // SHA256:...
+}
+
 export interface ConnectionLogEntry {
   timestamp: string; // ISO 8601
   level: 'info' | 'warn' | 'error';

@@ -1,7 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC, type AppInfo } from '@shared/ipc';
 import type { Host, HostGroup, HostInput, ImportPreview } from '@shared/hosts';
-import type { ConnectionLogEntry, HostKeyPrompt, SessionInfo, SessionStatus } from '@shared/ssh';
+import type {
+  ConnectionLogEntry,
+  HostKeyPrompt,
+  KnownHostView,
+  SessionInfo,
+  SessionStatus
+} from '@shared/ssh';
 import type { AppConfig } from '@shared/config';
 import type { SubmitResult } from '@shared/guard';
 import type { Breadcrumb } from '@shared/breadcrumb';
@@ -26,6 +32,9 @@ const api = {
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.configGet),
   updateConfig: (path: string, value: string | number | boolean): Promise<AppConfig> =>
     ipcRenderer.invoke(IPC.configUpdate, path, value),
+  resetConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.configReset),
+  listKnownHosts: (): Promise<KnownHostView[]> => ipcRenderer.invoke(IPC.knownHostsList),
+  deleteKnownHost: (line: number): Promise<void> => ipcRenderer.invoke(IPC.knownHostsDelete, line),
 
   // --- i18n ---
   i18nGetResource: (lng: string, ns: string): Promise<Record<string, unknown>> =>

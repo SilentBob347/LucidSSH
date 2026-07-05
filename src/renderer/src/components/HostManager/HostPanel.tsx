@@ -5,6 +5,7 @@ import type { Host, HostGroup } from '@shared/hosts';
 import type { ImportPreview } from '@shared/hosts';
 import { useHosts } from '@/stores/hosts';
 import { useSessions } from '@/stores/sessions';
+import { usePanels } from '@/stores/panels';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ImportDialog } from './ImportDialog';
 
@@ -112,6 +113,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
   const { t } = useTranslation();
   const { hosts, groups, refresh, openDrawer } = useHosts();
   const { sessions, connect } = useSessions();
+  const { openSettings } = usePanels();
   const [query, setQuery] = useState('');
   const [selectedHostId, setSelectedHostId] = useState<number | null>(null);
 
@@ -383,6 +385,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
       <div className="flex shrink-0 gap-1 border-t border-border-hairline px-[10px] py-2">
         <button
           type="button"
+          onClick={openSettings}
           className="h-7 flex-1 rounded-[4px] text-[12px] text-text-muted hover:bg-bg-elevated hover:text-text-strong"
         >
           {t('hosts.footer.settings')}

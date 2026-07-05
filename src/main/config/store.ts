@@ -54,3 +54,18 @@ export function updateConfig(mutator: (cfg: AppConfig) => void): AppConfig {
   saveConfig();
   return cfg;
 }
+
+/**
+ * Сброс настроек до заводских (SET-08). НЕ трогает хосты, ключи и историю —
+ * они в отдельных хранилищах. Геометрия окна и факт пройденного онбординга
+ * сохраняются, чтобы сброс не был резким (это не «настройки» в смысле SET).
+ */
+export function resetConfig(): AppConfig {
+  const prev = loadConfig();
+  const fresh = createDefaultConfig(app.getVersion());
+  fresh.window = prev.window;
+  fresh.onboarding = prev.onboarding;
+  cached = fresh;
+  saveConfig();
+  return fresh;
+}

@@ -24,7 +24,7 @@ import { usePanels } from '@/stores/panels';
  */
 export function TerminalArea(): JSX.Element {
   const { t } = useTranslation();
-  const { sessions, activeSessionId, reconnect, breadcrumbs, dashboards, errors, dismissError } =
+  const { sessions, activeSessionId, reconnect, closeTab, breadcrumbs, dashboards, errors, dismissError } =
     useSessions();
   const { config, update } = useConfig();
   const { openHistory, openSnippetDialog } = usePanels();
@@ -48,17 +48,33 @@ export function TerminalArea(): JSX.Element {
   const active = sessions.find((s) => s.sessionId === activeSessionId);
   const showTerminal = active && active.status !== 'disconnected' && active.status !== 'connecting';
 
-  // Ctrl+F открывает поиск по буферу активной сессии (FIND-01)
+  // Хоткеи терминала (SET-06): Ctrl+F поиск, Ctrl+L каталог, Ctrl+W закрыть вкладку,
+  // Ctrl+Shift+C/V копировать/вставить активной сессии.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && showTerminal) {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === 'f' && showTerminal) {
         e.preventDefault();
         setSearchOpen(true);
+      } else if (key === 'l') {
+        e.preventDefault();
+        void update('ui.catalogPanelOpen', !(config?.ui.catalogPanelOpen ?? false));
+      } else if (key === 'w' && active) {
+        e.preventDefault();
+        void closeTab(active.sessionId);
+      } else if (e.shiftKey && key === 'c' && active) {
+        e.preventDefault();
+        copySelection(active.sessionId);
+      } else if (e.shiftKey && key === 'v' && showTerminal && active) {
+        e.preventDefault();
+        handlePaste(active.sessionId);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showTerminal]);
+  });
 
   useEffect(() => {
     setSearchOpen(false);
@@ -152,8 +168,9 @@ export function TerminalArea(): JSX.Element {
         )}
       </div>
 
-      {/* Композер команд — перехватывается Стражем (GUARD-02). Показан для живой сессии. */}
-      {showTerminal && active && (
+      {/* Композер команд — перехватывается Стражем (GUARD-02). Показан для живой
+          сессии, кроме режима «ввод прямо в консоли» (тогда ввод идёт в pty). */}
+      {showTerminal && active && !config?.terminal.inlineInput && (
         <BottomInputBar
           sessionId={active.sessionId}
           onDanger={setDangerPrompt}

@@ -368,5 +368,93 @@
     "body": "“{{name}}” has {{count}} server snippets. What should happen to them?",
     "delete": "Delete snippets",
     "makeGlobal": "Make global"
+  },
+  "settings": {
+    "title": "Settings",
+    "sections": {
+      "terminal": "Terminal",
+      "connection": "Connection",
+      "security": "Security",
+      "interface": "Interface",
+      "hotkeys": "Hotkeys",
+      "about": "About"
+    },
+    "terminal": {
+      "font": "Font",
+      "fontSize": "Font size",
+      "sizeSmall": "Small",
+      "sizeMedium": "Medium",
+      "sizeLarge": "Large",
+      "bell": "Bell",
+      "bellDesc": "Play a bell on \\a in the output.",
+      "brightBold": "Bright bold text",
+      "brightBoldDesc": "Render bold in a brighter shade.",
+      "selectCopy": "Select = copy",
+      "selectCopyDesc": "Selected text goes straight to the clipboard.",
+      "rightPaste": "Right click = paste",
+      "rightPasteDesc": "Paste from the clipboard on right click.",
+      "inlineInput": "Type directly in the console",
+      "inlineInputDesc": "Type the command in the output line, like a regular terminal. The bottom input is hidden.",
+      "inlineInputGuardWarn": "In this mode the Guard does not check commands typed directly in the console. Dangerous-command protection only applies to the bottom input line."
+    },
+    "connection": {
+      "keepalive": "Keepalive interval, sec",
+      "keepaliveDesc": "How often to send a keepalive so the connection stays up.",
+      "timeout": "Connect timeout, sec",
+      "timeoutDesc": "How long to wait for the server when connecting.",
+      "autoreconnect": "Auto-reconnect",
+      "autoreconnectDesc": "Try to restore the connection when it drops."
+    },
+    "security": {
+      "guard": "Dangerous command guard",
+      "guardDesc": "Asks for confirmation before rm -rf, kill -9 and similar, requiring the object name. Turning it off removes all warnings.",
+      "history": "Command history",
+      "historyDesc": "Store executed commands. Passwords and tokens are always masked. Turning it off stops recording.",
+      "knownHosts": "Known servers (known_hosts)",
+      "knownEmpty": "No saved server fingerprints yet.",
+      "knownDelete": "Delete entry"
+    },
+    "interface": {
+      "expert": "Expert mode",
+      "expertDesc": "Turns off all learning hints at once. Bring them back individually with the toggles below.",
+      "expertEnable": "Enable",
+      "expertOn": "On",
+      "hintCatalog": "Command catalog hints",
+      "hintCatalogDesc": "Tips above the input and descriptions in the catalog.",
+      "hintTooltips": "Command output tooltips",
+      "hintTooltipsDesc": "Explanatory tooltips on hovering the output.",
+      "hintError": "Error detector panel",
+      "hintErrorDesc": "Pop-up “what to check” panel on errors.",
+      "hintConnect": "Connection dialog hints",
+      "hintConnectDesc": "Learning notes in the new connection form.",
+      "notifications": "Notifications",
+      "systemToasts": "Windows system notifications",
+      "systemToastsDesc": "Toasts on connection loss and long commands finishing when the window is not focused.",
+      "longCommand": "Long command threshold, sec",
+      "longCommandDesc": "Notify about commands longer than N seconds. 0 disables it."
+    },
+    "hk": {
+      "searchPlaceholder": "Search by action or key…",
+      "noMatches": "Nothing found",
+      "openSettings": "Open settings",
+      "openHistory": "Open command history",
+      "openCatalog": "Open command catalog",
+      "search": "Search terminal buffer",
+      "closeTab": "Close tab",
+      "copy": "Copy selection",
+      "paste": "Paste from clipboard",
+      "closePanel": "Close panel / dialog",
+      "guide": "Open guide"
+    },
+    "about": {
+      "version": "Version {{version}}",
+      "tagline": "A simple SSH client for Windows. Fully local: no account, cloud or telemetry.",
+      "help": "Help",
+      "openGuide": "Open guide",
+      "reset": "Reset settings",
+      "resetDesc": "Restore settings to defaults. Does not touch servers, keys or command history.",
+      "resetBtn": "Reset settings to defaults",
+      "resetConfirm": "Yes, reset"
+    }
   }
 }

@@ -17,6 +17,9 @@ interface PanelsStore {
   historyOpen: boolean;
   openHistory: () => void;
   closeHistory: () => void;
+  settingsOpen: boolean;
+  openSettings: () => void;
+  closeSettings: () => void;
   snippetDialog: SnippetDialogState | null;
   openSnippetDialog: (command: string, editSnippet?: Snippet) => void;
   closeSnippetDialog: () => void;
@@ -29,6 +32,7 @@ const Ctx = createContext<PanelsStore | null>(null);
 
 export function PanelsProvider({ children }: { children: ReactNode }): JSX.Element {
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [snippetDialog, setSnippetDialog] = useState<SnippetDialogState | null>(null);
   const [snippetsRevision, setSnippetsRevision] = useState(0);
 
@@ -37,13 +41,16 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
       historyOpen,
       openHistory: () => setHistoryOpen(true),
       closeHistory: () => setHistoryOpen(false),
+      settingsOpen,
+      openSettings: () => setSettingsOpen(true),
+      closeSettings: () => setSettingsOpen(false),
       snippetDialog,
       openSnippetDialog: (command, editSnippet) => setSnippetDialog({ command, editSnippet }),
       closeSnippetDialog: () => setSnippetDialog(null),
       snippetsRevision,
       bumpSnippets: () => setSnippetsRevision((v) => v + 1)
     }),
-    [historyOpen, snippetDialog, snippetsRevision]
+    [historyOpen, settingsOpen, snippetDialog, snippetsRevision]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

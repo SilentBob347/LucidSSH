@@ -42,6 +42,7 @@ const WRITABLE: Record<string, (v: unknown, cfg: AppConfig) => void> = {
   'terminal.brightBold': (v, cfg) => setBool(v, (b) => (cfg.terminal.brightBold = b)),
   'terminal.selectToCopy': (v, cfg) => setBool(v, (b) => (cfg.terminal.selectToCopy = b)),
   'terminal.rightClickPaste': (v, cfg) => setBool(v, (b) => (cfg.terminal.rightClickPaste = b)),
+  'terminal.inlineInput': (v, cfg) => setBool(v, (b) => (cfg.terminal.inlineInput = b)),
   'connection.autoreconnect': (v, cfg) => setBool(v, (b) => (cfg.connection.autoreconnect = b)),
   'connection.keepaliveIntervalSec': (v, cfg) =>
     setNum(v, 5, 3600, (n) => (cfg.connection.keepaliveIntervalSec = n)),

@@ -14,6 +14,9 @@ export const IPC = {
   // --- Настройки (config.json, без секретов) ---
   configGet: 'config:get',
   configUpdate: 'config:update',
+  configReset: 'config:reset', // SET-08 сброс до заводских
+  knownHostsList: 'security:known-hosts-list', // SET-04
+  knownHostsDelete: 'security:known-hosts-delete',
 
   // --- i18n ---
   i18nGetResource: 'i18n:get-resource',

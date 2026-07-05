@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TitleBar } from './components/chrome/TitleBar';
 import { StatusBar } from './components/chrome/StatusBar';
 import { HostPanel } from './components/HostManager/HostPanel';
@@ -13,6 +13,7 @@ import { WindowCloseGuard } from './components/Terminal/WindowCloseGuard';
 import { ResizeDivider } from './components/common/ResizeDivider';
 import { HistoryDrawer } from './components/History/HistoryDrawer';
 import { SnippetSaveDialog } from './components/Snippets/SnippetSaveDialog';
+import { SettingsScreen } from './components/Settings/SettingsScreen';
 import { HostsProvider, useHosts } from './stores/hosts';
 import { SessionsProvider, useSessions } from './stores/sessions';
 import { ConfigProvider, useConfig } from './stores/config';
@@ -27,8 +28,27 @@ function AppBody(): JSX.Element {
   const { hosts, loaded, openDrawer } = useHosts();
   const { hostKeyPrompt, answerHostKey, sessions, activeSessionId } = useSessions();
   const { config, update } = useConfig();
-  const { historyOpen, snippetDialog, closeSnippetDialog, bumpSnippets } = usePanels();
+  const { historyOpen, snippetDialog, closeSnippetDialog, bumpSnippets, settingsOpen, openSettings, openHistory } =
+    usePanels();
   const [guideOpen, setGuideOpen] = useState(false);
+
+  // Глобальные хоткеи (SET-01 Ctrl+, · SET-06). Ctrl+F/поиск живёт в TerminalArea.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        openSettings();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h') {
+        e.preventDefault();
+        openHistory();
+      } else if (e.key === 'F1') {
+        e.preventDefault();
+        setGuideOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [openSettings, openHistory]);
 
   const activeSession = sessions.find((s) => s.sessionId === activeSessionId);
   const leftRef = useRef<HTMLElement>(null);
@@ -86,6 +106,7 @@ function AppBody(): JSX.Element {
       )}
       <WindowCloseGuard />
       {historyOpen && <HistoryDrawer activeHostId={activeSession?.hostId} />}
+      {settingsOpen && <SettingsScreen onOpenGuide={() => setGuideOpen(true)} />}
       {snippetDialog && (
         <SnippetSaveDialog
           command={snippetDialog.command}

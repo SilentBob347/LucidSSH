@@ -4,6 +4,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
+import type { AppConfig } from '@shared/config';
 import { getCurrentConfig } from '@/stores/config';
 import { attachTerminalWriter, dropTerminalBuffer } from '@/stores/terminalBuffer';
 
@@ -38,6 +39,42 @@ export function destroyTerminal(sessionId: string): void {
 
 export function getSearchAddon(sessionId: string): SearchAddon | undefined {
   return cache.get(sessionId)?.search;
+}
+
+/**
+ * Применить настройки терминала ко всем живым сессиям без перезапуска (SET-02).
+ * Меняем шрифт/размер/bold прямо в options и рефитим.
+ */
+export function applyTerminalConfig(cfg: AppConfig): void {
+  const fontFamily = `'${cfg.terminal.font}', 'Cascadia Mono', Consolas, monospace`;
+  for (const c of cache.values()) {
+    c.term.options.fontFamily = fontFamily;
+    c.term.options.fontSize = cfg.terminal.fontSize;
+    c.term.options.drawBoldTextInBrightColors = cfg.terminal.brightBold;
+    try {
+      c.fit.fit();
+    } catch {
+      /* контейнер ещё без размера */
+    }
+  }
+}
+
+/** Короткий сигнал для bell='sound' (TERM-04). Терминал — жест пользователя, autoplay ок. */
+function beep(): void {
+  try {
+    const AC = window.AudioContext;
+    const ctx = new AC();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 880;
+    gain.gain.value = 0.05;
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.08);
+    osc.onended = () => void ctx.close();
+  } catch {
+    /* нет аудио — тихо игнорируем */
+  }
 }
 
 export function getSelection(sessionId: string): string {
@@ -86,6 +123,11 @@ function createTerminal(sessionId: string): Cached {
   term.loadAddon(search);
 
   term.onData((data) => window.lucidSSH.sendTerminalInput(sessionId, data));
+
+  // TERM-04 bell: звуковой сигнал при \a, если включён в настройках
+  term.onBell(() => {
+    if (getCurrentConfig()?.terminal.bell === 'sound') beep();
+  });
 
   // TERM-04 select-to-copy: выделение → буфер обмена (если включено)
   term.onSelectionChange(() => {
@@ -160,6 +202,15 @@ export function XtermView({
 
     const onCtx = (e: MouseEvent): void => {
       e.preventDefault();
+      // TERM-04 правый клик = вставка: читаем буфер, многострочное — в предпросмотр
+      if (getCurrentConfig()?.terminal.rightClickPaste) {
+        void window.lucidSSH.clipboardRead().then((text) => {
+          if (!text) return;
+          if (text.includes('\n') || text.includes('\r')) cbRef.current.onMultilinePaste(text);
+          else window.lucidSSH.sendTerminalInput(sessionId, text);
+        });
+        return;
+      }
       cbRef.current.onContextMenu(e.clientX, e.clientY);
     };
     el.addEventListener('contextmenu', onCtx);
