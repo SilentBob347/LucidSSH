@@ -61,6 +61,11 @@ body,
   background: var(--color-bg-base);
   color: var(--color-text-body);
   font-family: var(--font-sans);
+}
+
+/* Базовый кегль ТОЛЬКО на body: на html он менял бы 1rem (16px → 13px)
+   и сжимал все rem-утилиты Tailwind (size-2, h-8, gap-2…) до 81% номинала. */
+body {
   font-size: 13px;
 }
 
