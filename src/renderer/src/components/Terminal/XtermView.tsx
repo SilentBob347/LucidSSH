@@ -102,6 +102,10 @@ function createTerminal(sessionId: string): Cached {
     // высокий курсор. Проверено визуально 07.07.2026.
     lineHeight: 1.2,
     cursorBlink: true,
+    // Осознанное отступление от макета (тот рисует block-курсор шириной с
+    // символ): тонкий бар по прямой просьбе разработчика 07.07.2026.
+    cursorStyle: 'bar',
+    cursorWidth: 1,
     scrollback: 5000,
     drawBoldTextInBrightColors: cfg?.terminal.brightBold ?? true,
     theme: {
