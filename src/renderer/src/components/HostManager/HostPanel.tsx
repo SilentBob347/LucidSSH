@@ -54,8 +54,8 @@ function HostRow({
       onDoubleClick={onOpen}
       className={
         selected
-          ? 'group relative flex cursor-default items-center gap-2 rounded-[5px] py-[5px] pr-1 pl-3 before:absolute before:top-1 before:bottom-1 before:left-0 before:w-[2px] before:rounded-full before:bg-accent before:content-[""] bg-[rgba(99,102,241,0.12)]'
-          : 'group relative flex cursor-default items-center gap-2 rounded-[5px] py-[5px] pr-1 pl-3 hover:bg-bg-elevated'
+          ? 'group relative my-px flex cursor-default items-center gap-2 rounded-[5px] py-[6px] pr-[6px] pl-2 before:absolute before:top-1 before:bottom-1 before:left-0 before:w-[2px] before:rounded-full before:bg-accent before:content-[""] bg-[rgba(99,102,241,0.12)]'
+          : 'group relative my-px flex cursor-default items-center gap-2 rounded-[5px] py-[6px] pr-[6px] pl-2 hover:bg-bg-elevated'
       }
     >
       {connected ? (
@@ -65,14 +65,15 @@ function HostRow({
       )}
       <div className="min-w-0 flex-1">
         <div
-          className={`truncate text-[12.5px] font-medium ${selected ? 'text-text-strong' : 'text-text-body group-hover:text-text-strong'}`}
+          className={`truncate text-[12.5px] ${selected ? 'font-medium text-text-strong' : 'text-text-body'}`}
         >
           {host.name}
         </div>
-        <div className="truncate font-mono text-[10.5px] text-text-dim">{host.address}</div>
+        {/* Осознанное отступление: в макете адрес набран Inter, оставлен mono (решение от 07.07.2026) */}
+        <div className="truncate font-mono text-[10.5px] text-text-muted">{host.address}</div>
       </div>
       {connected && (
-        <span className="shrink-0 rounded-[3px] bg-[rgba(34,197,94,0.14)] px-[5px] py-[1px] text-[9px] font-bold text-success-bright group-hover:hidden">
+        <span className="shrink-0 text-[9px] font-bold tracking-[0.05em] text-success-bright group-hover:hidden">
           ON
         </span>
       )}
@@ -211,7 +212,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
       className="flex shrink-0 flex-col border-r border-border-default bg-bg-panel"
     >
       <div className="flex h-[38px] shrink-0 items-center justify-between border-b border-border-default pr-2 pl-3">
-        <span className="text-[11px] font-semibold tracking-[0.05em] text-text-muted uppercase">
+        <span className="text-[12px] font-semibold tracking-[0.04em] text-text-muted uppercase">
           {t('hosts.title')}
         </span>
         <div className="flex gap-px">
@@ -244,54 +245,73 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
           placeholder={t('hosts.searchPlaceholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="h-7 w-full rounded-[4px] border border-border-default bg-bg-base px-2 text-[12px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent"
+          className="h-7 w-full rounded-[4px] border border-border-default bg-bg-base px-[9px] text-[12px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent"
         />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-[6px] pt-[2px] pb-2">
         {newGroupOpen && (
-          <div className="mb-2 rounded-[5px] border border-border-accent bg-accent/10 p-2">
-            <input
-              autoFocus
-              value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void createGroup();
-                if (e.key === 'Escape') {
+          <div className="animate-[esh-fade_.12s_ease] pt-[2px] pb-1">
+            <div className="flex items-center gap-[6px] rounded-[5px] border border-border-accent bg-accent/10 px-[6px] py-[5px]">
+              <span className="text-[9px] text-accent">▸</span>
+              <input
+                autoFocus
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void createGroup();
+                  if (e.key === 'Escape') {
+                    setNewGroupOpen(false);
+                    setNewGroupName('');
+                  }
+                }}
+                placeholder={t('hosts.newGroup.placeholder')}
+                maxLength={60}
+                className="min-w-0 flex-1 bg-transparent text-[12px] font-semibold text-text-strong outline-none placeholder:text-text-dim"
+              />
+              <button
+                type="button"
+                aria-label={t('common.close')}
+                onClick={() => {
                   setNewGroupOpen(false);
                   setNewGroupName('');
-                }
-              }}
-              placeholder={t('hosts.newGroup.placeholder')}
-              maxLength={60}
-              className="h-7 w-full rounded-[4px] border border-border-strong bg-bg-base px-2 text-[12px] text-text-strong outline-none focus:border-accent"
-            />
-            <div className="mt-1 text-[10.5px] text-text-dim">{t('hosts.newGroup.hint')}</div>
+                }}
+                className="flex size-4 shrink-0 items-center justify-center text-[13px] text-text-dim hover:text-text-strong"
+              >
+                ×
+              </button>
+            </div>
+            <div className="px-2 py-[3px] text-[10.5px] text-text-dim">
+              {t('hosts.newGroup.hint')}
+            </div>
           </div>
         )}
 
         {noHostsAtAll && !newGroupOpen && groups.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-3 pt-10 text-center">
+          <div className="flex flex-col items-center gap-[11px] px-[18px] pt-10 text-center">
             <Icon name="server" size={30} className="text-text-faint" />
-
-            <div className="text-[13px] font-semibold text-text-body">{t('hosts.empty.title')}</div>
-            <div className="text-[12px] leading-relaxed text-text-dim">
+            <div className="text-[12.5px] font-medium text-text-body">{t('hosts.empty.title')}</div>
+            <div className="max-w-[200px] text-[11.5px] leading-[1.5] text-text-muted">
               {t('hosts.empty.description')}
             </div>
             <button
               type="button"
               onClick={() => openDrawer()}
-              className="mt-2 h-8 rounded-[6px] bg-accent px-4 text-[12.5px] font-medium text-white hover:bg-accent-hover"
+              className="mt-1 flex h-[30px] items-center gap-[7px] rounded-[6px] bg-accent px-[14px] text-[12px] font-medium text-white hover:bg-accent-hover"
             >
-              + {t('hosts.empty.cta')}
+              <Icon name="plus" size={13} strokeWidth={2.5} />
+              {t('hosts.empty.cta')}
             </button>
           </div>
         ) : nothingFound ? (
-          <div className="flex flex-col items-center gap-1 px-3 pt-10 text-center">
-            <div className="text-[13px] font-semibold text-text-body">
+          <div className="flex flex-col items-center gap-[11px] px-[18px] pt-10 text-center">
+            <Icon name="server" size={30} className="text-text-faint" />
+            <div className="text-[12.5px] font-medium text-text-body">
               {t('hosts.noMatches.title')}
             </div>
-            <div className="text-[12px] text-text-dim">{t('hosts.noMatches.description')}</div>
+            <div className="max-w-[200px] text-[11.5px] leading-[1.5] text-text-muted">
+              {t('hosts.noMatches.description')}
+            </div>
           </div>
         ) : (
           <>
@@ -300,24 +320,24 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
               if (q !== '' && groupHosts.length === 0) return null; // HM-05: группа без совпадений скрыта
               const collapsed = g.collapsed && q === '';
               return (
-                <div key={g.id} className="mb-1">
-                  <div className="group flex items-center gap-1 rounded-[5px] px-1 py-[3px] hover:bg-bg-elevated">
+                <div key={g.id} className="mb-[2px]">
+                  <div className="flex items-center">
                     <button
                       type="button"
                       onClick={() => void toggleGroup(g)}
-                      className="flex min-w-0 flex-1 items-center gap-[6px] text-left"
+                      className="flex min-w-0 flex-1 items-center gap-[6px] rounded-[5px] px-[6px] py-[5px] text-left hover:bg-bg-elevated"
                       aria-expanded={!collapsed}
                     >
                       <span
-                        className="inline-flex text-text-dim transition-transform duration-[120ms]"
+                        className="inline-flex text-[9px] text-text-muted transition-transform duration-[120ms]"
                         style={{ transform: collapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}
                       >
-                        <Icon name="chevron-right" size={11} strokeWidth={2.5} />
+                        ▸
                       </span>
-                      <span className="truncate text-[11px] font-semibold tracking-[0.04em] text-text-muted uppercase">
+                      <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-text-body">
                         {g.name}
                       </span>
-                      <span className="shrink-0 text-[10.5px] text-text-dim">
+                      <span className="shrink-0 text-[11px] text-text-dim">
                         {t('hosts.groupCount', { count: groupHosts.length })}
                       </span>
                     </button>
@@ -326,7 +346,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
                       title={t('hosts.addServer')}
                       aria-label={t('hosts.addServer')}
                       onClick={() => openDrawer({ presetGroupId: g.id })}
-                      className="hidden size-[18px] items-center justify-center rounded-[4px] text-text-dim group-hover:flex hover:bg-bg-elevated-2 hover:text-text-strong"
+                      className="flex size-[22px] shrink-0 items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
                     >
                       <Icon name="plus" size={13} />
                     </button>
@@ -363,18 +383,18 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
         )}
       </div>
 
-      <div className="flex shrink-0 gap-1 border-t border-border-default px-[10px] py-2">
+      <div className="flex shrink-0 gap-[6px] border-t border-border-default px-[10px] py-2">
         <button
           type="button"
           onClick={openSettings}
-          className="h-7 flex-1 rounded-[4px] text-[12px] text-text-muted hover:bg-bg-elevated hover:text-text-strong"
+          className="h-7 flex-1 rounded-[4px] text-[11.5px] text-text-body hover:bg-bg-elevated"
         >
           {t('hosts.footer.settings')}
         </button>
         <button
           type="button"
           onClick={() => setExtImportOpen(true)}
-          className="h-7 flex-1 rounded-[4px] text-[12px] text-text-muted hover:bg-bg-elevated hover:text-text-strong"
+          className="h-7 flex-1 rounded-[4px] text-[11.5px] text-text-body hover:bg-bg-elevated"
         >
           {t('hosts.footer.importPutty')}
         </button>
