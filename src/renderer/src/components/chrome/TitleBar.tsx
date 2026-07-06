@@ -34,7 +34,7 @@ export function TitleBar(): JSX.Element {
           title={t('titleBar.help')}
           aria-label={t('titleBar.help')}
           onClick={openGuide}
-          className="app-no-drag flex size-[22px] shrink-0 items-center justify-center rounded-full text-text-dim hover:bg-bg-elevated hover:text-lavender"
+          className="app-no-drag flex size-[22px] shrink-0 items-center justify-center rounded-full text-text-muted hover:bg-bg-elevated hover:text-lavender-light"
         >
           <Icon name="help" size={16} />
         </button>
@@ -49,8 +49,8 @@ export function TitleBar(): JSX.Element {
           onClick={() => window.lucidSSH.windowMinimize()}
           className="flex h-full w-11 items-center justify-center text-text-muted hover:bg-bg-elevated hover:text-text-strong"
         >
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-            <line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" strokeWidth="1" />
+          <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
+            <rect x="1.5" y="5.5" width="9" height="1" fill="currentColor" />
           </svg>
         </button>
         <button
@@ -61,13 +61,13 @@ export function TitleBar(): JSX.Element {
           className="flex h-full w-11 items-center justify-center text-text-muted hover:bg-bg-elevated hover:text-text-strong"
         >
           {maximized ? (
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-              <rect x="2" y="0.5" width="7" height="7" fill="none" stroke="currentColor" />
-              <rect x="0.5" y="2.5" width="7" height="7" fill="var(--color-bg-base)" stroke="currentColor" />
+            <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true">
+              <rect x="3" y="1.5" width="7.5" height="7.5" fill="none" stroke="currentColor" strokeWidth="1" />
+              <rect x="1.5" y="3" width="7.5" height="7.5" fill="var(--color-bg-base)" stroke="currentColor" strokeWidth="1" />
             </svg>
           ) : (
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-              <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" />
+            <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true">
+              <rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" />
             </svg>
           )}
         </button>
@@ -78,9 +78,8 @@ export function TitleBar(): JSX.Element {
           onClick={() => window.lucidSSH.windowClose()}
           className="flex h-full w-[46px] items-center justify-center text-text-muted hover:bg-close-hover hover:text-white"
         >
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-            <line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" strokeWidth="1" />
-            <line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" strokeWidth="1" />
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" strokeWidth="1.1" />
           </svg>
         </button>
       </div>

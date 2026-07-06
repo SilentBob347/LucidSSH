@@ -308,7 +308,8 @@
   },
   "statusBar": {
     "local": "All data is stored locally",
-    "version": "v{{version}}"
+    "version": "v{{version}}",
+    "help": "Help"
   },
   "history": {
     "title": "Command history",

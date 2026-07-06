@@ -308,7 +308,8 @@
   },
   "statusBar": {
     "local": "Все данные хранятся локально",
-    "version": "v{{version}}"
+    "version": "v{{version}}",
+    "help": "Справка"
   },
   "history": {
     "title": "История команд",

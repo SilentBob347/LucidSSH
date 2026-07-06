@@ -21,7 +21,7 @@ function StatusDot({ status }: { status: SessionInfo['status'] }): JSX.Element {
       <span className="animate-[esh-pulse_1.2s_ease-in-out_infinite] size-[7px] shrink-0 rounded-full bg-warning" />
     );
   }
-  return <span className="size-[7px] shrink-0 rounded-full border-[1.5px] border-text-faint" />;
+  return <span className="size-[7px] shrink-0 rounded-full bg-text-dim" />;
 }
 
 export function TabBar({ onToggleDetails }: { onToggleDetails: () => void }): JSX.Element {
@@ -78,7 +78,7 @@ export function TabBar({ onToggleDetails }: { onToggleDetails: () => void }): JS
       }}
       onDrop={onHostDrop}
     >
-      <div className="flex min-w-0 flex-1 items-end gap-[2px] overflow-x-auto px-2 [scrollbar-width:none]">
+      <div className="flex min-w-0 flex-1 items-end gap-px overflow-x-auto [scrollbar-width:none]">
         {sessions.map((s) => {
           const activeTab = s.sessionId === activeSessionId;
           const isDragOver = dragOverId === s.sessionId;
@@ -125,9 +125,9 @@ export function TabBar({ onToggleDetails }: { onToggleDetails: () => void }): JS
               }}
               className={
                 (activeTab
-                  ? 'flex h-[34px] max-w-[190px] min-w-0 cursor-default items-center gap-2 rounded-t-[7px] border-t-2 border-t-accent bg-bg-tab-active px-3'
-                  : 'flex h-[34px] max-w-[190px] min-w-0 cursor-default items-center gap-2 rounded-t-[7px] border-t-2 border-t-transparent bg-bg-tab-idle px-3 hover:bg-bg-elevated') +
-                (isDragOver ? ' border-l-2 border-l-accent' : '')
+                  ? 'flex h-[38px] max-w-[190px] min-w-0 cursor-default items-center gap-2 rounded-t-[7px] border-t-2 border-t-accent bg-bg-tab-active px-[11px]'
+                  : 'flex h-[38px] max-w-[190px] min-w-0 cursor-default items-center gap-2 rounded-t-[7px] border-t-2 border-t-transparent bg-bg-tab-idle px-[11px] hover:bg-bg-elevated') +
+                (isDragOver ? ' shadow-[inset_2px_0_0_var(--color-accent)]' : '')
               }
             >
               <StatusDot status={s.status} />
@@ -147,7 +147,7 @@ export function TabBar({ onToggleDetails }: { onToggleDetails: () => void }): JS
                 />
               ) : (
                 <span
-                  className={`truncate text-[12px] ${activeTab ? 'font-medium text-text-strong' : 'text-text-dim'}`}
+                  className={`truncate text-[12.5px] ${activeTab ? 'font-medium text-text-strong' : 'text-text-muted'}`}
                 >
                   {s.hostName}
                 </span>
@@ -160,7 +160,7 @@ export function TabBar({ onToggleDetails }: { onToggleDetails: () => void }): JS
                   e.stopPropagation();
                   requestClose(s);
                 }}
-                className="flex size-[16px] shrink-0 items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-text-strong"
+                className="flex size-[16px] shrink-0 items-center justify-center rounded-[4px] text-text-dim hover:bg-[rgba(255,255,255,0.12)] hover:text-text-strong"
               >
                 <Icon name="close" size={11} />
               </button>

@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSessions } from '@/stores/sessions';
+import { usePanels } from '@/stores/panels';
 
 /**
  * Статус-бар 24px, фон #0B0B0F (Design_Brief §3.1):
@@ -20,6 +21,7 @@ function formatKeyType(k: string): string {
 
 export function StatusBar(): JSX.Element {
   const { t } = useTranslation();
+  const { openGuide } = usePanels();
   const { sessions, activeSessionId } = useSessions();
   const [version, setVersion] = useState('');
   const [crypto, setCrypto] = useState<{ cipher: string; keyType: string } | null>(null);
@@ -51,8 +53,20 @@ export function StatusBar(): JSX.Element {
   }, [active, connected]);
 
   return (
-    <footer className="flex h-6 shrink-0 items-center justify-between border-t border-border-default bg-bg-base-deep px-3 font-mono text-[11px] text-text-dim">
-      <span>{crypto ? `SSH-2 · ${crypto.cipher} · ${crypto.keyType}` : ''}</span>
+    <footer className="flex h-6 shrink-0 items-center justify-between border-t border-border-default bg-bg-base-deep px-3 font-mono text-[11.5px] text-text-muted">
+      <div className="flex items-center gap-[10px]">
+        {crypto && <span>{`SSH-2 · ${crypto.cipher} · ${crypto.keyType}`}</span>}
+        <button
+          type="button"
+          title={t('statusBar.help')}
+          onClick={openGuide}
+          className={`flex items-center gap-[5px] text-text-muted hover:text-text-strong ${
+            crypto ? 'border-l border-border-strong pl-[10px]' : ''
+          }`}
+        >
+          ? {t('statusBar.help')}
+        </button>
+      </div>
       <span>
         {version ? t('statusBar.version', { version }) : ''}
         {version ? ' · ' : ''}
