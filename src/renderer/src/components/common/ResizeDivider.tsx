@@ -48,8 +48,11 @@ export function ResizeDivider({
   }, [side, targetRef, min, max, onCommit]);
 
   return (
-    // Визуально 5px (Design_Brief §2.1), но интерактивная зона шире (±5px) через
-    // абсолютный оверлей — так дивайдер удобнее захватить, layout не смещается.
+    // Визуально ровно 5px, как в макете, но интерактивная зона шире (±5px)
+    // через абсолютный оверлей-хитбокс — так дивайдер удобнее захватить,
+    // layout не смещается. Подсветка hover — только на видимых 5px (в макете
+    // она на них же; при расширении на весь хитбокс полоса выглядела заметно
+    // шире и ярче, чем в макете).
     <div
       role="separator"
       aria-orientation="vertical"
@@ -58,9 +61,9 @@ export function ResizeDivider({
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
       }}
-      className="group relative z-10 w-[5px] shrink-0 cursor-col-resize"
+      className="group relative z-10 w-[5px] shrink-0 cursor-col-resize hover:bg-[rgba(99,102,241,0.28)]"
     >
-      <div className="absolute inset-y-0 -left-[3px] -right-[3px] group-hover:bg-[rgba(99,102,241,0.28)]" />
+      <div className="absolute inset-y-0 -left-[3px] -right-[3px]" />
     </div>
   );
 }
