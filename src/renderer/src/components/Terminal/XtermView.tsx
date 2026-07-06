@@ -96,16 +96,14 @@ function createTerminal(sessionId: string): Cached {
   const term = new Terminal({
     fontFamily: `'${cfg?.terminal.font ?? 'JetBrains Mono'}', 'Cascadia Mono', Consolas, monospace`,
     fontSize: cfg?.terminal.fontSize ?? 13,
-    // 1.2, не значение line-height из макета (1.55): в дизайне это межстрочник
-    // div-блоков с текстом, а в xterm line-height растягивает всю ячейку —
-    // курсор-блок заливает её целиком, поэтому 1.55 давало неестественно
-    // высокий курсор. Проверено визуально 07.07.2026.
-    lineHeight: 1.2,
+    // 1.1: не значение line-height из макета (1.55, это межстрочник div-блоков
+    // с текстом, а в xterm line-height растягивает всю ячейку — курсор-блок
+    // заливает её целиком). Слегка ниже 1.2 — по просьбе уменьшить высоту
+    // курсора-блока (единственный рычаг для этого в xterm, т.к. блочный
+    // курсор всегда = высоте ячейки). Проверено визуально 07.07.2026.
+    lineHeight: 1.1,
     cursorBlink: true,
-    // Осознанное отступление от макета (тот рисует block-курсор шириной с
-    // символ): тонкий бар по прямой просьбе разработчика 07.07.2026.
-    cursorStyle: 'bar',
-    cursorWidth: 1,
+    cursorStyle: 'block',
     scrollback: 5000,
     drawBoldTextInBrightColors: cfg?.terminal.brightBold ?? true,
     theme: {
