@@ -38,7 +38,8 @@ export type IconName =
   | 'upload'
   | 'folder-plus'
   | 'folder'
-  | 'folders';
+  | 'folders'
+  | 'terminal';
 
 // Пути взяты из дизайна (или стандартный Lucide для недостающих). Всё в 0 0 24 24.
 const PATHS: Record<IconName, JSX.Element> = {
@@ -197,6 +198,12 @@ const PATHS: Record<IconName, JSX.Element> = {
     <>
       <path d="M20 17a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.9a2 2 0 0 1-1.69-.9l-.81-1.2a2 2 0 0 0-1.67-.9H8a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2Z" />
       <path d="M2 8v11a2 2 0 0 0 2 2h14" />
+    </>
+  ),
+  terminal: (
+    <>
+      <polyline points="4 17 10 11 4 5" />
+      <line x1="12" y1="19" x2="20" y2="19" />
     </>
   )
 };

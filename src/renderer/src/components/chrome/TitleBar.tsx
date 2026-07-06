@@ -20,19 +20,23 @@ export function TitleBar(): JSX.Element {
 
   return (
     <header className="app-drag flex h-8 shrink-0 items-center border-b border-border-hairline bg-bg-base">
-      <div className="flex items-center gap-2 pl-3">
-        <div className="flex size-[18px] items-center justify-center rounded-[5px] bg-accent text-[10px] font-bold text-white">
-          &gt;_
+      <div className="flex items-center gap-[11px] pl-[11px]">
+        <div className="flex items-center gap-2">
+          <div className="flex size-[18px] items-center justify-center rounded-[5px] bg-accent text-white">
+            <Icon name="terminal" size={11} strokeWidth={2.4} />
+          </div>
+          <span className="text-[12px] font-semibold tracking-[0.01em] text-text-body">
+            {t('app.name')}
+          </span>
         </div>
-        <span className="text-[12.5px] font-semibold text-text-strong">{t('app.name')}</span>
         <button
           type="button"
           title={t('titleBar.help')}
           aria-label={t('titleBar.help')}
           onClick={openGuide}
-          className="app-no-drag ml-1 flex size-[22px] items-center justify-center rounded-full border border-border-default text-text-dim hover:bg-bg-elevated hover:text-text-strong"
+          className="app-no-drag flex size-[22px] shrink-0 items-center justify-center rounded-full text-text-dim hover:bg-bg-elevated hover:text-lavender"
         >
-          <Icon name="help" size={13} />
+          <Icon name="help" size={16} />
         </button>
         <EventsMenu />
       </div>
