@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Icon } from '@/components/common/Icon';
+import { ExternalImportDialog } from '@/components/HostManager/ExternalImportDialog';
 
 /**
  * Экран первого запуска (OB-01…OB-02; скриншот 14-Firstrun):
@@ -18,6 +19,7 @@ export function WelcomeScreen({
   const { t } = useTranslation();
   const [puttyCount, setPuttyCount] = useState(0);
   const [version, setVersion] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => {
     void window.lucidSSH.puttySessionsCount().then(setPuttyCount);
@@ -47,6 +49,7 @@ export function WelcomeScreen({
       {puttyCount > 0 && (
         <button
           type="button"
+          onClick={() => setImportOpen(true)}
           className="mt-5 flex items-center gap-[6px] text-[12.5px] text-text-body hover:text-text-strong hover:underline"
         >
           <Icon name="download" size={14} /> {t('welcome.importPutty')}
@@ -62,6 +65,7 @@ export function WelcomeScreen({
       <div className="absolute bottom-8 text-[11.5px] text-text-faint">
         {version ? t('welcome.footer', { version }) : ''}
       </div>
+      {importOpen && <ExternalImportDialog onClose={() => setImportOpen(false)} />}
     </div>
   );
 }
