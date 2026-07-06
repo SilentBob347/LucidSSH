@@ -406,8 +406,8 @@
       "selectCopyDesc": "Selected text goes straight to the clipboard.",
       "rightPaste": "Right click = paste",
       "rightPasteDesc": "Paste from the clipboard on right click.",
-      "inlineInput": "Type directly in the console",
-      "inlineInputDesc": "Type the command in the output line, like a regular terminal. The bottom input is hidden.",
+      "inlineInput": "Hide the composer input line",
+      "inlineInputDesc": "Hides the separate input line at the bottom - type commands straight into the terminal output. Note: typing directly in the terminal is always possible, even with this off - it only hides the composer.",
       "inlineInputGuardWarn": "In this mode the Guard does not check commands typed directly in the console. Dangerous-command protection only applies to the bottom input line."
     },
     "connection": {
