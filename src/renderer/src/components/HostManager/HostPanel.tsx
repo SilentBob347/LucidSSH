@@ -59,9 +59,9 @@ function HostRow({
       }
     >
       {connected ? (
-        <span className="size-[7px] shrink-0 rounded-full bg-success-bright" />
+        <span className="size-2 shrink-0 rounded-full bg-success-bright" />
       ) : (
-        <span className="size-[7px] shrink-0 rounded-full border-[1.5px] border-text-faint" />
+        <span className="size-2 shrink-0 rounded-full border-[1.5px] border-text-faint" />
       )}
       <div className="min-w-0 flex-1">
         <div
