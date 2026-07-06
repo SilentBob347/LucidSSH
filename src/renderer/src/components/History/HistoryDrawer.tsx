@@ -86,7 +86,7 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
 
   return (
     <div
-      className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 bg-black/45"
+      className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 bg-black/70"
       onClick={closeHistory}
       role="presentation"
     >
@@ -246,7 +246,7 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
               )}
             </div>
 
-            <div className="shrink-0 border-t border-border-hairline px-5 py-2 text-[11px] text-text-dim">
+            <div className="shrink-0 border-t border-border-default px-5 py-2 text-[11px] text-text-dim">
               {t('history.footer', { shown: visible.length, total })}
             </div>
           </>

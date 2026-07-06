@@ -197,7 +197,7 @@ function TerminalSection({
         />
 
         {/* Ввод прямо в консоли — с предупреждением о Страже (§4–5) */}
-        <div className="rounded-[8px] border border-border-hairline bg-bg-panel px-4 py-3">
+        <div className="rounded-[8px] border border-border-default bg-bg-panel px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <div className="text-[13.5px] font-semibold text-text-strong">
@@ -281,7 +281,7 @@ function NumberCard({
     else setDraft(String(value));
   };
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[8px] border border-border-hairline bg-bg-panel px-4 py-3">
+    <div className="flex items-center justify-between gap-4 rounded-[8px] border border-border-default bg-bg-panel px-4 py-3">
       <div className="min-w-0">
         <div className="text-[13.5px] font-semibold text-text-strong">{title}</div>
         <div className="mt-[2px] text-[12px] text-text-dim">{desc}</div>
@@ -327,7 +327,7 @@ function SecuritySection({ config, update }: { config: AppConfig; update: Update
     <>
       <SectionTitle>{t('settings.sections.security')}</SectionTitle>
       <div className="space-y-3">
-        <div className="rounded-[8px] border border-border-hairline bg-bg-panel px-4 py-3">
+        <div className="rounded-[8px] border border-border-default bg-bg-panel px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <div className="text-[13.5px] font-semibold text-text-strong">
@@ -538,7 +538,7 @@ function HotkeysSection(): JSX.Element {
         placeholder={t('settings.hk.searchPlaceholder')}
         className="mb-3 h-9 w-full rounded-[6px] border border-border-strong bg-bg-base px-3 text-[13px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent"
       />
-      <div className="overflow-hidden rounded-[8px] border border-border-hairline">
+      <div className="overflow-hidden rounded-[8px] border border-border-default">
         {rows.length === 0 ? (
           <div className="bg-bg-panel py-6 text-center text-[12.5px] text-text-dim">
             {t('settings.hk.noMatches')}
@@ -597,7 +597,7 @@ function UpdatesCard(): JSX.Element {
   };
 
   return (
-    <div className="rounded-[8px] border border-border-hairline bg-bg-panel px-4 py-3">
+    <div className="rounded-[8px] border border-border-default bg-bg-panel px-4 py-3">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <div className="text-[13.5px] font-semibold text-text-strong">

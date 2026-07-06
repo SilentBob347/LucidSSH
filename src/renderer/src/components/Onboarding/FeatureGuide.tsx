@@ -22,7 +22,7 @@ export function FeatureGuide({ onClose }: { onClose: () => void }): JSX.Element 
 
   return (
     <div
-      className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 flex items-center justify-center bg-black/55"
+      className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 flex items-center justify-center bg-black/70"
       onClick={onClose}
       role="presentation"
     >
@@ -33,7 +33,7 @@ export function FeatureGuide({ onClose }: { onClose: () => void }): JSX.Element 
         aria-modal="true"
         aria-label={t('guide.title')}
       >
-        <div className="flex items-center justify-between border-b border-border-hairline px-5 py-4">
+        <div className="flex items-center justify-between border-b border-border-default px-5 py-4">
           <div className="flex items-center gap-2">
             <span className="flex size-[22px] items-center justify-center rounded-full border border-border-default text-lavender">
               <Icon name="help" size={13} />
@@ -85,7 +85,7 @@ export function FeatureGuide({ onClose }: { onClose: () => void }): JSX.Element 
           })}
         </div>
 
-        <div className="flex items-center justify-between border-t border-border-hairline px-5 py-3">
+        <div className="flex items-center justify-between border-t border-border-default px-5 py-3">
           <button
             type="button"
             onClick={() => {

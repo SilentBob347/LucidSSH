@@ -80,7 +80,7 @@ export function SnippetSaveDialog({
 
   return (
     <div
-      className="animate-[esh-fade_.15s_ease] fixed inset-0 z-[60] flex items-center justify-center bg-black/55"
+      className="animate-[esh-fade_.15s_ease] fixed inset-0 z-[60] flex items-center justify-center bg-black/70"
       onClick={onClose}
       role="presentation"
     >

@@ -72,7 +72,7 @@ export function TabBar({ onToggleDetails }: { onToggleDetails: () => void }): JS
 
   return (
     <div
-      className="flex h-[38px] shrink-0 items-end border-b border-border-hairline bg-bg-base"
+      className="flex h-[38px] shrink-0 items-end border-b border-border-default bg-bg-base"
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('application/x-lucidssh-host')) e.preventDefault();
       }}

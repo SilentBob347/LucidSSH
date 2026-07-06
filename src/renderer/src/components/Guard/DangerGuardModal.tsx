@@ -34,7 +34,7 @@ export function DangerGuardModal({
 
   return (
     <div
-      className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 flex items-center justify-center bg-black/55"
+      className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 flex items-center justify-center bg-black/70"
       onClick={onCancel}
       role="presentation"
     >

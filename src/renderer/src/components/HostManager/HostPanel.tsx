@@ -210,7 +210,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
       style={{ width }}
       className="flex shrink-0 flex-col border-r border-border-default bg-bg-panel"
     >
-      <div className="flex h-[38px] shrink-0 items-center justify-between pr-2 pl-3">
+      <div className="flex h-[38px] shrink-0 items-center justify-between border-b border-border-default pr-2 pl-3">
         <span className="text-[11px] font-semibold tracking-[0.05em] text-text-muted uppercase">
           {t('hosts.title')}
         </span>
@@ -363,7 +363,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
         )}
       </div>
 
-      <div className="flex shrink-0 gap-1 border-t border-border-hairline px-[10px] py-2">
+      <div className="flex shrink-0 gap-1 border-t border-border-default px-[10px] py-2">
         <button
           type="button"
           onClick={openSettings}

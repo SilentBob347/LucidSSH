@@ -47,7 +47,7 @@ export function ToggleRow({
   onChange: (v: boolean) => void;
 }): JSX.Element {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[8px] border border-border-hairline bg-bg-panel px-4 py-3">
+    <div className="flex items-center justify-between gap-4 rounded-[8px] border border-border-default bg-bg-panel px-4 py-3">
       <div className="min-w-0">
         <div className="text-[13.5px] font-semibold text-text-strong">{title}</div>
         <div className="mt-[2px] text-[12px] text-text-dim">{desc}</div>
@@ -95,7 +95,7 @@ export function Card({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <div className="rounded-[8px] border border-border-hairline bg-bg-panel px-4 py-3">
+    <div className="rounded-[8px] border border-border-default bg-bg-panel px-4 py-3">
       {title && <div className="mb-2 text-[13.5px] font-semibold text-text-strong">{title}</div>}
       {children}
     </div>

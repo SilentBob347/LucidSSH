@@ -51,7 +51,7 @@ export function StatusBar(): JSX.Element {
   }, [active, connected]);
 
   return (
-    <footer className="flex h-6 shrink-0 items-center justify-between border-t border-border-hairline bg-bg-base-deep px-3 font-mono text-[11px] text-text-dim">
+    <footer className="flex h-6 shrink-0 items-center justify-between border-t border-border-default bg-bg-base-deep px-3 font-mono text-[11px] text-text-dim">
       <span>{crypto ? `SSH-2 · ${crypto.cipher} · ${crypto.keyType}` : ''}</span>
       <span>
         {version ? t('statusBar.version', { version }) : ''}

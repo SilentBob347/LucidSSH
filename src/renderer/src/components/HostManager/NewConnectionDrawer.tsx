@@ -157,7 +157,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
 
   return (
     <div
-      className="animate-[esh-fade_.15s_ease] fixed inset-0 z-40 bg-black/45"
+      className="animate-[esh-fade_.15s_ease] fixed inset-0 z-40 bg-black/70"
       onClick={closeDrawer}
       role="presentation"
     >
@@ -168,7 +168,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
         aria-modal="true"
         aria-label={editHost ? t('conn.titleEdit') : t('conn.titleNew')}
       >
-        <div className="flex h-[52px] shrink-0 items-center justify-between px-5">
+        <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-border-default px-5">
           <span className="text-[15px] font-semibold text-text-primary">
             {editHost ? t('conn.titleEdit') : t('conn.titleNew')}
           </span>
@@ -357,7 +357,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
           )}
         </div>
 
-        <div className="shrink-0 space-y-2 border-t border-border-hairline px-5 py-4">
+        <div className="shrink-0 space-y-2 border-t border-border-default px-5 py-4">
           {testResult && (
             <div
               className={`rounded-[6px] px-3 py-2 text-[12px] ${

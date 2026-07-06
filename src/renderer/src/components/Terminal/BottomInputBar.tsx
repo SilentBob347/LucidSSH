@@ -62,7 +62,7 @@ export function BottomInputBar({
   };
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-2 border-t border-border-hairline bg-bg-panel px-[14px]">
+    <div className="flex h-10 shrink-0 items-center gap-2 border-t border-border-default bg-bg-panel px-[14px]">
       <span className="font-mono text-[13px] text-success-bright">~$</span>
       <input
         ref={inputRef}

@@ -86,7 +86,7 @@ export function BreadcrumbBar({
 
   return (
     <div
-      className={`flex h-12 shrink-0 items-center gap-3 border-b border-border-hairline px-4 ${
+      className={`flex h-12 shrink-0 items-center gap-3 border-b border-border-default px-4 ${
         priv === 'root' ? 'bg-[rgba(239,68,68,0.06)]' : 'bg-bg-panel'
       }`}
     >
