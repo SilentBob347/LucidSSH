@@ -63,7 +63,7 @@ export function BottomInputBar({
 
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-t border-border-default bg-bg-panel px-[14px]">
-      <span className="font-mono text-[13px] text-success-bright">~$</span>
+      <span className="font-mono text-[13px] font-semibold text-accent">~$</span>
       <input
         ref={inputRef}
         value={value}
@@ -77,7 +77,7 @@ export function BottomInputBar({
       <button
         type="button"
         onClick={onOpenHistory}
-        className="flex h-[26px] items-center gap-[5px] rounded-[4px] bg-bg-elevated-2 px-3 text-[11.5px] text-text-muted hover:text-text-strong"
+        className="flex h-[26px] items-center gap-[5px] rounded-[4px] border border-[rgba(255,255,255,0.07)] px-[9px] text-[11.5px] text-text-muted hover:border-[rgba(255,255,255,0.14)] hover:bg-bg-elevated hover:text-text-strong"
       >
         <Icon name="history" size={13} /> {t('input.history')}
       </button>

@@ -53,10 +53,10 @@ function Metric({
   const color = danger ? 'text-danger' : warn ? 'text-warning' : 'text-text-body';
   return (
     <span className="flex items-center gap-1 font-mono text-[12px]">
-      <span className="text-text-dim">{label}</span>
-      <span className={color}>
+      <span className="text-text-muted">{label}</span>
+      <span className={`${color} ${warn || danger ? 'font-bold' : ''}`}>
         {value}
-        {(warn || danger) && <span className="ml-[2px]">▲</span>}
+        {(warn || danger) && <span className="ml-[2px] text-[9px]">▲</span>}
       </span>
     </span>
   );
@@ -74,8 +74,10 @@ export function BreadcrumbBar({
   const dashVisible = config?.ui.dashboardVisible ?? true;
 
   const priv = crumb?.privilege ?? 'normal';
+  // BRD-03: у root привилегия видна цветом+жирностью имени, у sudo — отдельным
+  // бейджем (само имя остаётся обычного цвета), у normal — только зелёным именем.
   const userColor =
-    priv === 'root' ? 'text-danger' : priv === 'sudo' ? 'text-warning' : 'text-success-bright';
+    priv === 'root' ? 'font-semibold text-danger' : priv === 'sudo' ? 'text-text-body' : 'text-success-bright';
 
   const cpu = metrics?.cpuPercent ?? null;
   const disk = metrics?.diskPercent ?? null;
@@ -85,43 +87,46 @@ export function BreadcrumbBar({
       : null;
 
   return (
-    <div
-      className={`flex h-12 shrink-0 items-center gap-3 border-b border-border-default px-4 ${
-        priv === 'root' ? 'bg-[rgba(239,68,68,0.06)]' : 'bg-bg-panel'
-      }`}
-    >
+    <div className="flex h-12 shrink-0 items-center gap-3 border-b border-border-default bg-bg-panel px-4">
       {/* Breadcrumb */}
-      <div className="flex min-w-0 flex-1 items-center gap-1 font-mono text-[13px]">
+      <div className="flex min-w-0 flex-1 items-center gap-[7px] font-mono text-[13px]">
         {crumb ? (
           <>
-            <span className={userColor}>{crumb.username}</span>
             {priv === 'root' && (
-              <span className="rounded-[3px] bg-danger/20 px-[5px] text-[9px] font-bold text-danger uppercase">
-                {t('breadcrumb.rootBadge')}
-              </span>
+              <span
+                className="size-[7px] shrink-0 rounded-full bg-danger"
+                title={t('breadcrumb.rootBadge')}
+              />
             )}
+            {priv === 'sudo' && <span className="size-[7px] shrink-0 rounded-full bg-warning" />}
+            <span className={userColor}>{crumb.username}</span>
             {priv === 'sudo' && (
-              <span className="rounded-[3px] bg-warning/20 px-[5px] text-[9px] font-bold text-warning uppercase">
+              <span className="rounded-[4px] bg-[rgba(245,158,11,0.14)] px-[7px] py-[1px] font-sans text-[11px] text-warning">
                 {t('breadcrumb.sudoBadge')}
               </span>
             )}
             <span className="text-text-dim">@</span>
             <span className="text-text-body">{crumb.host}</span>
-            <span className="mx-1 text-accent">›</span>
+            <span className="mx-[2px] text-accent">&gt;</span>
             <div className="flex min-w-0 items-center">
-              {pathSegments(crumb.path).map((seg, i) => (
-                <span key={i} className="flex items-center">
-                  {i > 0 && seg.label !== '~' && <span className="text-text-faint">/</span>}
-                  <button
-                    type="button"
-                    title={t('breadcrumb.insertCd')}
-                    onClick={() => insertIntoComposer(`cd ${seg.full}`)}
-                    className="max-w-[160px] truncate text-info hover:text-lavender-light hover:underline"
-                  >
-                    {seg.label}
-                  </button>
-                </span>
-              ))}
+              {pathSegments(crumb.path).map((seg, i, arr) => {
+                const isLast = i === arr.length - 1;
+                return (
+                  <span key={i} className="flex items-center">
+                    {i > 0 && seg.label !== '~' && <span className="text-accent">/</span>}
+                    <button
+                      type="button"
+                      title={t('breadcrumb.insertCd')}
+                      onClick={() => insertIntoComposer(`cd ${seg.full}`)}
+                      className={`max-w-[160px] truncate hover:text-lavender-light hover:underline ${
+                        isLast ? 'text-text-strong' : 'text-text-muted'
+                      }`}
+                    >
+                      {seg.label}
+                    </button>
+                  </span>
+                );
+              })}
             </div>
           </>
         ) : (
@@ -157,7 +162,7 @@ export function BreadcrumbBar({
             danger={disk !== null && disk > 90}
           />
           <span className="h-3 w-px bg-[rgba(255,255,255,0.1)]" />
-          <span className="font-mono text-[12px] text-text-dim">
+          <span className="font-mono text-[12px] text-text-muted">
             ↑{' '}
             {(() => {
               const up = uptimeParts(metrics?.uptimeSeconds ?? null);

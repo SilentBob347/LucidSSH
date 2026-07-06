@@ -137,7 +137,7 @@ export function TerminalArea(): JSX.Element {
         ) : (
           <>
             {showTerminal && (
-              <div className="relative min-h-0 flex-1 p-2">
+              <div className="relative min-h-0 flex-1 px-4 py-3">
                 <XtermView
                   key={active.sessionId}
                   sessionId={active.sessionId}

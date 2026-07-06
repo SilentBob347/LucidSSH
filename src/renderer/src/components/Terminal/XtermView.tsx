@@ -96,14 +96,14 @@ function createTerminal(sessionId: string): Cached {
   const term = new Terminal({
     fontFamily: `'${cfg?.terminal.font ?? 'JetBrains Mono'}', 'Cascadia Mono', Consolas, monospace`,
     fontSize: cfg?.terminal.fontSize ?? 13,
-    lineHeight: 1.2,
+    lineHeight: 1.55,
     cursorBlink: true,
     scrollback: 5000,
     drawBoldTextInBrightColors: cfg?.terminal.brightBold ?? true,
     theme: {
       background: '#1A1A22',
       foreground: '#CBD5E1',
-      cursor: '#818CF8',
+      cursor: '#CBD5E1',
       selectionBackground: 'rgba(99,102,241,0.35)',
       black: '#15151B',
       brightBlack: '#475569',
