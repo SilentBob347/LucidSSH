@@ -1,4 +1,4 @@
-import { app, Menu } from 'electron';
+import { app, globalShortcut, Menu } from 'electron';
 import { hardenApp, hardenCommandLine } from './security/hardening';
 import { createMainWindow, getMainWindow } from './window/mainWindow';
 import { registerIpcHandlers } from './ipc';
@@ -50,6 +50,14 @@ if (!gotLock) {
     registerUpdateIpcHandlers();
     createMainWindow();
 
+    // Меню приложения отключено (кастомный тайтл-бар), поэтому стандартный
+    // акселератор DevTools из меню недоступен — регистрируем свой, только в dev.
+    if (!app.isPackaged) {
+      const toggleDevTools = (): void => getMainWindow()?.webContents.toggleDevTools();
+      globalShortcut.register('CommandOrControl+Shift+I', toggleDevTools);
+      globalShortcut.register('F12', toggleDevTools);
+    }
+
     // Автообновление (UPD-01): инициализация + неблокирующая проверка при запуске,
     // если она включена. Ошибки/офлайн глотаются молча внутри checkForUpdates.
     initUpdater();
@@ -58,5 +66,9 @@ if (!gotLock) {
 
   app.on('window-all-closed', () => {
     app.quit();
+  });
+
+  app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
   });
 }
