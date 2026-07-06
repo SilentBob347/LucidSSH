@@ -118,7 +118,7 @@ export function TerminalArea(): JSX.Element {
 
   return (
     <main className="flex min-w-0 flex-1 flex-col">
-      <TabBar onToggleDetails={() => setDetailsOpen((v) => !v)} detailsOpen={detailsOpen} />
+      <TabBar onToggleDetails={() => setDetailsOpen((v) => !v)} />
 
       {/* Breadcrumb + мини-дашборд (BRD-01, DASH-01) — для живой сессии */}
       {showTerminal && active && (

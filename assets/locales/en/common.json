@@ -110,6 +110,7 @@
   "guide": {
     "title": "LucidSSH features",
     "ok": "Got it",
+    "openFull": "Open full guide",
     "cards": {
       "navigation": {
         "title": "Navigation",
@@ -417,7 +418,11 @@
       "historyDesc": "Store executed commands. Passwords and tokens are always masked. Turning it off stops recording.",
       "knownHosts": "Known servers (known_hosts)",
       "knownEmpty": "No saved server fingerprints yet.",
-      "knownDelete": "Delete entry"
+      "knownDelete": "Delete entry",
+      "hostData": "Host data",
+      "hostDataDesc": "Export and import the server list as JSON. Passwords and keys are not exported — only the key file path.",
+      "exportHosts": "Export",
+      "importHosts": "Import"
     },
     "interface": {
       "expert": "Expert mode",
@@ -530,5 +535,43 @@
     "counter": "Tip {{n}} of {{total}}",
     "next": "Next",
     "hide": "Hide"
+  },
+  "help": {
+    "title": "LucidSSH — Guide",
+    "tabs": {
+      "start": "Getting started",
+      "saved": "Saved commands",
+      "guard": "Guard",
+      "error": "Error detector",
+      "hotkeys": "Hotkeys"
+    },
+    "start": {
+      "title": "Welcome to LucidSSH",
+      "body": "LucidSSH is a safe SSH client for everyday server work. Manage connections, keep commands at hand, and don't fear dangerous operations — the Guard warns in advance and the error detector tells you what to check.",
+      "item1": "Add a server: click + in the Servers panel and enter address, port and credentials.",
+      "item2": "Connect: double-click a server or drag it onto the tabs.",
+      "item3": "Work: type commands in the bottom input; the path above is clickable."
+    },
+    "saved": {
+      "title": "Saved commands",
+      "body": "Frequently used commands can be saved as snippets and run in one click.",
+      "item1": "Save: 🔖 in history or right-click in the terminal → Save as snippet.",
+      "item2": "Scope: server snippets show only on that connection, global ones everywhere.",
+      "item3": "Run: from the catalog [host]/Global tabs or Favorites (Ctrl+H)."
+    },
+    "guard": {
+      "title": "Dangerous command guard",
+      "body": "Before destructive commands (rm -rf, kill -9, mkfs and similar) the Guard shows a confirmation requiring the object name — accidental deletion is prevented.",
+      "item1": "Interception happens before the command is sent to the server.",
+      "item2": "You must type the exact affected object name, not just OK.",
+      "item3": "Can be disabled globally in Settings → Security."
+    },
+    "error": {
+      "title": "Error detector",
+      "body": "When a command fails, a panel slides up with a plain explanation and what-to-check steps — offline, no cloud.",
+      "item1": "Triggers on a non-zero exit code or an error message.",
+      "item2": "Steps can be inserted into the input or copied in one click.",
+      "item3": "The panel doesn't cover the input; close with Esc or ×."
+    }
   }
 }

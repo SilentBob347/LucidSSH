@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { TitleBar } from './components/chrome/TitleBar';
 import { StatusBar } from './components/chrome/StatusBar';
 import { HostPanel } from './components/HostManager/HostPanel';
@@ -9,6 +9,7 @@ import { FingerprintModal } from './components/Terminal/FingerprintModal';
 import { CatalogPanel } from './components/CommandCatalog/CatalogPanel';
 import { WelcomeScreen } from './components/Onboarding/WelcomeScreen';
 import { FeatureGuide } from './components/Onboarding/FeatureGuide';
+import { HelpScreen } from './components/Onboarding/HelpScreen';
 import { WindowCloseGuard } from './components/Terminal/WindowCloseGuard';
 import { ResizeDivider } from './components/common/ResizeDivider';
 import { HistoryDrawer } from './components/History/HistoryDrawer';
@@ -30,10 +31,20 @@ function AppBody(): JSX.Element {
   const { hosts, loaded, openDrawer } = useHosts();
   const { hostKeyPrompt, answerHostKey, sessions, activeSessionId } = useSessions();
   const { config, update } = useConfig();
-  const { historyOpen, snippetDialog, closeSnippetDialog, bumpSnippets, settingsOpen, openSettings, openHistory } =
-    usePanels();
+  const {
+    historyOpen,
+    snippetDialog,
+    closeSnippetDialog,
+    bumpSnippets,
+    settingsOpen,
+    openSettings,
+    openHistory,
+    guideOpen,
+    openGuide,
+    closeGuide,
+    helpOpen
+  } = usePanels();
   const { addFingerprintEvent } = useEvents();
-  const [guideOpen, setGuideOpen] = useState(false);
 
   // NOTIF-03: изменение отпечатка сервера попадает в ленту событий шапки.
   useEffect(() => {
@@ -51,12 +62,12 @@ function AppBody(): JSX.Element {
         openHistory();
       } else if (e.key === 'F1') {
         e.preventDefault();
-        setGuideOpen(true);
+        openGuide();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [openSettings, openHistory]);
+  }, [openSettings, openHistory, openGuide]);
 
   const activeSession = sessions.find((s) => s.sessionId === activeSessionId);
   const leftRef = useRef<HTMLElement>(null);
@@ -72,7 +83,7 @@ function AppBody(): JSX.Element {
       <TitleBar />
       {showWelcome ? (
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <WelcomeScreen onAddFirst={() => openDrawer()} onOpenGuide={() => setGuideOpen(true)} />
+          <WelcomeScreen onAddFirst={() => openDrawer()} onOpenGuide={openGuide} />
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
@@ -105,7 +116,8 @@ function AppBody(): JSX.Element {
       )}
       <StatusBar />
       <NewConnectionDrawer />
-      {guideOpen && <FeatureGuide onClose={() => setGuideOpen(false)} />}
+      {guideOpen && <FeatureGuide onClose={closeGuide} />}
+      {helpOpen && <HelpScreen />}
       {hostKeyPrompt && (
         <FingerprintModal
           prompt={hostKeyPrompt}
@@ -114,7 +126,7 @@ function AppBody(): JSX.Element {
       )}
       <WindowCloseGuard />
       {historyOpen && <HistoryDrawer activeHostId={activeSession?.hostId} />}
-      {settingsOpen && <SettingsScreen onOpenGuide={() => setGuideOpen(true)} />}
+      {settingsOpen && <SettingsScreen onOpenGuide={openGuide} />}
       {snippetDialog && (
         <SnippetSaveDialog
           command={snippetDialog.command}

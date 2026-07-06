@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AppConfig } from '@shared/config';
 import type { KnownHostView } from '@shared/ssh';
+import type { ImportPreview } from '@shared/hosts';
+import { ImportDialog } from '@/components/HostManager/ImportDialog';
 import { useConfig, getCurrentConfig } from '@/stores/config';
 import { usePanels } from '@/stores/panels';
 import { useUpdates } from '@/stores/updates';
@@ -306,6 +308,21 @@ function SecuritySection({ config, update }: { config: AppConfig; update: Update
   const refresh = useCallback(() => void window.lucidSSH.listKnownHosts().then(setHosts), []);
   useEffect(() => refresh(), [refresh]);
 
+  // Экспорт/импорт хостов JSON (EXP-01…04) — по дизайну живут в настройках, не в шапке.
+  const [importState, setImportState] = useState<{ json: string; preview: ImportPreview } | null>(
+    null
+  );
+  const [importError, setImportError] = useState(false);
+  const pickImport = async (): Promise<void> => {
+    setImportError(false);
+    try {
+      const res = await window.lucidSSH.pickImportHosts();
+      if (res) setImportState(res);
+    } catch {
+      setImportError(true);
+    }
+  };
+
   return (
     <>
       <SectionTitle>{t('settings.sections.security')}</SectionTitle>
@@ -365,7 +382,38 @@ function SecuritySection({ config, update }: { config: AppConfig; update: Update
             </div>
           )}
         </Card>
+
+        <Card title={t('settings.security.hostData')}>
+          <div className="mb-2 text-[12px] text-text-dim">{t('settings.security.hostDataDesc')}</div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void window.lucidSSH.exportHosts()}
+              className="flex h-[32px] items-center gap-2 rounded-[6px] border border-border-strong bg-bg-base px-3 text-[12.5px] text-text-body hover:text-text-strong"
+            >
+              <Icon name="upload" size={14} /> {t('settings.security.exportHosts')}
+            </button>
+            <button
+              type="button"
+              onClick={() => void pickImport()}
+              className="flex h-[32px] items-center gap-2 rounded-[6px] border border-border-strong bg-bg-base px-3 text-[12.5px] text-text-body hover:text-text-strong"
+            >
+              <Icon name="download" size={14} /> {t('settings.security.importHosts')}
+            </button>
+          </div>
+          {importError && (
+            <div className="mt-2 text-[11.5px] text-danger-text">{t('hosts.import.invalidFile')}</div>
+          )}
+        </Card>
       </div>
+
+      {importState && (
+        <ImportDialog
+          json={importState.json}
+          preview={importState.preview}
+          onClose={() => setImportState(null)}
+        />
+      )}
     </>
   );
 }

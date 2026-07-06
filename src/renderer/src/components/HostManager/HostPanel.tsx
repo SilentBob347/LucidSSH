@@ -2,13 +2,11 @@ import type { JSX } from 'react';
 import { forwardRef, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Host, HostGroup } from '@shared/hosts';
-import type { ImportPreview } from '@shared/hosts';
 import { useHosts } from '@/stores/hosts';
 import { useSessions } from '@/stores/sessions';
 import { usePanels } from '@/stores/panels';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Icon } from '@/components/common/Icon';
-import { ImportDialog } from './ImportDialog';
 import { ExternalImportDialog } from './ExternalImportDialog';
 
 /**
@@ -127,21 +125,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
   const [newGroupName, setNewGroupName] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Host | null>(null);
   const [snippetHostTarget, setSnippetHostTarget] = useState<Host | null>(null);
-  const [importState, setImportState] = useState<{ json: string; preview: ImportPreview } | null>(
-    null
-  );
-  const [importError, setImportError] = useState(false);
   const [extImportOpen, setExtImportOpen] = useState(false);
-
-  const pickImport = async (): Promise<void> => {
-    setImportError(false);
-    try {
-      const res = await window.lucidSSH.pickImportHosts();
-      if (res) setImportState(res);
-    } catch {
-      setImportError(true);
-    }
-  };
 
   const q = query.trim();
 
@@ -232,34 +216,10 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
             onClick={() => setNewGroupOpen(true)}
             className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
           >
-            <Icon name="folder-plus" size={14} />
-          </button>
-          <button
-            type="button"
-            title={t('hosts.export.button')}
-            aria-label={t('hosts.export.button')}
-            onClick={() => void window.lucidSSH.exportHosts()}
-            className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
-          >
-            <Icon name="upload" size={14} />
-          </button>
-          <button
-            type="button"
-            title={t('hosts.import.button')}
-            aria-label={t('hosts.import.button')}
-            onClick={() => void pickImport()}
-            className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
-          >
-            <Icon name="download" size={14} />
+            <Icon name="folder" size={14} />
           </button>
         </div>
       </div>
-
-      {importError && (
-        <div className="mx-3 mt-2 rounded-[6px] border border-danger/30 bg-danger/10 px-3 py-2 text-[11.5px] text-danger-text">
-          {t('hosts.import.invalidFile')}
-        </div>
-      )}
 
       <div className="px-3 pt-[10px] pb-2">
         <input
@@ -402,14 +362,6 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
           {t('hosts.footer.importPutty')}
         </button>
       </div>
-
-      {importState && (
-        <ImportDialog
-          json={importState.json}
-          preview={importState.preview}
-          onClose={() => setImportState(null)}
-        />
-      )}
 
       {extImportOpen && <ExternalImportDialog onClose={() => setExtImportOpen(false)} />}
 

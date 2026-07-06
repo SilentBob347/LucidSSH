@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EventsMenu } from './EventsMenu';
 import { Icon } from '@/components/common/Icon';
+import { usePanels } from '@/stores/panels';
 
 /**
  * Кастомный тайтл-бар 32px (Design_Brief §3.1): лого + имя + справка слева,
@@ -10,6 +11,7 @@ import { Icon } from '@/components/common/Icon';
  */
 export function TitleBar(): JSX.Element {
   const { t } = useTranslation();
+  const { openGuide } = usePanels();
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -27,6 +29,7 @@ export function TitleBar(): JSX.Element {
           type="button"
           title={t('titleBar.help')}
           aria-label={t('titleBar.help')}
+          onClick={openGuide}
           className="app-no-drag ml-1 flex size-[22px] items-center justify-center rounded-full border border-border-default text-text-dim hover:bg-bg-elevated hover:text-text-strong"
         >
           <Icon name="help" size={13} />

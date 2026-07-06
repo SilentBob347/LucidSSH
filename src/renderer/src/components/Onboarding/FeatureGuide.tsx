@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Icon } from '@/components/common/Icon';
+import { usePanels } from '@/stores/panels';
 
 /**
  * FeatureGuide — модалка «Возможности LucidSSH» (скриншот 15-Guide):
@@ -17,6 +18,7 @@ const CARDS = [
 
 export function FeatureGuide({ onClose }: { onClose: () => void }): JSX.Element {
   const { t } = useTranslation();
+  const { openHelp } = usePanels();
 
   return (
     <div
@@ -33,8 +35,8 @@ export function FeatureGuide({ onClose }: { onClose: () => void }): JSX.Element 
       >
         <div className="flex items-center justify-between border-b border-border-hairline px-5 py-4">
           <div className="flex items-center gap-2">
-            <span className="flex size-[22px] items-center justify-center rounded-full border border-border-default text-[11px] text-lavender">
-              ?
+            <span className="flex size-[22px] items-center justify-center rounded-full border border-border-default text-lavender">
+              <Icon name="help" size={13} />
             </span>
             <span className="text-[15px] font-semibold text-text-primary">{t('guide.title')}</span>
           </div>
@@ -83,7 +85,17 @@ export function FeatureGuide({ onClose }: { onClose: () => void }): JSX.Element 
           })}
         </div>
 
-        <div className="flex items-center justify-end border-t border-border-hairline px-5 py-3">
+        <div className="flex items-center justify-between border-t border-border-hairline px-5 py-3">
+          <button
+            type="button"
+            onClick={() => {
+              openHelp();
+              onClose();
+            }}
+            className="flex items-center gap-[6px] text-[13px] font-medium text-lavender hover:text-lavender-light"
+          >
+            {t('guide.openFull')} →
+          </button>
           <button
             type="button"
             onClick={onClose}

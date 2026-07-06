@@ -24,13 +24,7 @@ function StatusDot({ status }: { status: SessionInfo['status'] }): JSX.Element {
   return <span className="size-[7px] shrink-0 rounded-full border-[1.5px] border-text-faint" />;
 }
 
-export function TabBar({
-  onToggleDetails,
-  detailsOpen
-}: {
-  onToggleDetails: () => void;
-  detailsOpen: boolean;
-}): JSX.Element {
+export function TabBar({ onToggleDetails }: { onToggleDetails: () => void }): JSX.Element {
   const { t } = useTranslation();
   const { sessions, activeSessionId, select, closeTab, connect, renameTab, reorderTab } =
     useSessions();
@@ -174,25 +168,6 @@ export function TabBar({
           );
         })}
       </div>
-      {activeSessionId && (
-        <div className="flex h-full shrink-0 items-center pr-2">
-          <button
-            type="button"
-            title={t('tabs.details')}
-            aria-label={t('tabs.details')}
-            aria-pressed={detailsOpen}
-            onClick={onToggleDetails}
-            className={`flex size-[24px] items-center justify-center rounded-[4px] text-[12px] ${
-              detailsOpen
-                ? 'bg-bg-elevated-2 text-lavender'
-                : 'text-text-dim hover:bg-bg-elevated hover:text-text-strong'
-            }`}
-          >
-            ⓘ
-          </button>
-        </div>
-      )}
-
       {menu && (
         <div
           className="animate-[esh-pop_.12s_ease] fixed z-50 w-[160px] rounded-[6px] border border-border-strong bg-bg-elevated py-1 shadow-[0_18px_50px_rgba(0,0,0,0.55)]"
@@ -221,6 +196,17 @@ export function TabBar({
             className="w-full px-3 py-[6px] text-left text-[12.5px] text-text-body hover:bg-bg-elevated-2 hover:text-text-strong"
           >
             {t('tabs.duplicate')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onToggleDetails();
+              setMenu(null);
+            }}
+            className="w-full px-3 py-[6px] text-left text-[12.5px] text-text-body hover:bg-bg-elevated-2 hover:text-text-strong"
+          >
+            {t('tabs.details')}
           </button>
           <div className="my-1 h-px bg-border-hairline" />
           <button
