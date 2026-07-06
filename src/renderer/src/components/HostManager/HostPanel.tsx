@@ -106,6 +106,21 @@ function HostRow({
   );
 }
 
+/**
+ * Бейдж-плюс в углу иконки (дизайн шапки «Серверы»): маленький фиолетовый
+ * кружок с белым «+», отделён от иконки кольцом цвета панели.
+ */
+function AddBadge(): JSX.Element {
+  return (
+    <span className="pointer-events-none absolute -right-px -bottom-px flex size-[10px] items-center justify-center rounded-full bg-accent shadow-[0_0_0_1.5px_var(--color-bg-panel)]">
+      <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={4} strokeLinecap="round" aria-hidden="true">
+        <path d="M12 6v12" />
+        <path d="M6 12h12" />
+      </svg>
+    </span>
+  );
+}
+
 export const HostPanel = forwardRef<HTMLElement, { width: number }>(function HostPanel(
   { width },
   ref
@@ -199,24 +214,26 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
         <span className="text-[11px] font-semibold tracking-[0.05em] text-text-muted uppercase">
           {t('hosts.title')}
         </span>
-        <div className="flex gap-1">
+        <div className="flex gap-px">
           <button
             type="button"
             title={t('hosts.addServer')}
             aria-label={t('hosts.addServer')}
             onClick={() => openDrawer()}
-            className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
+            className="relative flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
           >
-            <Icon name="plus" size={15} />
+            <Icon name="server" size={15} />
+            <AddBadge />
           </button>
           <button
             type="button"
             title={t('hosts.addGroup')}
             aria-label={t('hosts.addGroup')}
             onClick={() => setNewGroupOpen(true)}
-            className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
+            className="relative flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
           >
-            <Icon name="folder" size={14} />
+            <Icon name="folders" size={15} />
+            <AddBadge />
           </button>
         </div>
       </div>
