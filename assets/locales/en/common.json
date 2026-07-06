@@ -36,6 +36,12 @@
       "placeholder": "Group name",
       "hint": "↵ Enter — create · Esc — cancel"
     },
+    "groupDelete": {
+      "action": "Delete group",
+      "title": "Delete group?",
+      "body": "Group “{{name}}” will be deleted. Its servers are kept and move to “No group”.",
+      "confirm": "Delete"
+    },
     "actions": {
       "edit": "Edit",
       "delete": "Delete"

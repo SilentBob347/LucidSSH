@@ -140,6 +140,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
   const [newGroupOpen, setNewGroupOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Host | null>(null);
+  const [deleteGroupTarget, setDeleteGroupTarget] = useState<HostGroup | null>(null);
   const [snippetHostTarget, setSnippetHostTarget] = useState<Host | null>(null);
   const [extImportOpen, setExtImportOpen] = useState(false);
 
@@ -180,6 +181,20 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
   const toggleGroup = async (g: HostGroup): Promise<void> => {
     await window.lucidSSH.setGroupCollapsed(g.id, !g.collapsed);
     await refresh();
+  };
+
+  // Пустая группа удаляется сразу; с серверами — через подтверждение
+  // (хосты при этом не удаляются, уходят в «Без группы» — SET NULL в БД).
+  const removeGroup = async (g: HostGroup): Promise<void> => {
+    await window.lucidSSH.deleteGroup(g.id);
+    setDeleteGroupTarget(null);
+    await refresh();
+  };
+
+  const requestGroupDelete = (g: HostGroup): void => {
+    const hasHosts = hosts.some((h) => h.groupId === g.id);
+    if (hasHosts) setDeleteGroupTarget(g);
+    else void removeGroup(g);
   };
 
   const removeHost = async (host: Host): Promise<void> => {
@@ -321,7 +336,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
               const collapsed = g.collapsed && q === '';
               return (
                 <div key={g.id} className="mb-[2px]">
-                  <div className="flex items-center">
+                  <div className="group/head flex items-center">
                     <button
                       type="button"
                       onClick={() => void toggleGroup(g)}
@@ -340,6 +355,15 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
                       <span className="shrink-0 text-[11px] text-text-dim">
                         {t('hosts.groupCount', { count: groupHosts.length })}
                       </span>
+                    </button>
+                    <button
+                      type="button"
+                      title={t('hosts.groupDelete.action')}
+                      aria-label={t('hosts.groupDelete.action')}
+                      onClick={() => requestGroupDelete(g)}
+                      className="hidden size-[22px] shrink-0 items-center justify-center rounded-[4px] text-text-dim group-hover/head:flex hover:bg-bg-elevated hover:text-danger"
+                    >
+                      <Icon name="trash" size={12} />
                     </button>
                     <button
                       type="button"
@@ -401,6 +425,18 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
       </div>
 
       {extImportOpen && <ExternalImportDialog onClose={() => setExtImportOpen(false)} />}
+
+      {deleteGroupTarget && (
+        <ConfirmDialog
+          title={t('hosts.groupDelete.title')}
+          confirmLabel={t('hosts.groupDelete.confirm')}
+          danger
+          onConfirm={() => void removeGroup(deleteGroupTarget)}
+          onCancel={() => setDeleteGroupTarget(null)}
+        >
+          {t('hosts.groupDelete.body', { name: deleteGroupTarget.name })}
+        </ConfirmDialog>
+      )}
 
       {deleteTarget && (
         <ConfirmDialog
