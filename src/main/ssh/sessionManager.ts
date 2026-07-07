@@ -14,7 +14,7 @@ import {
   replaceKnownKey,
   sha256Fingerprint
 } from './knownHosts';
-import { BreadcrumbParser, SHELL_INTEGRATION_SETUP } from './shellIntegration';
+import { BreadcrumbParser, EchoGate, SHELL_INTEGRATION_SETUP } from './shellIntegration';
 import { startDashboard, stopDashboard } from './dashboard';
 import { loadErrorPatterns } from '../content/loader';
 import { detectError, isEmptyOutput } from '../errors/detector';
@@ -58,6 +58,16 @@ interface ManagedSession {
   pendingGuardStatus?: GuardStatus;
   /** Первый маркер после подключения — приветствие, не результат команды. */
   firstMarkSeen: boolean;
+  /** Гейт подавления эха setup-команды: MOTD виден, эхо настройки — нет. */
+  echoGate: EchoGate;
+  /** Отправлена ли настройка shell integration в текущий shell. */
+  setupSent: boolean;
+  /** Пауза в выводе после MOTD — сигнал отправить настройку. */
+  setupSilenceTimer?: NodeJS.Timeout;
+  /** Кап: настройка уходит даже если сервер молчит (нет MOTD/приглашения). */
+  setupCapTimer?: NodeJS.Timeout;
+  /** Страховка: shell без bash/zsh не пришлёт маркер — показать накопленное. */
+  echoFlushTimer?: NodeJS.Timeout;
 }
 
 interface PendingHostKey {
@@ -75,6 +85,12 @@ const pendingHostKeys = new Map<string, PendingHostKey>();
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAY_MS = 2500;
 const HOSTKEY_DECISION_TIMEOUT_MS = 5 * 60 * 1000;
+// Отправка shell integration: ждём паузу в выводе после MOTD (иначе окно
+// подавления эха съест приветствие), но не дольше капа. Маркер-страховка —
+// если shell не bash/zsh и маркер не придёт, накопленное эхо показывается.
+const SETUP_SILENCE_MS = 300;
+const SETUP_CAP_MS = 2000;
+const ECHO_FLUSH_TIMEOUT_MS = 3000;
 
 function send(channel: string, ...args: unknown[]): void {
   const win = getMainWindow();
@@ -162,7 +178,9 @@ export async function connectHost(hostId: number): Promise<{ sessionId: string }
     lastCommand: '',
     lastCommandStartedAt: 0,
     everConnected: false,
-    firstMarkSeen: false
+    firstMarkSeen: false,
+    echoGate: new EchoGate(),
+    setupSent: false
   };
   sessions.set(session.id, session);
   setStatus(session, 'connecting');
@@ -371,17 +389,28 @@ function openShell(session: ManagedSession, client: Client): void {
       }
       session.shell = stream;
       session.everConnected = true;
+      // Новый shell (в т.ч. после переподключения) — настройка ещё не отправлена,
+      // гейт и таймеры прошлого shell сбрасываются.
+      session.setupSent = false;
+      clearSetupTimers(session);
       setStatus(session, 'connected');
       log(session, 'info', 'clog.shellOpen', undefined, 'session');
 
       // Вывод сервера проходит через парсер breadcrumb: APC-маркеры вырезаются
       // (в xterm не попадают), из них формируется breadcrumb (BRD-04) и
-      // отслеживается exit code для детектора ошибок (ERR-01).
+      // отслеживается exit code для детектора ошибок (ERR-01). EchoGate
+      // дополнительно прячет эхо setup-команды (MOTD остаётся видимым).
       stream.on('data', (data: Buffer) => {
-        const { cleaned, marks } = session.breadcrumbParser.push(data.toString('utf8'));
-        if (cleaned) {
-          send(IPC.evTerminalData, session.id, cleaned);
-          session.outputSinceMark += cleaned;
+        const { pieces, marks } = session.breadcrumbParser.push(data.toString('utf8'));
+        if (!session.setupSent) {
+          // MOTD ещё идёт — настройка уходит после паузы в выводе
+          clearTimeout(session.setupSilenceTimer);
+          session.setupSilenceTimer = setTimeout(() => sendShellSetup(session), SETUP_SILENCE_MS);
+        }
+        const forward = session.echoGate.filter(pieces, marks.length);
+        if (forward) {
+          send(IPC.evTerminalData, session.id, forward);
+          session.outputSinceMark += forward;
           if (session.outputSinceMark.length > 65536) {
             session.outputSinceMark = session.outputSinceMark.slice(-65536);
           }
@@ -395,13 +424,14 @@ function openShell(session: ManagedSession, client: Client): void {
         send(IPC.evTerminalData, session.id, data.toString('utf8'));
       });
       stream.on('close', () => {
+        clearSetupTimers(session);
         session.shell = null;
         stopDashboard(session.id);
       });
 
-      // Настройка shell integration (BRD-04): статическая строка, значения
-      // подставляет удалённый shell из своих переменных (§19 гайда).
-      stream.write(SHELL_INTEGRATION_SETUP);
+      // Кап на случай сервера без MOTD/приглашения: настройка уйдёт даже
+      // если данных от сервера не было и silence-таймер не взводился.
+      session.setupCapTimer = setTimeout(() => sendShellSetup(session), SETUP_CAP_MS);
 
       // Мини-дашборд: отдельный exec-канал, интервал 10 с (DASH-02).
       // Логгер — причина недоступности метрик попадает в «Детали подключения» (DASH-05).
@@ -502,10 +532,48 @@ export function recordBlockedCommand(sessionId: string, command: string): void {
   if (session) recordCommand(session, command, undefined, 'blocked');
 }
 
+function clearSetupTimers(session: ManagedSession): void {
+  clearTimeout(session.setupSilenceTimer);
+  clearTimeout(session.setupCapTimer);
+  clearTimeout(session.echoFlushTimer);
+  session.setupSilenceTimer = undefined;
+  session.setupCapTimer = undefined;
+  session.echoFlushTimer = undefined;
+}
+
+/**
+ * Отправка настройки shell integration (BRD-04): статическая строка, значения
+ * подставляет удалённый shell из своих переменных (§19 гайда). Отправляется
+ * один раз на shell, ПОСЛЕ того как MOTD дошёл до xterm (см. таймеры в
+ * openShell) — с этого момента EchoGate прячет эхо настройки до первого маркера.
+ */
+function sendShellSetup(session: ManagedSession): void {
+  if (session.setupSent || !session.shell) return;
+  session.setupSent = true;
+  clearTimeout(session.setupSilenceTimer);
+  clearTimeout(session.setupCapTimer);
+  session.echoGate.arm();
+  session.shell.write(SHELL_INTEGRATION_SETUP);
+  // Маркер не пришёл (shell без bash/zsh, ошибка настройки) — показать
+  // накопленный вывод вместо того, чтобы молча его проглотить.
+  session.echoFlushTimer = setTimeout(() => {
+    const buffered = session.echoGate.flush();
+    if (buffered) {
+      send(IPC.evTerminalData, session.id, buffered);
+      session.outputSinceMark += buffered;
+    }
+  }, ECHO_FLUSH_TIMEOUT_MS);
+}
+
 /** Отправка ввода пользователя в сессию (SEC: проверка через Стража — Этап 4). */
 export function sendInput(sessionId: string, data: string): void {
   const session = sessions.get(sessionId);
-  session?.shell?.write(data);
+  if (!session?.shell) return;
+  // Пользователь успел напечатать до отправки настройки — настройка уходит
+  // первой отдельной строкой, ввод следом: bash выполнит её раньше, эхо ввода
+  // придёт уже после маркера и подавлено не будет.
+  if (!session.setupSent) sendShellSetup(session);
+  session.shell.write(data);
 }
 
 /** Изменение размера pty под размер xterm. */
@@ -590,6 +658,7 @@ export function destroySession(sessionId: string): void {
   const session = sessions.get(sessionId);
   if (!session) return;
   session.userClosed = true;
+  clearSetupTimers(session);
   stopDashboard(sessionId);
   session.client?.destroy();
   sessions.delete(sessionId);

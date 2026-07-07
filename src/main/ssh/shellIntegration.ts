@@ -20,15 +20,15 @@ const APC_END = '\x1b\\';
 /**
  * Команда настройки интеграции. Одна строка; отправляется один раз после
  * открытия shell. `printf` с фиксированным форматом — статическая строка.
+ * Префикс-пробел не даёт команде попасть в историю при HISTCONTROL=ignorespace.
  *
- * Хвост очищает экран после установки (`ESC[H ESC[2J` — home + clear screen,
- * БЕЗ ESC[3J, поэтому scrollback с MOTD сохраняется и доступен прокруткой),
- * чтобы эхо длинной команды-настройки не висело вверху сессии. Префикс-пробел
- * не даёт команде попасть в историю при HISTCONTROL=ignorespace.
- *
- * (Попытка точечного стирания только своего эха, чтобы не прятать MOTD за
- * прокруткой, — см. docs/Ideas_Backlog.md; откачена 07.07.2026 после двух
- * неудачных попыток на живом сервере, ломавших исполнение команды целиком.)
+ * Экран НЕ очищается: MOTD сервера остаётся видимым сразу после подключения.
+ * Эхо самой команды-настройки прячется на стороне main процесса (EchoGate
+ * ниже): всё между отправкой настройки и первым маркером — это её эхо, оно
+ * не пересылается в xterm. Финальный вызов `__lucidssh_mark` в конце строки —
+ * детерминированный сигнал «эхо закончилось». (Прошлые попытки стирать эхо
+ * ANSI-кодами на стороне сервера ломались о непредсказуемость readline —
+ * см. docs/Ideas_Backlog.md.)
  */
 export const SHELL_INTEGRATION_SETUP =
   // __lc=$? — код возврата последней команды снимается ПЕРВЫМ, до любых операций (ERR-01).
@@ -40,7 +40,7 @@ export const SHELL_INTEGRATION_SETUP =
   `"\${USER:-$(id -un 2>/dev/null)}" "\${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD" "$(id -u 2>/dev/null)" "$__lc"; }; ` +
   `if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __lucidssh_mark 2>/dev/null || precmd_functions+=(__lucidssh_mark); ` +
   `else case "$PROMPT_COMMAND" in *__lucidssh_mark*) ;; *) PROMPT_COMMAND="__lucidssh_mark;$PROMPT_COMMAND";; esac; fi; ` +
-  `printf '\\033[H\\033[2J'; __lucidssh_mark\n`;
+  `__lucidssh_mark\n`;
 
 // eslint-disable-next-line no-control-regex
 const MARKER_RE = /\x1b_lucidssh([\s\S]*?)\x1b\\/;
@@ -51,6 +51,19 @@ export interface ShellMark {
   exitCode: number | null;
 }
 
+/** Результат push: очищенный вывод целиком + он же кусками между маркерами. */
+export interface ParseResult {
+  cleaned: string;
+  /**
+   * Текст, разбитый по позициям маркеров: pieces[i] — до marks[i],
+   * pieces[последний] — после последнего маркера. Всегда pieces.length ===
+   * marks.length + 1. Нужен EchoGate, чтобы отбросить текст ДО первого маркера
+   * (эхо настройки), не тронув текст после.
+   */
+  pieces: string[];
+  marks: ShellMark[];
+}
+
 /**
  * Потоковый парсер маркеров: удерживает «хвост» на случай, если APC-маркер
  * разрезан между чанками. Возвращает очищенный вывод и распознанные маркеры.
@@ -58,11 +71,12 @@ export interface ShellMark {
 export class BreadcrumbParser {
   private pending = '';
 
-  push(chunk: string): { cleaned: string; marks: ShellMark[] } {
+  push(chunk: string): ParseResult {
     let buf = this.pending + chunk;
     this.pending = '';
     const marks: ShellMark[] = [];
-    let cleaned = '';
+    const pieces: string[] = [];
+    let cur = '';
 
     for (;;) {
       const startIdx = buf.indexOf(APC_START);
@@ -70,19 +84,24 @@ export class BreadcrumbParser {
       const endIdx = buf.indexOf(APC_END, startIdx);
       if (endIdx === -1) {
         // маркер не завершён — выводим всё до него, хвост оставляем на потом
-        cleaned += buf.slice(0, startIdx);
+        cur += buf.slice(0, startIdx);
         this.pending = buf.slice(startIdx);
         // защита от бесконечного накопления мусора без завершителя
         if (this.pending.length > 4096) {
-          cleaned += this.pending;
+          cur += this.pending;
           this.pending = '';
         }
-        return { cleaned, marks };
+        pieces.push(cur);
+        return { cleaned: pieces.join(''), pieces, marks };
       }
-      cleaned += buf.slice(0, startIdx);
+      cur += buf.slice(0, startIdx);
       const marker = buf.slice(startIdx, endIdx + APC_END.length);
       const mark = parseMarker(marker);
-      if (mark) marks.push(mark);
+      if (mark) {
+        marks.push(mark);
+        pieces.push(cur);
+        cur = '';
+      }
       buf = buf.slice(endIdx + APC_END.length);
     }
 
@@ -90,12 +109,58 @@ export class BreadcrumbParser {
     // придержим небольшой хвост, если он выглядит как начало ESC-последовательности.
     const tailEsc = buf.lastIndexOf('\x1b');
     if (tailEsc !== -1 && buf.length - tailEsc < APC_START.length && APC_START.startsWith(buf.slice(tailEsc))) {
-      cleaned += buf.slice(0, tailEsc);
+      cur += buf.slice(0, tailEsc);
       this.pending = buf.slice(tailEsc);
     } else {
-      cleaned += buf;
+      cur += buf;
     }
-    return { cleaned, marks };
+    pieces.push(cur);
+    return { cleaned: pieces.join(''), pieces, marks };
+  }
+}
+
+/**
+ * Гейт подавления эха setup-команды (MOTD виден сразу, без прокрутки).
+ *
+ * Между отправкой SHELL_INTEGRATION_SETUP и первым маркером поток содержит
+ * только эхо самой настройки — arm() включает подавление, filter() копит этот
+ * текст вместо пересылки в xterm. Первый маркер завершает подавление: эхо
+ * отбрасывается, вместо него в xterm уходит `\r ESC[K` — стирает устаревшее
+ * приглашение с текущей строки, чтобы новое (напечатанное shell после
+ * настройки) не приклеилось к старому. flush() — страховка для shell без
+ * bash/zsh (маркер не придёт): накопленное показывается, а не теряется.
+ */
+export class EchoGate {
+  private suppressing = false;
+  private buffer = '';
+
+  get active(): boolean {
+    return this.suppressing;
+  }
+
+  arm(): void {
+    this.suppressing = true;
+    this.buffer = '';
+  }
+
+  /** Фильтр очередного чанка: что из него реально переслать в xterm. */
+  filter(pieces: string[], markCount: number): string {
+    if (!this.suppressing) return pieces.join('');
+    if (markCount === 0) {
+      this.buffer += pieces.join('');
+      return '';
+    }
+    this.suppressing = false;
+    this.buffer = '';
+    return '\r\x1b[K' + pieces.slice(1).join('');
+  }
+
+  /** Аварийный сброс по таймауту: вернуть накопленное, выключить подавление. */
+  flush(): string {
+    const buffered = this.buffer;
+    this.buffer = '';
+    this.suppressing = false;
+    return buffered;
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BreadcrumbParser, buildCdCommand } from './shellIntegration';
+import { BreadcrumbParser, EchoGate, buildCdCommand } from './shellIntegration';
 
 const US = '\x1f';
 const mk = (u: string, h: string, p: string, e: string, c = '0'): string =>
@@ -56,6 +56,79 @@ describe('BreadcrumbParser', () => {
     expect(cleaned).toBe('mid');
     expect(marks).toHaveLength(2);
     expect(marks[1]?.crumb.path).toBe('/tmp');
+  });
+
+  it('pieces: текст разбит по позициям маркеров, длина = marks + 1', () => {
+    const parser = new BreadcrumbParser();
+    const { pieces, marks } = parser.push('echo' + mk('u', 'h', '/', '1000') + 'prompt$ ');
+    expect(marks).toHaveLength(1);
+    expect(pieces).toEqual(['echo', 'prompt$ ']);
+  });
+
+  it('pieces: чанк без маркеров — один кусок', () => {
+    const parser = new BreadcrumbParser();
+    const { pieces } = parser.push('plain output');
+    expect(pieces).toEqual(['plain output']);
+  });
+
+  it('pieces: маркер, разрезанный между чанками, не создаёт ложных границ', () => {
+    const parser = new BreadcrumbParser();
+    const full = mk('u', 'h', '/', '1000');
+    const mid = Math.floor(full.length / 2);
+    const r1 = parser.push('a' + full.slice(0, mid));
+    expect(r1.pieces).toEqual(['a']); // незавершённый маркер придержан
+    const r2 = parser.push(full.slice(mid) + 'b');
+    expect(r2.marks).toHaveLength(1);
+    expect(r2.pieces).toEqual(['', 'b']);
+  });
+});
+
+describe('EchoGate — подавление эха setup-команды (MOTD без прокрутки)', () => {
+  it('неактивный гейт пропускает всё как есть', () => {
+    const gate = new EchoGate();
+    expect(gate.filter(['motd line\r\n'], 0)).toBe('motd line\r\n');
+    expect(gate.active).toBe(false);
+  });
+
+  it('после arm() копит текст до маркера и не пересылает его', () => {
+    const gate = new EchoGate();
+    gate.arm();
+    expect(gate.filter([' __lucidssh_mark() { …эхо…'], 0)).toBe('');
+    expect(gate.filter(['…хвост эха…\r\n'], 0)).toBe('');
+    expect(gate.active).toBe(true);
+  });
+
+  it('первый маркер: эхо отброшено, строка стёрта (\\r ESC[K), хвост чанка пересылается', () => {
+    const gate = new EchoGate();
+    gate.arm();
+    gate.filter(['…эхо…'], 0);
+    // чанк, где пришёл маркер: до маркера — остаток эха, после — новое приглашение
+    const out = gate.filter(['конец эха', 'user@host:~$ '], 1);
+    expect(out).toBe('\r\x1b[Kuser@host:~$ ');
+    expect(gate.active).toBe(false);
+  });
+
+  it('после закрытия гейт снова прозрачен, повторные маркеры не влияют', () => {
+    const gate = new EchoGate();
+    gate.arm();
+    gate.filter(['x', 'y'], 1);
+    expect(gate.filter(['ls output', 'prompt$ '], 1)).toBe('ls outputprompt$ ');
+  });
+
+  it('flush по таймауту возвращает накопленное и выключает подавление', () => {
+    const gate = new EchoGate();
+    gate.arm();
+    gate.filter(['вывод shell без маркеров'], 0);
+    expect(gate.flush()).toBe('вывод shell без маркеров');
+    expect(gate.active).toBe(false);
+    expect(gate.filter(['дальше как обычно'], 0)).toBe('дальше как обычно');
+  });
+
+  it('два маркера в одном чанке (явный вызов + PROMPT_COMMAND): пересылается всё после первого', () => {
+    const gate = new EchoGate();
+    gate.arm();
+    const out = gate.filter(['эхо', '', 'prompt$ '], 2);
+    expect(out).toBe('\r\x1b[Kprompt$ ');
   });
 });
 
