@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEvents } from '@/stores/events';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Иконка событий в шапке (NOTIF-03): цифровой бейдж — красный при изменении
@@ -33,16 +34,9 @@ export function EventsMenu(): JSX.Element {
         title={t('events.title')}
         aria-label={t('events.title')}
         onClick={() => setOpen((v) => !v)}
-        className="ml-1 flex size-[22px] items-center justify-center rounded-full border border-border-default text-[11px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
+        className="ml-1 flex size-[22px] items-center justify-center rounded-full text-text-muted hover:bg-bg-elevated hover:text-lavender-light"
       >
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path
-            d="M8 1.5a4 4 0 0 0-4 4v2.6L2.8 10.5A.5.5 0 0 0 3.2 11.3h9.6a.5.5 0 0 0 .4-.8L12 8.1V5.5a4 4 0 0 0-4-4Z"
-            stroke="currentColor"
-            strokeWidth="1.2"
-          />
-          <path d="M6.4 12.6a1.6 1.6 0 0 0 3.2 0" stroke="currentColor" strokeWidth="1.2" />
-        </svg>
+        <Icon name="bell" size={16} />
         {count > 0 && (
           <span
             className={`absolute top-[1px] -right-[3px] flex h-[13px] min-w-[13px] items-center justify-center rounded-full px-[3px] text-[8.5px] leading-none font-bold text-white ${
