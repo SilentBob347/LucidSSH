@@ -24,6 +24,9 @@ interface Cached {
   fit: FitAddon;
   search: SearchAddon;
   pasteAttached: boolean;
+  /** Персистентный контейнер: term.open() вызывается один раз навсегда сюда,
+   *  при переключении вкладок контейнер переносится (appendChild), не пересоздаётся. */
+  container: HTMLDivElement;
 }
 
 const cache = new Map<string, Cached>();
@@ -33,6 +36,7 @@ export function destroyTerminal(sessionId: string): void {
   if (c) {
     dropTerminalBuffer(sessionId);
     c.term.dispose();
+    c.container.remove();
     cache.delete(sessionId);
   }
 }
@@ -146,7 +150,11 @@ function createTerminal(sessionId: string): Cached {
   // Вывод сервера — из буфера (накопленное до монтирования + живой поток)
   attachTerminalWriter(sessionId, (data) => term.write(data));
 
-  return { term, fit, search, pasteAttached: false };
+  const container = document.createElement('div');
+  container.className = 'h-full w-full';
+  term.open(container);
+
+  return { term, fit, search, pasteAttached: false, container };
 }
 
 export function XtermView({
@@ -171,8 +179,8 @@ export function XtermView({
       cached = createTerminal(sessionId);
       cache.set(sessionId, cached);
     }
-    if (cached.term.element?.parentElement !== el) {
-      cached.term.open(el);
+    if (cached.container.parentElement !== el) {
+      el.appendChild(cached.container);
     }
 
     // Перехват вставки: textarea появляется только после open() — вешаем один раз.
