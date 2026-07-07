@@ -280,7 +280,8 @@
     "tabCatalog": "Catalog",
     "tabGlobal": "Global",
     "searchPlaceholder": "Search commands",
-    "close": "Close panel"
+    "close": "Close panel",
+    "dragScroll": "Click and drag to scroll"
   },
   "input": {
     "placeholder": "Type a command…",
@@ -440,7 +441,7 @@
       "expertEnable": "Enable",
       "expertOn": "On",
       "hintCatalog": "Command catalog hints",
-      "hintCatalogDesc": "Tips above the input and descriptions in the catalog.",
+      "hintCatalogDesc": "Shows the flag's description right in the chip next to it. Off - the chip shows just the flag, with the description on hover.",
       "hintTooltips": "Command output tooltips",
       "hintTooltipsDesc": "Explanatory tooltips on hovering the output.",
       "hintError": "Error detector panel",

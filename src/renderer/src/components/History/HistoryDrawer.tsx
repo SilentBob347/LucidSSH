@@ -176,7 +176,18 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
                       <div className="flex shrink-0 gap-1">
                         <IconBtn title={t('history.copy')} onClick={() => window.lucidSSH.clipboardWrite(e.command)}><Icon name="copy" size={13} /></IconBtn>
                         <IconBtn title={t('history.insert')} onClick={() => insertIntoComposer(e.command)}><Icon name="insert" size={13} /></IconBtn>
-                        <IconBtn title={t('history.saveSnippet')} onClick={() => openSnippetDialog(e.command)}><Icon name="bookmark" size={13} /></IconBtn>
+                        <button
+                          type="button"
+                          title={t('history.saveSnippet')}
+                          aria-label={t('history.saveSnippet')}
+                          onClick={() => openSnippetDialog(e.command)}
+                          className="relative flex size-[24px] shrink-0 items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-text-strong"
+                        >
+                          <Icon name="save" size={15} />
+                          <span className="pointer-events-none absolute -right-[2px] -bottom-[2px] flex size-[11px] items-center justify-center rounded-full bg-accent text-white shadow-[0_0_0_1.5px_var(--color-bg-panel)]">
+                            <Icon name="plus" size={7} strokeWidth={4} />
+                          </span>
+                        </button>
                         <IconBtn
                           title={t('history.delete')}
                           onClick={() => void window.lucidSSH.deleteHistoryEntry(e.id).then(refreshHistory)}

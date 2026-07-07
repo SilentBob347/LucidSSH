@@ -99,7 +99,7 @@ export function SnippetSaveDialog({
 
         <div className="space-y-3 px-[18px] pt-[14px] pb-[18px]">
           {/* Превью команды */}
-          <div className="rounded-[6px] bg-bg-panel px-[11px] py-[10px] font-mono text-[12px] break-all text-text-body">
+          <div className="truncate rounded-[6px] border border-[rgba(255,255,255,0.06)] bg-bg-panel px-[11px] py-[10px] font-mono text-[12px] text-text-body">
             {cmd}
           </div>
 
@@ -111,16 +111,18 @@ export function SnippetSaveDialog({
 
           {/* Область видимости */}
           <div>
-            <span className="mb-1 block text-[12px] text-text-muted">{t('snippet.scopeLabel')}</span>
-            <div className="flex rounded-[7px] bg-bg-base p-[3px]">
+            <span className="mb-[5px] block text-[12px] font-medium text-text-strong">
+              {t('snippet.scopeLabel')}
+            </span>
+            <div className="flex gap-[3px] rounded-[7px] border border-border-default bg-bg-base p-[3px]">
               <button
                 type="button"
                 disabled={!canPickServer}
                 onClick={() => setScope('server')}
                 className={
                   scope === 'server'
-                    ? 'h-[28px] flex-1 rounded-[3px] bg-bg-tab-active text-[12px] font-medium text-text-strong'
-                    : 'h-[28px] flex-1 rounded-[3px] text-[12px] text-text-dim hover:text-text-muted disabled:opacity-40'
+                    ? 'h-[30px] flex-1 rounded-[5px] bg-bg-tab-active text-[12px] font-medium text-text-strong'
+                    : 'h-[30px] flex-1 rounded-[5px] text-[12px] text-text-dim hover:text-text-muted disabled:opacity-40'
                 }
               >
                 {hostName ? `${t('snippet.scopeServer')}: ${hostName}` : t('snippet.scopeServer')}
@@ -130,8 +132,8 @@ export function SnippetSaveDialog({
                 onClick={() => setScope('global')}
                 className={
                   scope === 'global'
-                    ? 'h-[28px] flex-1 rounded-[3px] bg-bg-tab-active text-[12px] font-medium text-text-strong'
-                    : 'h-[28px] flex-1 rounded-[3px] text-[12px] text-text-dim hover:text-text-muted'
+                    ? 'h-[30px] flex-1 rounded-[5px] bg-bg-tab-active text-[12px] font-medium text-text-strong'
+                    : 'h-[30px] flex-1 rounded-[5px] text-[12px] text-text-dim hover:text-text-muted'
                 }
               >
                 {t('snippet.scopeGlobal')}
@@ -141,7 +143,7 @@ export function SnippetSaveDialog({
           </div>
 
           <div>
-            <label className="mb-1 block text-[12px] text-text-muted" htmlFor="snip-name">
+            <label className="mb-[5px] block text-[12px] font-medium text-text-strong" htmlFor="snip-name">
               {t('snippet.name')} <span className="text-danger">*</span>
             </label>
             <input
@@ -160,7 +162,7 @@ export function SnippetSaveDialog({
           </div>
 
           <div>
-            <label className="mb-1 block text-[12px] text-text-muted" htmlFor="snip-desc">
+            <label className="mb-[5px] block text-[12px] font-medium text-text-strong" htmlFor="snip-desc">
               {t('snippet.description')}
             </label>
             <input
@@ -186,7 +188,11 @@ export function SnippetSaveDialog({
             type="button"
             disabled={!canSave}
             onClick={() => void save()}
-            className="h-[34px] rounded-[6px] bg-accent px-4 text-[12.5px] font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+            className={
+              canSave
+                ? 'h-[34px] rounded-[6px] bg-accent px-4 text-[12.5px] font-medium text-white hover:bg-accent-hover'
+                : 'h-[34px] cursor-not-allowed rounded-[6px] bg-accent/30 px-4 text-[12.5px] font-medium text-[#9596C6]'
+            }
           >
             {t('snippet.save')}
           </button>
