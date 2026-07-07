@@ -64,10 +64,12 @@ function Metric({
 
 export function BreadcrumbBar({
   crumb,
-  metrics
+  metrics,
+  onOpenDashboard
 }: {
   crumb: Breadcrumb | undefined;
   metrics: DashboardMetrics | undefined;
+  onOpenDashboard: () => void;
 }): JSX.Element {
   const { t } = useTranslation();
   const { config } = useConfig();
@@ -134,9 +136,14 @@ export function BreadcrumbBar({
         )}
       </div>
 
-      {/* Мини-дашборд */}
+      {/* Мини-дашборд — клик открывает полную модалку «Дашборд сервера» */}
       {dashVisible && (
-        <div className="flex shrink-0 items-center gap-3">
+        <button
+          type="button"
+          onClick={onOpenDashboard}
+          title={t('dashboard.openModal')}
+          className="flex shrink-0 items-center gap-3 rounded-[5px] hover:opacity-90"
+        >
           <Metric
             label={t('dashboard.cpu')}
             value={cpu === null ? '—' : `${cpu}%`}
@@ -169,7 +176,7 @@ export function BreadcrumbBar({
               return up ? t(up.key, up.params) : '—';
             })()}
           </span>
-        </div>
+        </button>
       )}
     </div>
   );

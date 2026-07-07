@@ -14,6 +14,7 @@ import { HintBar } from './HintBar';
 import { OnboardingHints } from './OnboardingHints';
 import { DangerGuardModal } from '@/components/Guard/DangerGuardModal';
 import { BreadcrumbBar } from '@/components/Breadcrumb/BreadcrumbBar';
+import { ServerDashboardModal } from './ServerDashboardModal';
 import { ErrorDetector } from './ErrorDetector';
 import { insertIntoComposer, getComposerValue } from '@/stores/composerBus';
 import { useConfig, getCurrentConfig } from '@/stores/config';
@@ -31,6 +32,7 @@ export function TerminalArea(): JSX.Element {
   const { config, update, markHint } = useConfig();
   const { openHistory, openSnippetDialog } = usePanels();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [dashboardModalOpen, setDashboardModalOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(
     null
   );
@@ -125,6 +127,14 @@ export function TerminalArea(): JSX.Element {
         <BreadcrumbBar
           crumb={breadcrumbs[active.sessionId]}
           metrics={dashboards[active.sessionId]}
+          onOpenDashboard={() => setDashboardModalOpen(true)}
+        />
+      )}
+      {active && dashboardModalOpen && (
+        <ServerDashboardModal
+          hostName={active.hostName}
+          metrics={dashboards[active.sessionId]}
+          onClose={() => setDashboardModalOpen(false)}
         />
       )}
 

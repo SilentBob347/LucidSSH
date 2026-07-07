@@ -168,8 +168,24 @@
     "uptime": "Uptime",
     "na": "—",
     "toggle": "Hide/show metrics",
+    "openModal": "Open server dashboard",
     "uptimeDays": "{{days}}d {{hours}}h",
-    "uptimeHours": "{{hours}}h {{mins}}m"
+    "uptimeHours": "{{hours}}h {{mins}}m",
+    "modal": {
+      "title": "Dashboard · {{host}}",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "unavailableBanner": "Server unavailable — metrics not received. Showing “—” instead of last known values, no red errors.",
+      "loadAvg": "Load average",
+      "network": "Network ↑ / ↓",
+      "topProcesses": "Top processes",
+      "noData": "— no data —",
+      "pid": "PID",
+      "user": "USER",
+      "command": "COMMAND",
+      "cpu": "CPU%",
+      "mem": "MEM%"
+    }
   },
   "tabs": {
     "details": "Connection details",

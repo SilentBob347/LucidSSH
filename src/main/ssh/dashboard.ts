@@ -21,16 +21,23 @@ const EXEC_TIMEOUT_MS = 8_000;
  * Не содержит недоверенного ввода — статическая строка (§19 гайда).
  */
 const METRICS_COMMAND = [
-  // CPU %: два замера /proc/stat с короткой паузой.
+  // CPU % и сеть: делят один и тот же замер с паузой 0.4с (два снимка /proc/stat
+  // и /proc/net/dev, дельта за интервал), чтобы не удлинять общий опрос.
   // `rest` обязателен: в /proc/stat 10 полей (…steal guest guest_nice), без него
   // последняя переменная забирает остаток строки («N 0 0»), арифметика $(( ))
   // падает с syntax error, а ошибка расширения ФАТАЛЬНА для неинтерактивного
   // bash — умирала вся команда, и дашборд всегда показывал «—» (найдено 07.07.2026).
   'read cpu a b c d e f g h rest < /proc/stat 2>/dev/null; t1=$((a+b+c+d+e+f+g+h)); id1=$d;',
+  // Сумма rx/tx по всем интерфейсам кроме lo. FS=[: ]+ убирает двоеточие после
+  // имени интерфейса без gsub — не нужно экранировать кавычки внутри JS-строки.
+  "netv1=$(awk -F'[: ]+' 'NR>2 && $2!=\"lo\"{rx+=$3;tx+=$11} END{print rx+0,tx+0}' /proc/net/dev 2>/dev/null); set -- $netv1; rx1=$1; tx1=$2;",
   'sleep 0.4;',
   'read cpu a b c d e f g h rest < /proc/stat 2>/dev/null; t2=$((a+b+c+d+e+f+g+h)); id2=$d;',
+  "netv2=$(awk -F'[: ]+' 'NR>2 && $2!=\"lo\"{rx+=$3;tx+=$11} END{print rx+0,tx+0}' /proc/net/dev 2>/dev/null); set -- $netv2; rx2=$1; tx2=$2;",
   'dt=$((t2-t1)); di=$((id2-id1));',
   'if [ "$dt" -gt 0 ] 2>/dev/null; then echo "CPU $(( (100*(dt-di))/dt ))"; fi;',
+  // KB/s: делители нецелые (0.4с, 1024) — считаем в awk, не в bash-арифметике.
+  'awk -v rx1="$rx1" -v tx1="$tx1" -v rx2="$rx2" -v tx2="$tx2" \'BEGIN{d1=tx2-tx1; d2=rx2-rx1; if(d1<0)d1=0; if(d2<0)d2=0; printf "NET %.1f %.1f\\n", d1/0.4/1024, d2/0.4/1024}\';',
   // RAM: total и available (fallback MemFree) в МБ
   'mt=$(awk "/^MemTotal:/{print \\$2}" /proc/meminfo 2>/dev/null);',
   'ma=$(awk "/^MemAvailable:/{print \\$2}" /proc/meminfo 2>/dev/null);',
@@ -39,7 +46,11 @@ const METRICS_COMMAND = [
   // Диск по /
   'df -kP / 2>/dev/null | awk "NR==2{gsub(\\"%\\",\\"\\",\\$5); print \\"DISK \\"\\$5}";',
   // Uptime
-  'awk "{print \\"UP \\"int(\\$1)}" /proc/uptime 2>/dev/null'
+  'awk "{print \\"UP \\"int(\\$1)}" /proc/uptime 2>/dev/null;',
+  // Средняя нагрузка (1/5/15 мин)
+  'awk "{print \\"LOAD \\"\\$1\\" \\"\\$2\\" \\"\\$3}" /proc/loadavg 2>/dev/null;',
+  // Топ-5 процессов по CPU. comm (не полный cmdline) — без пробелов, парсинг безопасен.
+  'ps -eo pid,user,comm,pcpu,pmem --no-headers 2>/dev/null | sort -k4 -rn | head -n 5 | awk "{print \\"PROC \\"\\$1\\" \\"\\$2\\" \\"\\$3\\" \\"\\$4\\" \\"\\$5}"'
 ].join(' ');
 
 interface DashboardState {
@@ -59,7 +70,7 @@ function send(sessionId: string, metrics: DashboardMetrics): void {
 }
 
 function parseMetrics(output: string): DashboardMetrics {
-  const metrics: DashboardMetrics = { ...EMPTY_METRICS };
+  const metrics: DashboardMetrics = { ...EMPTY_METRICS, topProcesses: [] };
   for (const line of output.split(/\r?\n/)) {
     const parts = line.trim().split(/\s+/);
     const num = (s: string | undefined): number | null => {
@@ -80,6 +91,24 @@ function parseMetrics(output: string): DashboardMetrics {
       case 'UP':
         metrics.uptimeSeconds = num(parts[1]);
         break;
+      case 'LOAD':
+        metrics.loadAvg1 = num(parts[1]);
+        metrics.loadAvg5 = num(parts[2]);
+        metrics.loadAvg15 = num(parts[3]);
+        break;
+      case 'NET':
+        metrics.netUpKbps = num(parts[1]);
+        metrics.netDownKbps = num(parts[2]);
+        break;
+      case 'PROC': {
+        const pid = num(parts[1]);
+        const cpuPercent = num(parts[4]);
+        const memPercent = num(parts[5]);
+        if (pid !== null && parts[2] && parts[3] && cpuPercent !== null && memPercent !== null) {
+          metrics.topProcesses.push({ pid, user: parts[2], cmd: parts[3], cpuPercent, memPercent });
+        }
+        break;
+      }
     }
   }
   return metrics;

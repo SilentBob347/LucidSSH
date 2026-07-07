@@ -168,8 +168,24 @@
     "uptime": "Аптайм",
     "na": "—",
     "toggle": "Скрыть/показать метрики",
+    "openModal": "Открыть дашборд сервера",
     "uptimeDays": "{{days}}д {{hours}}ч",
-    "uptimeHours": "{{hours}}ч {{mins}}м"
+    "uptimeHours": "{{hours}}ч {{mins}}м",
+    "modal": {
+      "title": "Дашборд · {{host}}",
+      "available": "Доступен",
+      "unavailable": "Недоступен",
+      "unavailableBanner": "Сервер недоступен — метрики не получены. Показываем «—» вместо последних значений, без красных ошибок.",
+      "loadAvg": "Средняя нагрузка",
+      "network": "Сеть ↑ / ↓",
+      "topProcesses": "Топ процессов",
+      "noData": "— нет данных —",
+      "pid": "PID",
+      "user": "USER",
+      "command": "COMMAND",
+      "cpu": "CPU%",
+      "mem": "MEM%"
+    }
   },
   "tabs": {
     "details": "Детали подключения",
