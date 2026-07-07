@@ -404,7 +404,10 @@ function openShell(session: ManagedSession, client: Client): void {
       stream.write(SHELL_INTEGRATION_SETUP);
 
       // Мини-дашборд: отдельный exec-канал, интервал 10 с (DASH-02).
-      startDashboard(session.id, client);
+      // Логгер — причина недоступности метрик попадает в «Детали подключения» (DASH-05).
+      startDashboard(session.id, client, (messageKey, params) =>
+        log(session, 'warn', messageKey, params, 'session')
+      );
     }
   );
 }

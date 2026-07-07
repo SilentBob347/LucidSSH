@@ -3,6 +3,9 @@ import { IPC } from '@shared/ipc';
 import { EMPTY_METRICS, type DashboardMetrics } from '@shared/dashboard';
 import { getMainWindow } from '../window/mainWindow';
 
+/** Логгер в лог соединения сессии (передаёт sessionManager, чтобы не плодить цикл импортов). */
+export type DashboardLogger = (messageKey: string, params?: Record<string, string | number>) => void;
+
 /**
  * Мини-дашборд сервера (DASH-01…05, §19 Security_Guide).
  * Отдельный SSH exec-канал (НЕ основная сессия), заранее заданный набор команд,
@@ -18,10 +21,14 @@ const EXEC_TIMEOUT_MS = 8_000;
  * Не содержит недоверенного ввода — статическая строка (§19 гайда).
  */
 const METRICS_COMMAND = [
-  // CPU %: два замера /proc/stat с короткой паузой
-  'read cpu a b c d e f g h < /proc/stat 2>/dev/null; t1=$((a+b+c+d+e+f+g+h)); id1=$d;',
+  // CPU %: два замера /proc/stat с короткой паузой.
+  // `rest` обязателен: в /proc/stat 10 полей (…steal guest guest_nice), без него
+  // последняя переменная забирает остаток строки («N 0 0»), арифметика $(( ))
+  // падает с syntax error, а ошибка расширения ФАТАЛЬНА для неинтерактивного
+  // bash — умирала вся команда, и дашборд всегда показывал «—» (найдено 07.07.2026).
+  'read cpu a b c d e f g h rest < /proc/stat 2>/dev/null; t1=$((a+b+c+d+e+f+g+h)); id1=$d;',
   'sleep 0.4;',
-  'read cpu a b c d e f g h < /proc/stat 2>/dev/null; t2=$((a+b+c+d+e+f+g+h)); id2=$d;',
+  'read cpu a b c d e f g h rest < /proc/stat 2>/dev/null; t2=$((a+b+c+d+e+f+g+h)); id2=$d;',
   'dt=$((t2-t1)); di=$((id2-id1));',
   'if [ "$dt" -gt 0 ] 2>/dev/null; then echo "CPU $(( (100*(dt-di))/dt ))"; fi;',
   // RAM: total и available (fallback MemFree) в МБ
@@ -39,6 +46,9 @@ interface DashboardState {
   timer: NodeJS.Timeout;
   client: Client;
   running: boolean;
+  logger: DashboardLogger;
+  /** Причина недоступности уже записана в лог соединения — не спамим каждые 10 с. */
+  problemLogged: boolean;
 }
 
 const dashboards = new Map<string, DashboardState>();
@@ -86,6 +96,7 @@ function poll(sessionId: string): void {
   state.running = true;
 
   let output = '';
+  let stderrOut = '';
   let settled = false;
   const finish = (metrics: DashboardMetrics): void => {
     if (settled) return;
@@ -93,12 +104,23 @@ function poll(sessionId: string): void {
     state.running = false;
     if (dashboards.has(sessionId)) send(sessionId, metrics);
   };
+  // Диагностика «—» в лог соединения (однократно): без этого причину
+  // недоступности метрик было невозможно увидеть нигде (DASH-05).
+  const logProblem = (key: string, params?: Record<string, string | number>): void => {
+    if (state.problemLogged) return;
+    state.problemLogged = true;
+    state.logger(key, params);
+  };
 
-  const timeout = setTimeout(() => finish({ ...EMPTY_METRICS }), EXEC_TIMEOUT_MS);
+  const timeout = setTimeout(() => {
+    logProblem('clog.dashboardTimeout');
+    finish({ ...EMPTY_METRICS });
+  }, EXEC_TIMEOUT_MS);
 
   state.client.exec(METRICS_COMMAND, (err, stream) => {
     if (err) {
       clearTimeout(timeout);
+      logProblem('clog.dashboardExecError', { error: err.message });
       finish({ ...EMPTY_METRICS }); // канал недоступен → «—» (DASH-05)
       return;
     }
@@ -108,18 +130,32 @@ function poll(sessionId: string): void {
     });
     stream.on('close', () => {
       clearTimeout(timeout);
-      finish(parseMetrics(output));
+      const metrics = parseMetrics(output);
+      const empty =
+        metrics.cpuPercent === null &&
+        metrics.ramUsedMb === null &&
+        metrics.diskPercent === null &&
+        metrics.uptimeSeconds === null;
+      if (empty) {
+        // exec отработал, но ни одной метрики не распознано — покажем хвосты
+        // stdout/stderr (усечённые), чтобы было ясно, что ответил сервер.
+        logProblem('clog.dashboardNoData', {
+          stdout: output.trim().slice(0, 200) || '—',
+          stderr: stderrOut.trim().slice(0, 200) || '—'
+        });
+      }
+      finish(metrics);
     });
-    stream.stderr?.on('data', () => {
-      /* stderr метрик игнорируем — парсим только stdout */
+    stream.stderr?.on('data', (d: Buffer) => {
+      stderrOut += d.toString('utf8'); // только для диагностики, не парсится
     });
   });
 }
 
-export function startDashboard(sessionId: string, client: Client): void {
+export function startDashboard(sessionId: string, client: Client, logger: DashboardLogger): void {
   stopDashboard(sessionId);
   const timer = setInterval(() => poll(sessionId), INTERVAL_MS);
-  dashboards.set(sessionId, { timer, client, running: false });
+  dashboards.set(sessionId, { timer, client, running: false, logger, problemLogged: false });
   poll(sessionId); // первый замер сразу
 }
 

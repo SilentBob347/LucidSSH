@@ -144,7 +144,8 @@
         "title": "Terminal",
         "items": [
           "A root session is highlighted in red in the path bar",
-          "Settings → Terminal lets you type commands directly in the output area"
+          "Settings → Terminal lets you type commands directly in the output area",
+          "Right-click a session tab → “Connection details”: connection log, ciphers and error causes"
         ]
       }
     }
@@ -259,6 +260,9 @@
     "shellOpen": "Terminal channel opened",
     "shellError": "Failed to open terminal channel",
     "closed": "Connection closed",
+    "dashboardExecError": "Dashboard: could not open the exec channel ({{error}}) - metrics shown as '—'",
+    "dashboardTimeout": "Dashboard: the server did not answer the metrics request within 8 s - showing '—'",
+    "dashboardNoData": "Dashboard: server response not recognized (stdout: {{stdout}} · stderr: {{stderr}}) - showing '—'",
     "error": {
       "auth": "Authentication error — the server rejected the password or key",
       "timeout": "Connection timeout — the server did not respond in time",
