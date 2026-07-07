@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TitleBar } from './components/chrome/TitleBar';
 import { StatusBar } from './components/chrome/StatusBar';
 import { HostPanel } from './components/HostManager/HostPanel';
@@ -45,6 +45,7 @@ function AppBody(): JSX.Element {
     helpOpen
   } = usePanels();
   const { addFingerprintEvent } = useEvents();
+  const [previewWelcome, setPreviewWelcome] = useState(false);
 
   // NOTIF-03: изменение отпечатка сервера попадает в ленту событий шапки.
   useEffect(() => {
@@ -63,6 +64,18 @@ function AppBody(): JSX.Element {
       } else if (e.key === 'F1') {
         e.preventDefault();
         openGuide();
+      } else if (
+        // ВРЕМЕННЫЙ dev-хук для визуальной проверки WelcomeScreen без удаления
+        // хостов (пачка 9 дизайн-аудита) — import.meta.env.DEV вырезается
+        // Vite-сборкой в проде (dead-code elimination), в упакованное
+        // приложение не попадёт. Убрать после проверки.
+        import.meta.env.DEV &&
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        e.key.toLowerCase() === 'w'
+      ) {
+        e.preventDefault();
+        setPreviewWelcome((v) => !v);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -73,7 +86,7 @@ function AppBody(): JSX.Element {
   const leftRef = useRef<HTMLElement>(null);
   const rightRef = useRef<HTMLElement>(null);
 
-  const showWelcome = loaded && hosts.length === 0;
+  const showWelcome = (loaded && hosts.length === 0) || previewWelcome;
   const leftWidth = config?.ui.leftPanelWidth ?? 220;
   const rightWidth = config?.ui.rightPanelWidth ?? 320;
   const catalogOpen = config?.ui.catalogPanelOpen ?? false;
