@@ -96,7 +96,7 @@ function AppBody(): JSX.Element {
             onCommit={(w) => void update('ui.leftPanelWidth', w)}
           />
           <TerminalArea />
-          {catalogOpen && (
+          {catalogOpen && sessions.length > 0 && (
             <>
               <ResizeDivider
                 side="right"
