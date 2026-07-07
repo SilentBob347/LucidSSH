@@ -30,8 +30,13 @@ import { assertSenderIsMainWindow, assertString, IpcValidationError } from './va
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/** Только формат — без проверки, что сессия ещё жива (для fire-and-forget каналов ниже). */
+function assertSessionIdFormat(v: unknown): string {
+  return assertString(v, 'sessionId', 36, UUID_RE);
+}
+
 function validateSessionId(v: unknown): string {
-  const id = assertString(v, 'sessionId', 36, UUID_RE);
+  const id = assertSessionIdFormat(v);
   if (!getSession(id)) throw new IpcValidationError('sessionId: unknown');
   return id;
 }
@@ -70,12 +75,17 @@ export function registerSessionIpcHandlers(): void {
 
   // Ввод в терминал. Ограничение длины — защита от гигантских payload'ов;
   // распознавание опасных команд добавит Страж (Этап 4, GUARD-02).
+  // ipcMain.on — без канала ответа: синхронный throw здесь улетает как
+  // необработанное исключение в main и валит всё приложение, поэтому «сессии
+  // уже нет» (закрыли вкладку, а событие уже летело) — тихий no-op, а не
+  // IpcValidationError; формат/тип входа проверяем строго, как и раньше.
   ipcMain.on(IPC.sessionSendInput, (event, rawSessionId: unknown, rawData: unknown): void => {
     assertSenderIsMainWindow(event);
-    const id = validateSessionId(rawSessionId);
+    const id = assertSessionIdFormat(rawSessionId);
     if (typeof rawData !== 'string' || rawData.length > 100_000) {
       throw new IpcValidationError('data: invalid');
     }
+    if (!getSession(id)) return;
     sendInput(id, rawData);
   });
 
@@ -83,12 +93,13 @@ export function registerSessionIpcHandlers(): void {
     IPC.sessionResize,
     (event, rawSessionId: unknown, rawCols: unknown, rawRows: unknown): void => {
       assertSenderIsMainWindow(event);
-      const id = validateSessionId(rawSessionId);
+      const id = assertSessionIdFormat(rawSessionId);
       const cols = Number(rawCols);
       const rows = Number(rawRows);
       if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 1 || cols > 1000 || rows < 1 || rows > 1000) {
         throw new IpcValidationError('size: invalid');
       }
+      if (!getSession(id)) return;
       resizeSession(id, cols, rows);
     }
   );
