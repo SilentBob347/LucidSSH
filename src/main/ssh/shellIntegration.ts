@@ -29,6 +29,17 @@ const APC_END = '\x1b\\';
  * детерминированный сигнал «эхо закончилось». (Прошлые попытки стирать эхо
  * ANSI-кодами на стороне сервера ломались о непредсказуемость readline —
  * см. docs/Ideas_Backlog.md.)
+ *
+ * POSIX-совместимость (найдено на реальном BusyBox/ash-сервере 08.07.2026):
+ * `precmd_functions+=(...)` — bash/zsh-расширение (array-append), не валидный
+ * POSIX-синтаксис. `ash`/`dash` разбирают грамматику ВСЕГО `if/else/fi` до
+ * выполнения, включая недостижимую ветку — и падают с syntax error ещё до
+ * `__lucidssh_mark` в конце строки, из-за чего маркер не приходит вовсе
+ * (EchoGate тогда полагается на flush-таймаут, см. sessionManager.ts).
+ * Обёрнуто в `eval '...'`: для внешнего парсера это просто eval с одним
+ * quoted-словом, содержимое кавычек не разбирается как грамматика и не может
+ * сломать парсинг ash — а выполнится оно только если сам eval будет вызван
+ * (т.е. только в zsh, где ZSH_VERSION непуст).
  */
 export const SHELL_INTEGRATION_SETUP =
   // __lc=$? — код возврата последней команды снимается ПЕРВЫМ, до любых операций (ERR-01).
@@ -38,7 +49,7 @@ export const SHELL_INTEGRATION_SETUP =
   // склеивался без разделителей и breadcrumb не работал; мок без readline это скрывал).
   ` __lucidssh_mark() { __lc=$?; printf '\\033_lucidssh\\037%s\\037%s\\037%s\\037%s\\037%s\\033\\\\' ` +
   `"\${USER:-$(id -un 2>/dev/null)}" "\${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD" "$(id -u 2>/dev/null)" "$__lc"; }; ` +
-  `if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __lucidssh_mark 2>/dev/null || precmd_functions+=(__lucidssh_mark); ` +
+  `if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __lucidssh_mark 2>/dev/null || eval 'precmd_functions+=(__lucidssh_mark)'; ` +
   `else case "$PROMPT_COMMAND" in *__lucidssh_mark*) ;; *) PROMPT_COMMAND="__lucidssh_mark;$PROMPT_COMMAND";; esac; fi; ` +
   `__lucidssh_mark\n`;
 
