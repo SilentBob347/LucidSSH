@@ -465,7 +465,7 @@ function handleCommandFinished(session: ManagedSession, exitCode: number | null)
   // xterm не записывается — его текст main не знает. Маскирование секретов — в
   // recordHistory (HIST-07).
   if (session.lastCommand) {
-    recordCommand(session, session.lastCommand, exitCode, session.pendingGuardStatus);
+    recordCommand(session, session.lastCommand, exitCode, session.pendingGuardStatus, output);
     // NOTIF-02: тост о долгой/упавшей команде, если окно не в фокусе
     notifyCommandDone(session.hostName, exitCode, Date.now() - session.lastCommandStartedAt);
     session.lastCommand = '';
@@ -510,7 +510,8 @@ function recordCommand(
   session: ManagedSession,
   command: string,
   exitCode: number | null | undefined,
-  guardStatus?: GuardStatus
+  guardStatus?: GuardStatus,
+  output?: string
 ): void {
   const cfg = loadConfig();
   if (!cfg.history.enabled) return;
@@ -522,7 +523,8 @@ function recordCommand(
     hostName: session.hostName,
     username: host?.username ?? '',
     exitCode: exitCode ?? undefined,
-    guardStatus
+    guardStatus,
+    output
   });
 }
 

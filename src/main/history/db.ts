@@ -44,6 +44,12 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX IF NOT EXISTS idx_snippets_host   ON snippets(host_id);
   CREATE INDEX IF NOT EXISTS idx_snippets_danger ON snippets(danger);
+  `,
+  // v2 — вывод команды в истории (разворачивание по клику, замаскированный
+  // и усечённый в repository.ts перед записью; см. Ideas_Backlog.md)
+  `
+  ALTER TABLE history ADD COLUMN output TEXT;
+  ALTER TABLE history ADD COLUMN output_truncated INTEGER NOT NULL DEFAULT 0;
   `
 ];
 

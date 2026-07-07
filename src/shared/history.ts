@@ -18,6 +18,8 @@ export interface HistoryEntry {
   guardStatus?: GuardStatus;
   hasSecret: boolean;
   note?: string;
+  output?: string; // маскированный и усечённый (см. history/repository.ts); undefined = не сохранён
+  outputTruncated?: boolean;
 }
 
 export interface HistoryQuery {
@@ -47,4 +49,5 @@ export interface HistoryRecordInput {
   username: string;
   exitCode?: number;
   guardStatus?: GuardStatus;
+  output?: string; // сырой вывод команды — маскируется/усекается в main
 }

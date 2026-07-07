@@ -13,6 +13,9 @@ import { maskSecrets } from '../secrets/maskers';
  */
 
 const FIFO_LIMIT = 10_000;
+// Лимит на сохранённый вывод команды (разворачивание в HistoryDrawer, Ideas_Backlog.md
+// «Разворачивание вывода по клику»). Длинный вывод усекается, флаг — outputTruncated.
+const OUTPUT_LIMIT = 4000;
 
 interface HistoryRow {
   id: number;
@@ -26,6 +29,8 @@ interface HistoryRow {
   guard_status: string | null;
   has_secret: number;
   note: string | null;
+  output: string | null;
+  output_truncated: number;
 }
 
 function rowToEntry(r: HistoryRow): HistoryEntry {
@@ -40,24 +45,51 @@ function rowToEntry(r: HistoryRow): HistoryEntry {
     exitCode: r.exit_code ?? undefined,
     guardStatus: (r.guard_status as GuardStatus | null) ?? undefined,
     hasSecret: r.has_secret === 1,
-    note: r.note ?? undefined
+    note: r.note ?? undefined,
+    output: r.output ?? undefined,
+    outputTruncated: r.output_truncated === 1
+  };
+}
+
+/**
+ * Готовит вывод команды к сохранению (HIST-07): маскирует теми же правилами,
+ * что и команду, и усекает до OUTPUT_LIMIT. Если сама команда уже содержала
+ * секрет (commandHasSecret) — вывод не сохраняется вовсе (двойная защита:
+ * например `export API_KEY=...; env` — секрет мог утечь в echo вывода тоже).
+ */
+export function prepareOutput(
+  raw: string | undefined,
+  commandHasSecret: boolean
+): { output: string | null; outputTruncated: boolean; outputHasSecret: boolean } {
+  if (!raw || commandHasSecret) return { output: null, outputTruncated: false, outputHasSecret: false };
+  const { masked, hasSecret } = maskSecrets(raw);
+  const truncated = masked.length > OUTPUT_LIMIT;
+  return {
+    output: truncated ? masked.slice(0, OUTPUT_LIMIT) : masked,
+    outputTruncated: truncated,
+    outputHasSecret: hasSecret
   };
 }
 
 /** Записать команду. Возвращает id и признак наличия секрета (для бейджа). */
 export function recordHistory(input: HistoryRecordInput): { id: number; hasSecret: boolean } {
-  const { masked, hasSecret } = maskSecrets(input.command); // HIST-07
+  const commandMask = maskSecrets(input.command); // HIST-07
+  const { output, outputTruncated, outputHasSecret } = prepareOutput(
+    input.output,
+    commandMask.hasSecret
+  );
+  const hasSecret = commandMask.hasSecret || outputHasSecret;
   const now = new Date().toISOString();
   const db = openHistoryDb();
   const res = db
     .prepare(
       `INSERT INTO history (command, host_id, host_name, username, started_at, finished_at,
-         exit_code, guard_status, has_secret, note)
+         exit_code, guard_status, has_secret, note, output, output_truncated)
        VALUES (@command, @hostId, @hostName, @username, @startedAt, @finishedAt,
-         @exitCode, @guardStatus, @hasSecret, NULL)`
+         @exitCode, @guardStatus, @hasSecret, NULL, @output, @outputTruncated)`
     )
     .run({
-      command: masked,
+      command: commandMask.masked,
       hostId: input.hostId ?? null,
       hostName: input.hostName,
       username: input.username,
@@ -65,7 +97,9 @@ export function recordHistory(input: HistoryRecordInput): { id: number; hasSecre
       finishedAt: now,
       exitCode: input.exitCode ?? null,
       guardStatus: input.guardStatus ?? null,
-      hasSecret: hasSecret ? 1 : 0
+      hasSecret: hasSecret ? 1 : 0,
+      output,
+      outputTruncated: outputTruncated ? 1 : 0
     });
 
   // FIFO: при превышении лимита удаляем старейшие, кроме избранных (HIST-06, §3.4)

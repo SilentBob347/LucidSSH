@@ -367,6 +367,11 @@
       "minutes": "{{count}} min ago",
       "hours": "{{count}} h ago",
       "days": "{{count}} d ago"
+    },
+    "output": {
+      "empty": "No output saved",
+      "hiddenSecret": "Output not saved — command contained a secret",
+      "truncated": "Showing first {{limit}} characters, output truncated"
     }
   },
   "snippet": {

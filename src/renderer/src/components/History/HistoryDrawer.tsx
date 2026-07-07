@@ -34,6 +34,7 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
   const [hostFilter, setHostFilter] = useState<number | 'all' | 'session'>('all');
   const [noteEditing, setNoteEditing] = useState<number | null>(null);
   const [noteText, setNoteText] = useState('');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const refreshHistory = useCallback(() => {
     void window.lucidSSH.listHistory(query ? { text: query } : undefined).then(setEntries);
@@ -134,15 +135,26 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
                   </div>
                 </div>
               ) : (
-                visible.map((e) => (
+                visible.map((e) => {
+                  const expandable = e.guardStatus !== 'blocked';
+                  const expanded = expandedId === e.id;
+                  return (
                   <div key={e.id} className="border-b border-border-hairline py-[10px]">
                     <div className="flex items-center gap-[10px]">
                       <button
                         type="button"
-                        onClick={() => insertIntoComposer(e.command)}
-                        className="min-w-0 flex-1 truncate text-left font-mono text-[12.5px] text-text-strong hover:text-lavender"
+                        disabled={!expandable}
+                        onClick={() => expandable && setExpandedId(expanded ? null : e.id)}
+                        className="flex min-w-0 flex-1 items-center gap-[6px] text-left font-mono text-[12.5px] text-text-strong hover:text-lavender disabled:cursor-default disabled:hover:text-text-strong"
                       >
-                        {e.command}
+                        {expandable && (
+                          <Icon
+                            name="chevron-right"
+                            size={11}
+                            className={`shrink-0 text-text-dim transition-transform ${expanded ? 'rotate-90' : ''}`}
+                          />
+                        )}
+                        <span className="min-w-0 truncate">{e.command}</span>
                       </button>
                       {e.hasSecret && (
                         <span className="flex shrink-0 items-center gap-1 text-text-dim">
@@ -250,8 +262,29 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
                         + {t('history.addNote')}
                       </button>
                     )}
+                    {expanded && (
+                      <div className="mt-[8px] rounded-[4px] border border-border-default bg-bg-base p-[9px]">
+                        {e.output ? (
+                          <>
+                            <pre className="max-h-[220px] overflow-y-auto font-mono text-[11.5px] leading-[1.5] whitespace-pre-wrap text-text-body">
+                              {e.output}
+                            </pre>
+                            {e.outputTruncated && (
+                              <div className="mt-[6px] text-[10.5px] text-text-dim">
+                                {t('history.output.truncated', { limit: 4000 })}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-[11.5px] text-text-dim">
+                            {e.hasSecret ? t('history.output.hiddenSecret') : t('history.output.empty')}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
 
