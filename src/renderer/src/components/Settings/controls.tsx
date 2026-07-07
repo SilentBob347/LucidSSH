@@ -21,13 +21,13 @@ export function Toggle({
       aria-checked={on}
       aria-label={label}
       onClick={() => onChange(!on)}
-      className={`relative h-[22px] w-[40px] shrink-0 rounded-full transition-colors ${
+      className={`relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors ${
         on ? 'bg-accent' : 'bg-bg-elevated-2'
       }`}
     >
       <span
-        className={`absolute top-[3px] size-[16px] rounded-full bg-white transition-all ${
-          on ? 'left-[21px]' : 'left-[3px]'
+        className={`absolute top-[2px] size-[18px] rounded-full bg-white transition-all ${
+          on ? 'left-[18px]' : 'left-[2px]'
         }`}
       />
     </button>
@@ -47,10 +47,10 @@ export function ToggleRow({
   onChange: (v: boolean) => void;
 }): JSX.Element {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[8px] border border-border-default bg-bg-panel px-4 py-3">
+    <div className="flex items-center justify-between gap-[14px] rounded-[8px] border border-border-default bg-bg-panel px-[17px] py-[14px]">
       <div className="min-w-0">
         <div className="text-[13.5px] font-semibold text-text-strong">{title}</div>
-        <div className="mt-[2px] text-[12px] text-text-dim">{desc}</div>
+        <div className="mt-[3px] text-[12px] leading-[1.5] text-text-muted">{desc}</div>
       </div>
       <Toggle on={on} onChange={onChange} label={title} />
     </div>
@@ -68,7 +68,7 @@ export function Segment<T extends string>({
   onChange: (v: T) => void;
 }): JSX.Element {
   return (
-    <div className="flex rounded-[7px] bg-bg-base p-[3px]">
+    <div className="flex gap-[2px] rounded-[4px] border border-border-default bg-bg-base p-[3px]">
       {options.map((o) => (
         <button
           key={o.key}
@@ -76,8 +76,8 @@ export function Segment<T extends string>({
           onClick={() => onChange(o.key)}
           className={
             value === o.key
-              ? 'h-[30px] flex-1 rounded-[4px] bg-bg-tab-active text-[12.5px] font-medium text-text-strong'
-              : 'h-[30px] flex-1 rounded-[4px] text-[12.5px] text-text-dim hover:text-text-muted'
+              ? 'h-[28px] flex-1 rounded-[3px] bg-bg-elevated-2 text-[12px] font-medium text-text-strong'
+              : 'h-[28px] flex-1 rounded-[3px] text-[12px] text-text-muted hover:text-text-body'
           }
         >
           {o.label}
@@ -95,8 +95,8 @@ export function Card({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <div className="rounded-[8px] border border-border-default bg-bg-panel px-4 py-3">
-      {title && <div className="mb-2 text-[13.5px] font-semibold text-text-strong">{title}</div>}
+    <div className="rounded-[8px] border border-border-default bg-bg-panel px-[17px] py-[15px]">
+      {title && <div className="mb-[11px] text-[13.5px] font-semibold text-text-strong">{title}</div>}
       {children}
     </div>
   );
@@ -104,7 +104,7 @@ export function Card({
 
 export function SectionTitle({ children }: { children: ReactNode }): JSX.Element {
   return (
-    <div className="mb-3 text-[13px] font-semibold tracking-[0.05em] text-text-dim uppercase">
+    <div className="mb-[2px] text-[13px] font-semibold tracking-[0.05em] text-text-dim uppercase">
       {children}
     </div>
   );

@@ -412,13 +412,16 @@
       "rightPasteDesc": "Paste from the clipboard on right click.",
       "inlineInput": "Hide the composer input line",
       "inlineInputDesc": "Hides the separate input line at the bottom - type commands straight into the terminal output. Note: typing directly in the terminal is always possible, even with this off - it only hides the composer.",
-      "inlineInputGuardWarn": "In this mode the Guard does not check commands typed directly in the console. Dangerous-command protection only applies to the bottom input line."
+      "inlineInputGuardWarn": "In this mode the Guard does not check commands typed directly in the console. Dangerous-command protection only applies to the bottom input line.",
+      "emulationType": "Emulation type",
+      "emulationDesc": "Only xterm-256color is available in 1.0."
     },
     "connection": {
-      "keepalive": "Keepalive interval, sec",
+      "keepalive": "Keepalive interval",
       "keepaliveDesc": "How often to send a keepalive so the connection stays up.",
-      "timeout": "Connect timeout, sec",
+      "timeout": "Connect timeout",
       "timeoutDesc": "How long to wait for the server when connecting.",
+      "seconds": "sec.",
       "autoreconnect": "Auto-reconnect",
       "autoreconnectDesc": "Try to restore the connection when it drops."
     },
@@ -428,6 +431,7 @@
       "history": "Command history",
       "historyDesc": "Store executed commands. Passwords and tokens are always masked. Turning it off stops recording.",
       "knownHosts": "Known servers (known_hosts)",
+      "knownHostsDesc": "Fingerprints of servers you've already connected to and confirmed.",
       "knownEmpty": "No saved server fingerprints yet.",
       "knownDelete": "Delete entry",
       "hostData": "Host data",
@@ -451,12 +455,16 @@
       "notifications": "Notifications",
       "systemToasts": "Windows system notifications",
       "systemToastsDesc": "Toasts on connection loss and long commands finishing when the window is not focused.",
-      "longCommand": "Long command threshold, sec",
-      "longCommandDesc": "Notify about commands longer than N seconds. 0 disables it."
+      "longCommand": "Long command threshold",
+      "longCommandDesc": "Notify about commands longer than N seconds. 0 disables it.",
+      "expertReturn": "Bring back all hints",
+      "resetHintsLink": "Reset hint show counters",
+      "resetHintsNote": "(one-time hints will show again, as on first launch)"
     },
     "hk": {
       "searchPlaceholder": "Search by action or key…",
       "noMatches": "Nothing found",
+      "readOnlyNote": "In 1.0 the list is view-only.",
       "openSettings": "Open settings",
       "openHistory": "Open command history",
       "openCatalog": "Open command catalog",
@@ -469,12 +477,17 @@
     },
     "about": {
       "version": "Version {{version}}",
+      "versionOs": "Version {{version}} · Windows",
       "tagline": "A simple SSH client for Windows. Fully local: no account, cloud or telemetry.",
       "help": "Help",
       "openGuide": "Open guide",
+      "guideDesc": "How the breadcrumb, Guard, error detector and command catalog work.",
+      "licenseLink": "License agreement",
+      "openSource": "Open-source components",
+      "website": "Project website",
       "reset": "Reset settings",
       "resetDesc": "Restore settings to defaults. Does not touch servers, keys or command history.",
-      "resetBtn": "Reset settings to defaults",
+      "resetBtn": "Reset to defaults",
       "resetConfirm": "Yes, reset"
     },
     "updates": {
@@ -495,7 +508,8 @@
       "notConfigured": "Update source is not configured",
       "autoCheck": "Auto-check for updates",
       "autoCheckDesc": "Check for new versions on launch (HTTPS to the update source)."
-    }
+    },
+    "footer": "LucidSSH {{version}} · settings are saved automatically"
   },
   "notif": {
     "disconnect": "Connection lost. Click to return and reconnect.",

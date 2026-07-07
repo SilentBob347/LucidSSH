@@ -88,6 +88,15 @@ export function registerConfigIpcHandlers(): void {
       cfg.shownCounts[id] = (cfg.shownCounts[id] ?? 0) + 1;
     });
   });
+
+  // «Сбросить счётчик показов подсказок» (Настройки → Интерфейс) — обнуляет
+  // все известные счётчики, подсказки снова показываются до своего лимита.
+  ipcMain.handle(IPC.configResetHints, (event): AppConfig => {
+    assertSenderIsMainWindow(event);
+    return updateConfig((cfg) => {
+      for (const id of KNOWN_HINTS) cfg.shownCounts[id] = 0;
+    });
+  });
 }
 
 /** Разрешённые id подсказок (обучающие подсказки с лимитом показов). */
