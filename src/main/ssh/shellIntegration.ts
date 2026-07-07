@@ -23,13 +23,20 @@ const APC_END = '\x1b\\';
  *
  * Хвост очищает экран после установки (`ESC[H ESC[2J` — home + clear screen,
  * БЕЗ ESC[3J, поэтому scrollback с MOTD сохраняется и доступен прокруткой),
- * чтобы эхо длинной команды-настройки не висело вверху сессии. Это совпадает с
- * чистым стартом терминала на макетах. Префикс-пробел не даёт команде попасть в
- * историю при HISTCONTROL=ignorespace.
+ * чтобы эхо длинной команды-настройки не висело вверху сессии. Префикс-пробел
+ * не даёт команде попасть в историю при HISTCONTROL=ignorespace.
+ *
+ * (Попытка точечного стирания только своего эха, чтобы не прятать MOTD за
+ * прокруткой, — см. docs/Ideas_Backlog.md; откачена 07.07.2026 после двух
+ * неудачных попыток на живом сервере, ломавших исполнение команды целиком.)
  */
 export const SHELL_INTEGRATION_SETUP =
-  // __lc=$? — код возврата последней команды снимается ПЕРВЫМ, до любых операций (ERR-01)
-  ` __lucidssh_mark() { __lc=$?; printf '\\033_lucidssh${US}%s${US}%s${US}%s${US}%s${US}%s\\033\\\\' ` +
+  // __lc=$? — код возврата последней команды снимается ПЕРВЫМ, до любых операций (ERR-01).
+  // Разделитель US — октавой \037 ВНУТРИ формата printf (как \033 для ESC), НЕ сырым
+  // байтом в команде: сырой 0x1f — это Ctrl+_, в интерактивном bash readline
+  // выполняет его как undo и корёжит команду (на реальных серверах маркер
+  // склеивался без разделителей и breadcrumb не работал; мок без readline это скрывал).
+  ` __lucidssh_mark() { __lc=$?; printf '\\033_lucidssh\\037%s\\037%s\\037%s\\037%s\\037%s\\033\\\\' ` +
   `"\${USER:-$(id -un 2>/dev/null)}" "\${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD" "$(id -u 2>/dev/null)" "$__lc"; }; ` +
   `if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __lucidssh_mark 2>/dev/null || precmd_functions+=(__lucidssh_mark); ` +
   `else case "$PROMPT_COMMAND" in *__lucidssh_mark*) ;; *) PROMPT_COMMAND="__lucidssh_mark;$PROMPT_COMMAND";; esac; fi; ` +
