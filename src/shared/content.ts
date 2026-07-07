@@ -39,6 +39,8 @@ export interface ErrorExplanation {
   explanation: string;
   checks: ErrorCheck[];
   source: 'database' | 'fallback'; // в 1.2 добавится 'llm'
+  /** Упавшая команда — показывается в панели над объяснением (скриншот 02-Error). */
+  command: string;
 }
 
 // ---- Каталог команд ----

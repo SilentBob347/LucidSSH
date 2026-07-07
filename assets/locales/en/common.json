@@ -206,7 +206,6 @@
     "whatToCheck": "What to check",
     "close": "Close",
     "copy": "Copy command",
-    "insert": "Insert into input",
     "fallbackTitle": "Unknown error",
     "fallbackExplain": "The command exited with an error (code {{code}}). No exact explanation found in the built-in database.",
     "emptyOutput": "The command exited with code {{code}} without an error message. Try running it again with -v or check the service logs.",

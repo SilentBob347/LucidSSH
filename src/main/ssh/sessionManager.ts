@@ -426,6 +426,11 @@ function handleCommandFinished(session: ManagedSession, exitCode: number | null)
     return;
   }
 
+  // Команда, которая только что завершилась — нужна и для истории, и для
+  // подстановки {original}/{target} в шагах детектора ниже. Читаем ДО очистки
+  // session.lastCommand (следующий блок её обнуляет).
+  const command = session.lastCommand;
+
   // Запись в историю выполненной команды из композера (HIST-01). Прямой ввод в
   // xterm не записывается — его текст main не знает. Маскирование секретов — в
   // recordHistory (HIST-07).
@@ -441,7 +446,7 @@ function handleCommandFinished(session: ManagedSession, exitCode: number | null)
   if (!loadConfig().ui.hints.errorPanel) return; // отключено в «Интерфейсе»
 
   const patterns = loadErrorPatterns(loadConfig().language);
-  const result = detectError(patterns, 'command', output, exitCode, session.lastCommand);
+  const result = detectError(patterns, 'command', output, exitCode, command);
 
   let explanation: ErrorExplanation;
   if (result.matched) {
@@ -453,7 +458,8 @@ function handleCommandFinished(session: ManagedSession, exitCode: number | null)
       title: t('errDetector.fallbackTitle'),
       explanation: t(explainKey, { code: exitCode }),
       checks: [],
-      source: 'fallback'
+      source: 'fallback',
+      command
     };
   }
   send(IPC.evError, session.id, explanation);

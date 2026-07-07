@@ -78,7 +78,8 @@ export function detectError(
             text: c.text,
             command: c.command ? substitute(c.command, command, target) : undefined
           })),
-          source: 'database'
+          source: 'database',
+          command
         }
       };
     }

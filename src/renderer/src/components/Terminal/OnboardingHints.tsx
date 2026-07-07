@@ -24,7 +24,7 @@ export function OnboardingHints({ onDone }: { onDone: () => void }): JSX.Element
       <button
         type="button"
         onClick={() => (last ? onDone() : setStep((s) => s + 1))}
-        className="h-[24px] shrink-0 rounded-[4px] bg-bg-elevated-2 px-[11px] text-[11.5px] font-medium text-text-strong hover:bg-bg-tab-active"
+        className="h-[24px] shrink-0 rounded-[4px] bg-accent/20 px-[11px] text-[11.5px] font-medium text-text-strong hover:bg-accent/30"
       >
         {last ? t('tips.hide') : t('tips.next')}
       </button>
