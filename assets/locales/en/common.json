@@ -323,8 +323,6 @@
   },
   "history": {
     "title": "Command history",
-    "tabHistory": "History",
-    "tabFavorites": "Favorites",
     "searchPlaceholder": "Search commands and notes…",
     "filterAll": "All",
     "filterSession": "This session",
@@ -336,6 +334,7 @@
     "insert": "Insert into input",
     "saveSnippet": "Save as snippet",
     "addNote": "Add a note",
+    "deleteNote": "Delete note",
     "notePlaceholder": "Note for the command…",
     "delete": "Delete entry",
     "clear": "Clear history",
@@ -346,6 +345,7 @@
       "description": "Executed commands will appear here."
     },
     "noMatches": "Nothing found",
+    "noMatchesDesc": "No commands match the current filter or query. Change the filter or clear the search.",
     "time": {
       "now": "just now",
       "minutes": "{{count}} min ago",
