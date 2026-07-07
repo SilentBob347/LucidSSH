@@ -7,6 +7,11 @@ import { execFile } from 'node:child_process';
  */
 
 const PUTTY_SESSIONS_KEY = 'HKCU\\Software\\SimonTatham\\PuTTY\\Sessions';
+// reg.exe принимает сокращённый куст (HKCU) как ВХОД, но в ВЫВОДЕ всегда
+// печатает полное имя (HKEY_CURRENT_USER) — сверка с сокращённым префиксом
+// никогда не совпадала, счётчик всегда был 0 (см. puttyImport.ts:25, там
+// сделано верно).
+const OUTPUT_KEY_PREFIX = 'HKEY_CURRENT_USER\\Software\\SimonTatham\\PuTTY\\Sessions\\';
 
 export function countPuttySessions(): Promise<number> {
   return new Promise((resolve) => {
@@ -21,7 +26,7 @@ export function countPuttySessions(): Promise<number> {
         }
         const count = stdout
           .split(/\r?\n/)
-          .filter((line) => line.trim().startsWith(PUTTY_SESSIONS_KEY + '\\')).length;
+          .filter((line) => line.trim().startsWith(OUTPUT_KEY_PREFIX)).length;
         resolve(count);
       }
     );

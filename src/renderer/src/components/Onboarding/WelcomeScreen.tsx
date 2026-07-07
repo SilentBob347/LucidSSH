@@ -27,42 +27,49 @@ export function WelcomeScreen({
   }, []);
 
   return (
-    <div className="animate-[esh-fade_.18s_ease] flex flex-1 flex-col items-center justify-center bg-bg-base">
+    <div className="animate-[esh-fade_.18s_ease] relative flex flex-1 flex-col items-center justify-center bg-bg-base">
       <div
-        className="flex size-[72px] items-center justify-center rounded-[18px] bg-accent text-[26px] font-bold text-white"
-        style={{ boxShadow: '0 12px 32px rgba(99,102,241,0.35)' }}
+        className="flex size-[76px] items-center justify-center rounded-[18px]"
+        style={{
+          background: 'linear-gradient(145deg,#6366F1,#4F46E5)',
+          boxShadow: '0 12px 32px rgba(99,102,241,0.35)'
+        }}
         aria-hidden="true"
       >
-        &gt;_
+        <Icon name="terminal" size={38} className="text-white" />
       </div>
-      <h1 className="mt-6 text-[23px] font-semibold text-text-primary">{t('welcome.title')}</h1>
-      <p className="mt-3 max-w-[420px] text-center text-[14px] leading-relaxed text-text-muted">
+      <h1 className="mt-6 text-[23px] font-semibold tracking-[-0.01em] text-text-primary">
+        {t('welcome.title')}
+      </h1>
+      <p className="mt-[11px] max-w-[420px] text-center text-[14px] leading-[1.6] text-text-muted">
         {t('welcome.subtitle')}
       </p>
-      <button
-        type="button"
-        onClick={onAddFirst}
-        className="mt-8 flex h-10 items-center gap-2 rounded-[8px] bg-accent px-6 text-[14px] font-semibold text-white hover:bg-accent-hover"
-      >
-        <Icon name="plus" size={16} /> {t('welcome.addFirst')}
-      </button>
-      {puttyCount > 0 && (
+      <div className="mt-[30px] flex w-full flex-col items-center gap-[13px]">
         <button
           type="button"
-          onClick={() => setImportOpen(true)}
-          className="mt-5 flex items-center gap-[6px] text-[12.5px] text-text-body hover:text-text-strong hover:underline"
+          onClick={onAddFirst}
+          className="flex h-[44px] w-[280px] items-center justify-center gap-[9px] rounded-[8px] bg-accent text-[14px] font-semibold text-white hover:bg-accent-hover"
         >
-          <Icon name="download" size={14} /> {t('welcome.importPutty')}
+          <Icon name="plus" size={16} strokeWidth={2.4} /> {t('welcome.addFirst')}
         </button>
-      )}
-      <button
-        type="button"
-        onClick={onOpenGuide}
-        className="mt-4 flex items-center gap-[6px] text-[12.5px] text-lavender hover:text-lavender-light hover:underline"
-      >
-        <Icon name="help" size={14} /> {t('welcome.how')}
-      </button>
-      <div className="absolute bottom-8 text-[11.5px] text-text-faint">
+        {puttyCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-2 rounded-[7px] px-[14px] py-2 text-[13px] text-text-body hover:bg-bg-elevated hover:text-text-strong"
+          >
+            <Icon name="download" size={14} /> {t('welcome.importPutty')}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onOpenGuide}
+          className="flex items-center gap-[7px] px-3 py-[6px] text-[12.5px] text-lavender hover:underline"
+        >
+          <Icon name="help" size={14} /> {t('welcome.how')}
+        </button>
+      </div>
+      <div className="absolute bottom-[22px] text-[11.5px] text-text-faint">
         {version ? t('welcome.footer', { version }) : ''}
       </div>
       {importOpen && <ExternalImportDialog onClose={() => setImportOpen(false)} />}
