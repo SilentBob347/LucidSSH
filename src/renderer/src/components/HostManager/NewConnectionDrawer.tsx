@@ -150,10 +150,10 @@ export function NewConnectionDrawer(): JSX.Element | null {
     }
   };
 
-  const label = 'mb-1 block text-[12.5px] font-semibold text-text-strong';
-  const helper = 'mt-1 text-[11px] text-lavender';
+  const label = 'mb-1 block text-[12.5px] font-medium text-text-strong';
+  const helper = 'mt-1 text-[11px] text-text-muted';
   const inputCls =
-    'h-[34px] w-full rounded-[4px] border border-border-strong bg-bg-base px-[10px] text-[13px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent';
+    'h-[34px] w-full rounded-[4px] border border-border-default bg-bg-base px-[11px] text-[13px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent';
 
   return (
     <div
@@ -162,27 +162,27 @@ export function NewConnectionDrawer(): JSX.Element | null {
       role="presentation"
     >
       <aside
-        className="animate-[esh-slidein_.22s_cubic-bezier(.2,.7,.3,1)] absolute top-0 right-0 flex h-full w-[360px] flex-col border-l border-border-default bg-bg-panel"
+        className="animate-[esh-slidein_.22s_cubic-bezier(.2,.7,.3,1)] absolute top-0 right-0 flex h-full w-[360px] flex-col border-l border-border-strong bg-bg-panel"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={editHost ? t('conn.titleEdit') : t('conn.titleNew')}
       >
-        <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-border-default px-5">
-          <span className="text-[15px] font-semibold text-text-primary">
+        <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-border-default px-[18px]">
+          <span className="text-[15px] font-semibold text-text-strong">
             {editHost ? t('conn.titleEdit') : t('conn.titleNew')}
           </span>
           <button
             type="button"
             aria-label={t('common.close')}
             onClick={closeDrawer}
-            className="flex size-[24px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
+            className="flex size-[24px] items-center justify-center rounded-[4px] text-text-muted hover:bg-bg-elevated hover:text-text-strong"
           >
             <Icon name="close" size={15} />
           </button>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-5 pb-4">
+        <div className="flex-1 space-y-[15px] overflow-y-auto px-[18px] py-4">
           <div>
             <label className={label} htmlFor="conn-name">
               {t('conn.name')}
@@ -214,7 +214,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
           </div>
 
           <div className="flex gap-3">
-            <div className="w-[90px] shrink-0">
+            <div className="w-[96px] shrink-0">
               <label className={label} htmlFor="conn-port">
                 {t('conn.port')}
               </label>
@@ -245,7 +245,10 @@ export function NewConnectionDrawer(): JSX.Element | null {
 
           <div>
             <span className={label}>{t('conn.auth')}</span>
-            <div className="flex rounded-[7px] bg-bg-base p-[3px]" role="tablist">
+            <div
+              className="flex rounded-[4px] border border-border-default bg-bg-base p-[3px]"
+              role="tablist"
+            >
               {(['password', 'key'] as const).map((m) => (
                 <button
                   key={m}
@@ -304,7 +307,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
                         if (p) set({ keyPath: p });
                       });
                     }}
-                    className="h-[34px] shrink-0 rounded-[4px] bg-bg-elevated-2 px-3 text-[12px] text-text-body hover:text-text-strong"
+                    className="h-[34px] shrink-0 rounded-[4px] border border-[rgba(255,255,255,0.1)] bg-bg-elevated px-3 text-[12px] text-text-body hover:bg-bg-elevated-2"
                   >
                     {t('conn.browse')}
                   </button>
@@ -357,7 +360,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
           )}
         </div>
 
-        <div className="shrink-0 space-y-2 border-t border-border-default px-5 py-4">
+        <div className="shrink-0 space-y-[9px] border-t border-border-default px-[18px] py-[14px]">
           {testResult && (
             <div
               className={`rounded-[6px] px-3 py-2 text-[12px] ${
@@ -375,7 +378,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
             type="button"
             disabled={!valid || testing || saving}
             onClick={() => void test()}
-            className="h-9 w-full rounded-[6px] border border-border-strong bg-bg-base text-[13px] text-text-body hover:text-text-strong disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-9 w-full rounded-[4px] border border-[rgba(255,255,255,0.1)] bg-bg-elevated text-[13px] font-medium text-text-body hover:bg-bg-elevated-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {testing ? t('conn.testing') : t('conn.test')}
           </button>
@@ -383,7 +386,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
             type="button"
             disabled={!valid || saving}
             onClick={() => void save(!editHost)}
-            className="h-9 w-full rounded-[6px] bg-accent text-[13px] font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-9 w-full rounded-[4px] bg-accent text-[13px] font-semibold text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {editHost ? t('common.save') : t('conn.connect')}
           </button>
