@@ -23,6 +23,6 @@ nsis:
 # electron-builder генерирует app-update.yml, который читает electron-updater.
 publish:
   provider: github
-  owner: PLACEHOLDER_OWNER
-  repo: PLACEHOLDER_REPO
+  owner: Xykyma
+  repo: LucidSSH
   releaseType: release
