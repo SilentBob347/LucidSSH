@@ -524,6 +524,20 @@ interface DashboardMetrics {
   ramTotalMb: number | null;
   diskPercent: number | null;
   uptimeSeconds: number | null;
+  loadAvg1: number | null;     // /proc/loadavg, 1/5/15 мин (только полная модалка дашборда)
+  loadAvg5: number | null;
+  loadAvg15: number | null;
+  netUpKbps: number | null;    // дельта /proc/net/dev за то же окно замера, что и CPU
+  netDownKbps: number | null;
+  topProcesses: DashboardProcess[];  // топ-5 по CPU, [] если недоступно
+}
+
+interface DashboardProcess {
+  pid: number;
+  user: string;
+  cmd: string;          // короткое имя (ps comm, без аргументов)
+  cpuPercent: number;
+  memPercent: number;
 }
 
 interface Breadcrumb {
