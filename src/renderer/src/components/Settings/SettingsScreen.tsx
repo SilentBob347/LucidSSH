@@ -34,7 +34,7 @@ export function SettingsScreen({ onOpenGuide }: { onOpenGuide: () => void }): JS
   const { t } = useTranslation();
   const { config, update } = useConfig();
   const { closeSettings } = usePanels();
-  const [section, setSection] = useState<Section>('terminal');
+  const [section, setSection] = useState<Section>('interface');
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   useEffect(() => {
@@ -66,10 +66,10 @@ export function SettingsScreen({ onOpenGuide }: { onOpenGuide: () => void }): JS
   if (!config) return <div className="fixed inset-0 z-50 bg-bg-base" />;
 
   const sections: { k: Section; label: string }[] = [
+    { k: 'interface', label: t('settings.sections.interface') },
     { k: 'terminal', label: t('settings.sections.terminal') },
     { k: 'connection', label: t('settings.sections.connection') },
     { k: 'security', label: t('settings.sections.security') },
-    { k: 'interface', label: t('settings.sections.interface') },
     { k: 'hotkeys', label: t('settings.sections.hotkeys') },
     { k: 'about', label: t('settings.sections.about') }
   ];
@@ -489,6 +489,34 @@ function SecuritySection({ config, update }: { config: AppConfig; update: Update
   );
 }
 
+const LANGUAGE_LABELS: Record<string, string> = { ru: 'Русский', en: 'English' };
+
+function LanguageCard(): JSX.Element {
+  const { t, i18n } = useTranslation();
+  const [languages, setLanguages] = useState<string[]>([]);
+
+  useEffect(() => {
+    void window.lucidSSH.i18nListLanguages().then(setLanguages);
+  }, []);
+
+  const setLanguage = async (lng: string): Promise<void> => {
+    await window.lucidSSH.i18nSetLanguage(lng);
+    await i18n.changeLanguage(lng);
+  };
+
+  if (languages.length < 2) return <></>;
+
+  return (
+    <Card title={t('settings.interface.language')}>
+      <Segment
+        value={i18n.language}
+        onChange={(lng) => void setLanguage(lng)}
+        options={languages.map((lng) => ({ key: lng, label: LANGUAGE_LABELS[lng] ?? lng }))}
+      />
+    </Card>
+  );
+}
+
 function InterfaceSection({ config, update }: { config: AppConfig; update: UpdateFn }): JSX.Element {
   const { t } = useTranslation();
   const { resetHints } = useConfig();
@@ -512,6 +540,8 @@ function InterfaceSection({ config, update }: { config: AppConfig; update: Updat
   };
   return (
     <>
+      <LanguageCard />
+
       <div className="mb-[2px] flex items-start justify-between gap-[14px]">
         <div>
           <SectionTitle>{t('settings.sections.interface')}</SectionTitle>

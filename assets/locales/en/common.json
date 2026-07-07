@@ -456,6 +456,7 @@
       "importHosts": "Import"
     },
     "interface": {
+      "language": "Interface language",
       "expert": "Expert mode",
       "expertDesc": "Turns off all learning hints at once. Bring them back individually with the toggles below.",
       "expertEnable": "Enable",
