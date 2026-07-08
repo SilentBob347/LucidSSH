@@ -1,4 +1,8 @@
-# LucidSSH for Windows
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset=".github/assets/logo-light.svg">
+  <img alt="LucidSSH" src=".github/assets/logo-light.svg" width="360">
+</picture>
 
 SSH-клиент для Windows, который объясняет что происходит и не даёт случайно сломать сервер.
 

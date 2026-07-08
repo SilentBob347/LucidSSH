@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EventsMenu } from './EventsMenu';
 import { Icon } from '@/components/common/Icon';
+import { LogoFull } from '@/components/common/LogoFull';
 import { usePanels } from '@/stores/panels';
 
 /**
@@ -19,16 +20,9 @@ export function TitleBar(): JSX.Element {
   }, []);
 
   return (
-    <header className="app-drag flex h-8 shrink-0 items-center border-b border-border-hairline bg-bg-base">
+    <header className="app-drag flex h-9 shrink-0 items-center border-b border-border-hairline bg-bg-base">
       <div className="flex items-center gap-[11px] pl-[11px]">
-        <div className="flex items-center gap-2">
-          <div className="flex size-[18px] items-center justify-center rounded-[5px] bg-accent text-white">
-            <Icon name="terminal" size={11} strokeWidth={2.4} />
-          </div>
-          <span className="text-[12px] font-semibold tracking-[0.01em] text-text-body">
-            {t('app.name')}
-          </span>
-        </div>
+        <LogoFull height={26} />
         <button
           type="button"
           title={t('titleBar.help')}

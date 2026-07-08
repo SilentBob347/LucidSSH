@@ -1,9 +1,17 @@
-# Конфигурация упаковки и публикации. Подпись кода — блокер BLK-01
-# (сертификат ещё не приобретён; см. Release_and_Update_Strategy.md).
+# Конфигурация упаковки и публикации. BLK-01 закрыт решением от 08.07.2026:
+# релиз 1.0 выходит БЕЗ Code Signing Certificate (Artifact Signing недоступен
+# для РФ, сторонние CA нестабильны) — см. Release_and_Update_Strategy.md §9.
+# Целостность обновления проверяется через SHA-256/sha512 (electron-updater
+# делает это по умолчанию через latest.yml, без цифровой подписи, UPD-03).
+# Возврат к подписи (MSIX или публичный CA) рассматривается в 1.1+ — тогда
+# здесь понадобятся win.signtoolOptions/certificateFile (ключ ВНЕ репозитория,
+# SIGN-02) и publisherName ожидаемого издателя.
 appId: app.lucidssh
 productName: LucidSSH
 directories:
   output: release
+# 1024x1024 PNG — electron-builder сам генерирует .ico со всеми размерами.
+icon: resources/icon.png
 files:
   - out/**
   - assets/**
@@ -12,9 +20,6 @@ win:
   target:
     - nsis
     - portable
-  # BLK-01: при появлении сертификата задать signtoolOptions/certificateFile
-  # (ключ ВНЕ репозитория — SIGN-02) и publisherName ожидаемого издателя.
-  # electron-updater проверит подпись и издателя пакета перед установкой (UPD-03).
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

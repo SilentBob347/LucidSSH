@@ -66,6 +66,10 @@ export function createMainWindow(): BrowserWindow {
     show: false,
     frame: false, // кастомный тайтл-бар по дизайну (VS Code-style)
     backgroundColor: '#0F0F13',
+    // Панель задач/Alt-Tab берут иконку окна отсюда, а не из ресурса .exe —
+    // без этого показывается дефолтная иконка Electron (даже в упакованной
+    // сборке с icon в electron-builder.yml, который влияет только на .exe/установщик).
+    icon: join(app.getAppPath(), 'assets', 'icon.png'),
     webPreferences: {
       // SEC-05: обязательные флаги изоляции
       contextIsolation: true,

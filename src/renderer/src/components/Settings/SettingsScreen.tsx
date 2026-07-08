@@ -12,6 +12,7 @@ import { useSessions } from '@/stores/sessions';
 import { applyTerminalConfig } from '@/components/Terminal/XtermView';
 import { Card, Segment, SectionTitle, Toggle, ToggleRow } from './controls';
 import { Icon } from '@/components/common/Icon';
+import { LogoMark } from '@/components/common/LogoMark';
 
 /**
  * Страница настроек (SET-01…08; Design_Brief §3.10; скриншот 08). Отдельная
@@ -734,11 +735,8 @@ function AboutSection({ onOpenGuide }: { onOpenGuide: () => void }): JSX.Element
       {/* Лого + версия + проверка обновлений — одна компактная карточка, как в макете */}
       <div className="flex flex-col rounded-[8px] border border-border-default bg-bg-panel">
         <div className="flex items-center gap-[15px] px-[18px] py-5">
-          <div
-            className="flex size-[52px] shrink-0 items-center justify-center rounded-[13px]"
-            style={{ background: 'linear-gradient(145deg,#6366F1,#4F46E5)' }}
-          >
-            <Icon name="terminal" size={26} className="text-white" />
+          <div className="flex size-[72px] shrink-0 items-center justify-center">
+            <LogoMark size={72} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[16px] font-semibold text-text-primary">LucidSSH</div>
@@ -788,6 +786,23 @@ function AboutSection({ onOpenGuide }: { onOpenGuide: () => void }): JSX.Element
             )}
           </div>
         )}
+      </div>
+
+      {/* §9.1 Release_and_Update_Strategy.md: спокойное объяснение отсутствия
+          подписи вместо предупреждения в окне первого запуска (BLK-01 закрыт
+          решением от 08.07.2026 — сертификат недоступен разработчикам из РФ). */}
+      <div className="flex items-start gap-2 rounded-[8px] border border-border-default bg-bg-panel px-[17px] py-[13px]">
+        <Icon name="shield" size={14} className="mt-[1px] shrink-0 text-text-dim" />
+        <div className="text-[11.5px] leading-[1.5] text-text-dim">
+          {t('settings.about.noSignature')}{' '}
+          <button
+            type="button"
+            onClick={() => window.lucidSSH.openReleasesPage()}
+            className="text-lavender hover:underline"
+          >
+            {t('settings.about.noSignatureLink')}
+          </button>
+        </div>
       </div>
 
       <ToggleRow

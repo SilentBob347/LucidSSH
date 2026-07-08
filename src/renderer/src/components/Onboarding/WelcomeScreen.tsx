@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Icon } from '@/components/common/Icon';
+import { LogoMark } from '@/components/common/LogoMark';
 import { ExternalImportDialog } from '@/components/HostManager/ExternalImportDialog';
 
 /**
@@ -28,15 +29,8 @@ export function WelcomeScreen({
 
   return (
     <div className="animate-[esh-fade_.18s_ease] relative flex flex-1 flex-col items-center justify-center bg-bg-base">
-      <div
-        className="flex size-[76px] items-center justify-center rounded-[18px]"
-        style={{
-          background: 'linear-gradient(145deg,#6366F1,#4F46E5)',
-          boxShadow: '0 12px 32px rgba(99,102,241,0.35)'
-        }}
-        aria-hidden="true"
-      >
-        <Icon name="terminal" size={38} className="text-white" />
+      <div className="flex size-[76px] items-center justify-center" aria-hidden="true">
+        <LogoMark size={76} />
       </div>
       <h1 className="mt-6 text-[23px] font-semibold tracking-[-0.01em] text-text-primary">
         {t('welcome.title')}

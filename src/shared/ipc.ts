@@ -6,6 +6,7 @@
 export const IPC = {
   // --- Приложение ---
   appGetInfo: 'app:get-info',
+  appOpenReleasesPage: 'app:open-releases-page', // §9.1 Release_and_Update_Strategy.md — ссылка на SHA-256 в About
 
   // --- Буфер обмена (через main, renderer без clipboard-permission) ---
   clipboardRead: 'clipboard:read',

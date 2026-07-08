@@ -1,4 +1,4 @@
-import { app, clipboard, ipcMain } from 'electron';
+import { app, clipboard, ipcMain, shell } from 'electron';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { IPC, type AppInfo } from '@shared/ipc';
@@ -24,6 +24,13 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.appGetInfo, (event): AppInfo => {
     assertSenderIsMainWindow(event);
     return { version: app.getVersion(), language: loadConfig().language };
+  });
+
+  // Захардкоженный URL, не принимает аргументов от renderer (§22 гайда —
+  // внешние ссылки только на заранее определённые доверенные адреса).
+  ipcMain.on(IPC.appOpenReleasesPage, (event) => {
+    assertSenderIsMainWindow(event);
+    void shell.openExternal('https://github.com/Xykyma/LucidSSH/releases');
   });
 
   // --- i18n ---

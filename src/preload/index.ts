@@ -26,6 +26,7 @@ import type { UpdateStatus } from '@shared/updates';
 const api = {
   // --- Приложение ---
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke(IPC.appGetInfo),
+  openReleasesPage: (): void => ipcRenderer.send(IPC.appOpenReleasesPage),
 
   // --- Буфер обмена ---
   clipboardRead: (): Promise<string> => ipcRenderer.invoke(IPC.clipboardRead),
