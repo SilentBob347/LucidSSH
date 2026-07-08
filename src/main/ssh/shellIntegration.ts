@@ -50,7 +50,13 @@ export const SHELL_INTEGRATION_SETUP =
   ` __lucidssh_mark() { __lc=$?; printf '\\033_lucidssh\\037%s\\037%s\\037%s\\037%s\\037%s\\033\\\\' ` +
   `"\${USER:-$(id -un 2>/dev/null)}" "\${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD" "$(id -u 2>/dev/null)" "$__lc"; }; ` +
   `if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __lucidssh_mark 2>/dev/null || eval 'precmd_functions+=(__lucidssh_mark)'; ` +
-  `else case "$PROMPT_COMMAND" in *__lucidssh_mark*) ;; *) PROMPT_COMMAND="__lucidssh_mark;$PROMPT_COMMAND";; esac; fi; ` +
+  // PROMPT_COMMAND — bash-специфика: ash (BusyBox, роутеры) её не читает вовсе,
+  // маркер тогда срабатывает только один раз (явный вызов ниже) и не приходит
+  // после реальных команд — breadcrumb/история молча замирают на connect-time.
+  // Встраивание в PS1 ($(...) переразворачивается перед каждым приглашением) —
+  // POSIX-совместимый способ, работает и в ash/dash, и в bash — единый путь
+  // вместо PROMPT_COMMAND (найдено на реальном Keenetic/ash-сервере 09.07.2026).
+  `else case "$PS1" in *__lucidssh_mark*) ;; *) PS1='$(__lucidssh_mark)'"$PS1";; esac; fi; ` +
   `__lucidssh_mark\n`;
 
 // eslint-disable-next-line no-control-regex
