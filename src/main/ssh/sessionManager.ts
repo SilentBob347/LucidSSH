@@ -526,6 +526,9 @@ function recordCommand(
     guardStatus,
     output
   });
+  // HistoryDrawer, если уже открыт, не перечитывает список сам по себе —
+  // нужен явный сигнал (тот же баг чинили для сниппетов, snippetsRevision).
+  send(IPC.evHistoryRecorded);
 }
 
 /** Прямая запись в историю (заблокированная стражем команда, HIST-05). */

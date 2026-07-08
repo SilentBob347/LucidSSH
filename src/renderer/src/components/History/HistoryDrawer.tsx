@@ -27,7 +27,7 @@ function relativeTime(iso: string, t: (k: string, o?: Record<string, number>) =>
 
 export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.Element {
   const { t } = useTranslation();
-  const { closeHistory, openSnippetDialog } = usePanels();
+  const { closeHistory, openSnippetDialog, historyRevision } = usePanels();
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [query, setQuery] = useState('');
@@ -43,7 +43,9 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
 
   useEffect(() => {
     refreshHistory();
-  }, [refreshHistory]);
+    // historyRevision: перечитать при записи новой команды, даже пока панель открыта
+    // (main шлёт ev:history-recorded — иначе список замирает на моменте открытия).
+  }, [refreshHistory, historyRevision]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {

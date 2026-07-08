@@ -150,6 +150,11 @@ const api = {
     ipcRenderer.on(IPC.evBreadcrumb, listener);
     return () => ipcRenderer.removeListener(IPC.evBreadcrumb, listener);
   },
+  onHistoryRecorded: (cb: () => void): (() => void) => {
+    const listener = (): void => cb();
+    ipcRenderer.on(IPC.evHistoryRecorded, listener);
+    return () => ipcRenderer.removeListener(IPC.evHistoryRecorded, listener);
+  },
   onDashboard: (cb: (sessionId: string, metrics: DashboardMetrics) => void): (() => void) => {
     const listener = (
       _e: Electron.IpcRendererEvent,

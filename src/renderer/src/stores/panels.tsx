@@ -1,5 +1,5 @@
 import type { JSX, ReactNode } from 'react';
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { Snippet } from '@shared/history';
 
 /**
@@ -32,6 +32,9 @@ interface PanelsStore {
   /** Ревизия сниппетов: инкремент после сохранения → HistoryDrawer перечитывает список. */
   snippetsRevision: number;
   bumpSnippets: () => void;
+  /** Ревизия истории: инкремент при записи новой команды (main, ev:history-recorded)
+   * → HistoryDrawer перечитывает список, даже если панель уже открыта. */
+  historyRevision: number;
 }
 
 const Ctx = createContext<PanelsStore | null>(null);
@@ -43,6 +46,11 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
   const [helpOpen, setHelpOpen] = useState(false);
   const [snippetDialog, setSnippetDialog] = useState<SnippetDialogState | null>(null);
   const [snippetsRevision, setSnippetsRevision] = useState(0);
+  const [historyRevision, setHistoryRevision] = useState(0);
+
+  useEffect(() => {
+    return window.lucidSSH.onHistoryRecorded(() => setHistoryRevision((v) => v + 1));
+  }, []);
 
   const value = useMemo<PanelsStore>(
     () => ({
@@ -62,9 +70,10 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
       openSnippetDialog: (command, editSnippet) => setSnippetDialog({ command, editSnippet }),
       closeSnippetDialog: () => setSnippetDialog(null),
       snippetsRevision,
-      bumpSnippets: () => setSnippetsRevision((v) => v + 1)
+      bumpSnippets: () => setSnippetsRevision((v) => v + 1),
+      historyRevision
     }),
-    [historyOpen, settingsOpen, guideOpen, helpOpen, snippetDialog, snippetsRevision]
+    [historyOpen, settingsOpen, guideOpen, helpOpen, snippetDialog, snippetsRevision, historyRevision]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

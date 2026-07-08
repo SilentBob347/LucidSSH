@@ -112,7 +112,8 @@ export const IPC = {
   evBreadcrumb: 'ev:breadcrumb',
   evDashboard: 'ev:dashboard',
   evError: 'ev:error',
-  evUpdateStatus: 'ev:update-status'
+  evUpdateStatus: 'ev:update-status',
+  evHistoryRecorded: 'ev:history-recorded' // HistoryDrawer перечитывает список, если открыт
 } as const;
 
 export interface AppInfo {
