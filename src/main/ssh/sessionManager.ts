@@ -239,6 +239,16 @@ async function establish(session: ManagedSession, host: Host): Promise<void> {
     );
   });
 
+  // Некоторые серверы не предлагают password auth, только keyboard-interactive
+  // (виден как "Keyboard-interactive authentication prompts from server" в
+  // PuTTY-логах). ssh2 не пробует его без tryKeyboard: true и обработчика —
+  // отвечаем сохранённым паролем на промпты, это не альтернатива password auth,
+  // а его серверный вариант.
+  client.on('keyboard-interactive', (_name, _instructions, _lang, prompts, finish) => {
+    const answer = host.authMethod === 'password' ? (secret ?? '') : '';
+    finish(prompts.map(() => answer));
+  });
+
   client.on('ready', () => {
     session.reconnectAttempts = 0;
     log(
@@ -295,7 +305,7 @@ async function establish(session: ManagedSession, host: Host): Promise<void> {
     readyTimeout: cfg.connection.connectTimeoutSec * 1000 + HOSTKEY_DECISION_TIMEOUT_MS,
     keepaliveInterval: cfg.connection.keepaliveIntervalSec * 1000,
     keepaliveCountMax: 3,
-    tryKeyboard: false,
+    tryKeyboard: true,
     hostVerifier: (key: Buffer, verify: (valid: boolean) => void) => {
       handleHostKey(session, host, key, verify);
     }

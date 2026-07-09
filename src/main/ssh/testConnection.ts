@@ -44,6 +44,13 @@ export function testConnection(
       resolve(r);
     };
 
+    // Серверы с keyboard-interactive auth (без password auth) требуют tryKeyboard
+    // и обработчик — см. sessionManager.ts.
+    client.on('keyboard-interactive', (_name, _instructions, _lang, prompts, finish) => {
+      const answer = input.authMethod === 'password' ? (secret ?? '') : '';
+      finish(prompts.map(() => answer));
+    });
+
     client.on('ready', () => done({ ok: true }));
     client.on('error', (err: Error & { level?: string }) => {
       const category =
@@ -60,7 +67,7 @@ export function testConnection(
       port: input.port,
       username: input.username,
       readyTimeout: cfg.connection.connectTimeoutSec * 1000,
-      tryKeyboard: false,
+      tryKeyboard: true,
       hostVerifier: () => true // тест: сессии нет, ключ не сохраняем
     };
     if (input.authMethod === 'password') {
