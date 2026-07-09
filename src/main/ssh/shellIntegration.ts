@@ -18,9 +18,18 @@ const APC_START = '\x1b_lucidssh';
 const APC_END = '\x1b\\';
 
 /**
- * Команда настройки интеграции. Одна строка; отправляется один раз после
- * открытия shell. `printf` с фиксированным форматом — статическая строка.
- * Префикс-пробел не даёт команде попасть в историю при HISTCONTROL=ignorespace.
+ * Команда настройки интеграции. ДВЕ строки (определение функции + диспетчер);
+ * отправляются одной pty-записью, shell читает их последовательно. `printf` с
+ * фиксированным форматом — статическая строка. Префикс-пробел в начале каждой
+ * строки не даёт командам попасть в историю при HISTCONTROL=ignorespace.
+ *
+ * Почему не одна строка (найдено на реальном Keenetic/Xkeen 10.07.2026):
+ * редактор строки BusyBox обрезает интерактивный ввод по буферу
+ * CONFIG_FEATURE_EDITING_MAX_LEN (на роутерах обычно 512). Слитная настройка
+ * была 633 байта — ash принял ровно 511, кавычка PROMPT_COMMAND=" осталась
+ * незакрытой, shell завис в PS2-продолжении, маркер не выполнился, и через
+ * ECHO_FLUSH_TIMEOUT_MS сырое эхо вываливалось в терминал. Каждая строка
+ * обязана оставаться < ~500 байт (см. тест на лимит).
  *
  * Экран НЕ очищается: MOTD сервера остаётся видимым сразу после подключения.
  * Эхо самой команды-настройки прячется на стороне main процесса (EchoGate
@@ -48,8 +57,8 @@ export const SHELL_INTEGRATION_SETUP =
   // выполняет его как undo и корёжит команду (на реальных серверах маркер
   // склеивался без разделителей и breadcrumb не работал; мок без readline это скрывал).
   ` __lucidssh_mark() { __lc=$?; printf '\\033_lucidssh\\037%s\\037%s\\037%s\\037%s\\037%s\\033\\\\' ` +
-  `"\${USER:-$(id -un 2>/dev/null)}" "\${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD" "$(id -u 2>/dev/null)" "$__lc"; }; ` +
-  `if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __lucidssh_mark 2>/dev/null || eval 'precmd_functions+=(__lucidssh_mark)'; ` +
+  `"\${USER:-$(id -un 2>/dev/null)}" "\${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD" "$(id -u 2>/dev/null)" "$__lc"; }\n` +
+  ` if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __lucidssh_mark 2>/dev/null || eval 'precmd_functions+=(__lucidssh_mark)'; ` +
   // bash: маркер через PROMPT_COMMAND, НЕ через встраивание в PS1. Маркер в PS1
   // становится частью СТРОКИ приглашения: readline перепечатывает её при
   // SIGWINCH/Ctrl+L/completion — повторный маркер со старым $? (источник бага

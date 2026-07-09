@@ -1,4 +1,5 @@
 import { Notification } from 'electron';
+import { isSignalExitCode } from '@shared/ssh';
 import { loadConfig } from '../config/store';
 import { getMainWindow } from '../window/mainWindow';
 import { t } from '../i18n';
@@ -49,7 +50,8 @@ export function notifyCommandDone(
 ): void {
   const thresholdSec = loadConfig().ui.notifications.longCommandThresholdSec;
   if (thresholdSec <= 0) return;
-  const failed = exitCode !== null && exitCode !== 0;
+  // Прервано сигналом (Ctrl+C и т.п.) — не считается "упавшей" командой.
+  const failed = exitCode !== null && exitCode !== 0 && !isSignalExitCode(exitCode);
   const long = durationMs >= thresholdSec * 1000;
   if (!failed && !long) return;
   if (!toastsEnabled() || !windowInactive()) return;

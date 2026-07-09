@@ -23,6 +23,18 @@ export interface HostKeyPrompt {
   previousFingerprint?: string;
 }
 
+/**
+ * Запрос интерактивного ввода пароля/passphrase прямо в терминале (когда для
+ * хоста не сохранён секрет) — аналог промпта в PuTTY/консольном ssh (SSH-06).
+ */
+export interface AuthPromptRequest {
+  sessionId: string;
+  requestId: string;
+  prompts: { text: string; echo: boolean }[];
+  /** Незалогиненная попытка перед этой — сервер отклонил предыдущий ответ. */
+  retry: boolean;
+}
+
 /** Результат пробного подключения (кнопка «Проверить соединение»). */
 export interface TestConnectionResult {
   ok: boolean;
@@ -36,6 +48,15 @@ export interface KnownHostView {
   host: string;
   keyType: string;
   fingerprint: string; // SHA256:...
+}
+
+/**
+ * Код завершения похож на "shell завершил foreground-процесс сигналом"
+ * (128 + номер сигнала — POSIX-конвенция, напр. 130 = SIGINT/Ctrl+C).
+ * Такие коды — не ошибка команды, а намеренное прерывание пользователем.
+ */
+export function isSignalExitCode(exitCode: number | null): boolean {
+  return exitCode !== null && exitCode > 128 && exitCode <= 165;
 }
 
 export interface ConnectionLogEntry {

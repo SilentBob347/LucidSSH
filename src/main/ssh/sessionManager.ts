@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Client, type ClientChannel } from 'ssh2';
 import type { ConnectionLogEntry, HostKeyPrompt, SessionStatus } from '@shared/ssh';
+import { isSignalExitCode } from '@shared/ssh';
 import { IPC } from '@shared/ipc';
 import type { Host } from '@shared/hosts';
 import { getHost } from '../hosts/repository';
@@ -84,12 +85,23 @@ interface PendingHostKey {
   timeout: NodeJS.Timeout;
 }
 
+interface PendingAuthPrompt {
+  sessionId: string;
+  resolve: (answers: string[]) => void;
+  reject: (err: Error) => void;
+  timeout: NodeJS.Timeout;
+}
+
 const sessions = new Map<string, ManagedSession>();
 const pendingHostKeys = new Map<string, PendingHostKey>();
+const pendingAuthPrompts = new Map<string, PendingAuthPrompt>();
 
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAY_MS = 2500;
 const HOSTKEY_DECISION_TIMEOUT_MS = 5 * 60 * 1000;
+const AUTH_PROMPT_TIMEOUT_MS = 2 * 60 * 1000;
+const MAX_PASSPHRASE_ATTEMPTS = 3;
+const MAX_PASSWORD_ATTEMPTS = 3;
 // Отправка shell integration: ждём паузу в выводе после MOTD (иначе окно
 // подавления эха съест приветствие), но не дольше капа. Маркер-страховка —
 // если shell не bash/zsh и маркер не придёт, накопленное эхо показывается.
@@ -204,6 +216,161 @@ export async function connectHost(hostId: number): Promise<{ sessionId: string }
   return { sessionId: session.id };
 }
 
+/**
+ * Один заход на подключение: создаёт Client, вешает все обработчики, зовёт
+ * connect(). Возвращает 'ready' при успехе (openShell уже вызван внутри),
+ * 'auth-failed' — сервер отклонил аутентификацию ДО открытия сессии и
+ * разрешён повторный запрос пароля (allowAuthRetry), 'other' — прочие случаи
+ * (уже залогированы, и session переведена в disconnected через
+ * finishDisconnected — вызывающему дальше ничего делать не нужно).
+ */
+function attemptConnect(
+  session: ManagedSession,
+  host: Host,
+  password: string | undefined,
+  privateKey: Buffer | undefined,
+  keyPassphrase: string | undefined,
+  allowAuthRetry: boolean
+): Promise<'ready' | 'auth-failed' | 'other'> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (v: 'ready' | 'auth-failed' | 'other'): void => {
+      if (settled) return;
+      settled = true;
+      resolve(v);
+    };
+
+    const cfg = loadConfig();
+    const client = new Client();
+    session.client = client;
+
+    client.on('greeting', (greeting: string) => {
+      // Баннер сервера — недоверенный текст; в лог кладём только факт
+      void greeting;
+      log(session, 'info', 'clog.greeting', undefined, 'tcp');
+    });
+
+    client.on('handshake', (negotiated) => {
+      log(
+        session,
+        'info',
+        'clog.handshake',
+        {
+          kex: negotiated?.kex ?? '?',
+          cipher: negotiated?.cs?.cipher ?? '?',
+          mac: negotiated?.cs?.mac ?? '',
+          ms: Date.now() - session.connectStartedAt
+        },
+        'handshake'
+      );
+    });
+
+    // Некоторые серверы не предлагают password auth, только keyboard-interactive
+    // (виден как "Keyboard-interactive authentication prompts from server" в
+    // PuTTY-логах). ssh2 не пробует его без tryKeyboard: true и обработчика —
+    // отвечаем тем же паролем, что и в connectConfig, это не альтернатива
+    // password auth, а его серверный вариант (SSH-06).
+    client.on('keyboard-interactive', (_name, _instructions, _lang, prompts, finish) => {
+      const answer = host.authMethod === 'password' ? (password ?? '') : '';
+      finish(prompts.map(() => answer));
+    });
+
+    client.on('ready', () => {
+      session.reconnectAttempts = 0;
+      log(
+        session,
+        'info',
+        'clog.ready',
+        { method: host.authMethod, ms: Date.now() - session.connectStartedAt },
+        'auth'
+      );
+      openShell(session, client);
+      settle('ready');
+    });
+
+    let authFailed = false;
+    client.on('error', (err: Error & { level?: string }) => {
+      const category =
+        err.level === 'client-authentication'
+          ? 'auth'
+          : err.level === 'client-timeout'
+            ? 'timeout'
+            : 'socket';
+      if (category === 'auth') authFailed = true;
+      // Текст ошибки ssh2 не содержит секретов, но для надёжности не пробрасываем его
+      log(
+        session,
+        'error',
+        `clog.error.${category}`,
+        undefined,
+        category === 'auth' ? 'auth' : 'tcp'
+      );
+    });
+
+    client.on('close', () => {
+      if (settled) {
+        // Сессия уже была открыта раньше — обычное последующее отключение,
+        // штатная логика автопереподключения (не связана с retry паролем).
+        if (session.userClosed || session.shellUnavailable) {
+          finishDisconnected(session);
+          return;
+        }
+        if (session.status === 'connected' && loadConfig().connection.autoreconnect) {
+          scheduleReconnect(session);
+          return;
+        }
+        if (session.status === 'reconnecting') {
+          scheduleReconnect(session);
+          return;
+        }
+        finishDisconnected(session);
+        return;
+      }
+      // Закрытие ДО 'ready' — эта попытка подключения провалилась.
+      if (authFailed && allowAuthRetry) {
+        settle('auth-failed');
+        return;
+      }
+      finishDisconnected(session);
+      settle('other');
+    });
+
+    const connectConfig: Parameters<Client['connect']>[0] = {
+      host: host.address,
+      port: host.port,
+      username: host.username,
+      // readyTimeout охватывает весь путь до 'ready', включая ожидание решения
+      // пользователя по fingerprint в hostVerifier. Добавляем окно решения, иначе
+      // долгое подтверждение отпечатка ложно роняет соединение по таймауту.
+      // Недоступность сервера ловится раньше ОС-ошибками сокета (refused/unreachable).
+      readyTimeout: cfg.connection.connectTimeoutSec * 1000 + HOSTKEY_DECISION_TIMEOUT_MS,
+      keepaliveInterval: cfg.connection.keepaliveIntervalSec * 1000,
+      keepaliveCountMax: 3,
+      tryKeyboard: true,
+      hostVerifier: (key: Buffer, verify: (valid: boolean) => void) => {
+        handleHostKey(session, host, key, verify);
+      }
+    };
+
+    if (host.authMethod === 'password') {
+      if (password) connectConfig.password = password;
+    } else {
+      connectConfig.privateKey = privateKey;
+      if (keyPassphrase) connectConfig.passphrase = keyPassphrase;
+    }
+
+    // Секрет живёт только в локальной области видимости этой функции и в
+    // конфиге ssh2 на время подключения — нигде не кэшируется (§9.9 гайда).
+    try {
+      client.connect(connectConfig);
+    } catch {
+      log(session, 'error', 'clog.error.socket', undefined, 'tcp');
+      finishDisconnected(session);
+      settle('other');
+    }
+  });
+}
+
 async function establish(session: ManagedSession, host: Host): Promise<void> {
   session.connectStartedAt = Date.now();
   log(session, 'info', 'clog.tcpConnecting', { address: host.address, port: host.port }, 'tcp');
@@ -217,130 +384,69 @@ async function establish(session: ManagedSession, host: Host): Promise<void> {
     secret = null;
   }
 
+  // Passphrase ключа: если не сохранён/неверен, запрашиваем интерактивно в
+  // терминале (как PuTTY/консольный ssh), с ограниченным числом попыток —
+  // ключ расшифровывается локально, до всякого обращения к серверу (SSH-06).
   let privateKey: Buffer | undefined;
+  let keyPassphrase = secret ?? undefined;
   if (host.authMethod === 'key') {
-    try {
-      privateKey = loadPrivateKey(host.keyPath ?? '', secret ?? undefined);
-    } catch (err) {
-      const reason = err instanceof PrivateKeyError ? err.reason : 'unparsable';
-      log(session, 'error', `clog.keyError.${reason}`, undefined, 'auth');
-      finishDisconnected(session);
-      return;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        privateKey = loadPrivateKey(host.keyPath ?? '', keyPassphrase);
+        break;
+      } catch (err) {
+        const reason = err instanceof PrivateKeyError ? err.reason : 'unparsable';
+        if (reason !== 'needs-passphrase' || attempt >= MAX_PASSPHRASE_ATTEMPTS) {
+          log(session, 'error', `clog.keyError.${reason}`, undefined, 'auth');
+          finishDisconnected(session);
+          return;
+        }
+        try {
+          const promptKey = attempt === 0 ? 'sshAuth.passphrasePrompt' : 'sshAuth.passphrasePromptRetry';
+          const [answer] = await requestAuthPrompt(
+            session,
+            [{ text: t(promptKey), echo: false }],
+            attempt > 0
+          );
+          keyPassphrase = answer;
+        } catch {
+          log(session, 'error', 'clog.keyError.needs-passphrase', undefined, 'auth');
+          finishDisconnected(session);
+          return;
+        }
+      }
+    }
+    await attemptConnect(session, host, undefined, privateKey, keyPassphrase, false);
+    return;
+  }
+
+  // Пароль не сохранён: спрашиваем ДО подключения (pre-flight, как и
+  // passphrase выше) — это гарантирует connectConfig.password не пустым,
+  // что нужно для серверов, не предлагающих keyboard-interactive (частый
+  // случай на дефолтных настройках sshd, SSH-06). При отказе сервера —
+  // пересоздаём попытку с новым Client и переспрашиваем пароль.
+  if (!secret) {
+    for (let attempt = 0; ; attempt++) {
+      let password: string;
+      try {
+        const promptKey = attempt === 0 ? 'sshAuth.passwordPrompt' : 'sshAuth.passwordPromptRetry';
+        const [answer] = await requestAuthPrompt(
+          session,
+          [{ text: t(promptKey, { username: host.username, address: host.address }), echo: false }],
+          attempt > 0
+        );
+        password = answer ?? '';
+      } catch {
+        finishDisconnected(session);
+        return;
+      }
+      const allowRetry = attempt < MAX_PASSWORD_ATTEMPTS - 1;
+      const result = await attemptConnect(session, host, password, privateKey, keyPassphrase, allowRetry);
+      if (result !== 'auth-failed') return; // 'ready'/'other' — уже обработано внутри
     }
   }
 
-  const cfg = loadConfig();
-  const client = new Client();
-  session.client = client;
-
-  client.on('greeting', (greeting: string) => {
-    // Баннер сервера — недоверенный текст; в лог кладём только факт
-    void greeting;
-    log(session, 'info', 'clog.greeting', undefined, 'tcp');
-  });
-
-  client.on('handshake', (negotiated) => {
-    log(
-      session,
-      'info',
-      'clog.handshake',
-      {
-        kex: negotiated?.kex ?? '?',
-        cipher: negotiated?.cs?.cipher ?? '?',
-        mac: negotiated?.cs?.mac ?? '',
-        ms: Date.now() - session.connectStartedAt
-      },
-      'handshake'
-    );
-  });
-
-  // Некоторые серверы не предлагают password auth, только keyboard-interactive
-  // (виден как "Keyboard-interactive authentication prompts from server" в
-  // PuTTY-логах). ssh2 не пробует его без tryKeyboard: true и обработчика —
-  // отвечаем сохранённым паролем на промпты, это не альтернатива password auth,
-  // а его серверный вариант.
-  client.on('keyboard-interactive', (_name, _instructions, _lang, prompts, finish) => {
-    const answer = host.authMethod === 'password' ? (secret ?? '') : '';
-    finish(prompts.map(() => answer));
-  });
-
-  client.on('ready', () => {
-    session.reconnectAttempts = 0;
-    log(
-      session,
-      'info',
-      'clog.ready',
-      { method: host.authMethod, ms: Date.now() - session.connectStartedAt },
-      'auth'
-    );
-    openShell(session, client);
-  });
-
-  client.on('error', (err: Error & { level?: string }) => {
-    const category =
-      err.level === 'client-authentication'
-        ? 'auth'
-        : err.level === 'client-timeout'
-          ? 'timeout'
-          : 'socket';
-    // Текст ошибки ssh2 не содержит секретов, но для надёжности не пробрасываем его
-    log(
-      session,
-      'error',
-      `clog.error.${category}`,
-      undefined,
-      category === 'auth' ? 'auth' : 'tcp'
-    );
-  });
-
-  client.on('close', () => {
-    if (session.userClosed || session.shellUnavailable) {
-      finishDisconnected(session);
-      return;
-    }
-    if (session.status === 'connected' && loadConfig().connection.autoreconnect) {
-      scheduleReconnect(session);
-      return;
-    }
-    if (session.status === 'reconnecting') {
-      scheduleReconnect(session);
-      return;
-    }
-    finishDisconnected(session);
-  });
-
-  const connectConfig: Parameters<Client['connect']>[0] = {
-    host: host.address,
-    port: host.port,
-    username: host.username,
-    // readyTimeout охватывает весь путь до 'ready', включая ожидание решения
-    // пользователя по fingerprint в hostVerifier. Добавляем окно решения, иначе
-    // долгое подтверждение отпечатка ложно роняет соединение по таймауту.
-    // Недоступность сервера ловится раньше ОС-ошибками сокета (refused/unreachable).
-    readyTimeout: cfg.connection.connectTimeoutSec * 1000 + HOSTKEY_DECISION_TIMEOUT_MS,
-    keepaliveInterval: cfg.connection.keepaliveIntervalSec * 1000,
-    keepaliveCountMax: 3,
-    tryKeyboard: true,
-    hostVerifier: (key: Buffer, verify: (valid: boolean) => void) => {
-      handleHostKey(session, host, key, verify);
-    }
-  };
-
-  if (host.authMethod === 'password') {
-    connectConfig.password = secret ?? '';
-  } else {
-    connectConfig.privateKey = privateKey;
-    if (secret) connectConfig.passphrase = secret;
-  }
-
-  // Секрет живёт только в локальной области видимости этой функции и в
-  // конфиге ssh2 на время подключения — нигде не кэшируется (§9.9 гайда).
-  try {
-    client.connect(connectConfig);
-  } catch {
-    log(session, 'error', 'clog.error.socket', undefined, 'tcp');
-    finishDisconnected(session);
-  }
+  await attemptConnect(session, host, secret, privateKey, keyPassphrase, false);
 }
 
 function handleHostKey(
@@ -531,6 +637,9 @@ function handleCommandFinished(session: ManagedSession, exitCode: number | null)
   }
 
   if (exitCode === null || exitCode === 0) return;
+  // Прервано сигналом (напр. Ctrl+C во время `tail -f`/`journalctl -f`) — это
+  // намеренное действие пользователя, а не ошибка команды.
+  if (isSignalExitCode(exitCode)) return;
   // Пустой Enter: команды не было, $? унаследован от предыдущей — не детектор.
   if (!cycle.typed && !command) return;
   if (!loadConfig().ui.hints.errorPanel) return; // отключено в «Интерфейсе»
@@ -678,6 +787,50 @@ export function confirmHostKey(requestId: string, decision: 'accept' | 'reject')
   }
 }
 
+/**
+ * Запросить у renderer ввод пароля/passphrase прямо в терминале (SSH-06),
+ * когда для хоста нет сохранённого секрета — как в PuTTY/консольном ssh.
+ */
+function requestAuthPrompt(
+  session: ManagedSession,
+  prompts: { text: string; echo: boolean }[],
+  retry: boolean
+): Promise<string[]> {
+  const requestId = randomUUID();
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      pendingAuthPrompts.delete(requestId);
+      reject(new Error('auth prompt timeout'));
+    }, AUTH_PROMPT_TIMEOUT_MS);
+    pendingAuthPrompts.set(requestId, { sessionId: session.id, resolve, reject, timeout });
+    send(IPC.evAuthPrompt, {
+      sessionId: session.id,
+      requestId,
+      prompts,
+      retry
+    });
+  });
+}
+
+/** Ответ renderer на запрос пароля/passphrase. */
+export function answerAuthPrompt(requestId: string, answers: string[]): void {
+  const pending = pendingAuthPrompts.get(requestId);
+  if (!pending) return; // просроченный/неизвестный requestId игнорируется
+  clearTimeout(pending.timeout);
+  pendingAuthPrompts.delete(requestId);
+  pending.resolve(answers);
+}
+
+/** Отменить незавершённые промпты сессии — при закрытии вкладки/отключении. */
+function cancelAuthPrompts(sessionId: string): void {
+  for (const [id, pending] of pendingAuthPrompts) {
+    if (pending.sessionId !== sessionId) continue;
+    clearTimeout(pending.timeout);
+    pendingAuthPrompts.delete(id);
+    pending.reject(new Error('session closed'));
+  }
+}
+
 function scheduleReconnect(session: ManagedSession): void {
   session.reconnectAttempts += 1;
   if (session.reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
@@ -705,6 +858,7 @@ function finishDisconnected(session: ManagedSession): void {
   log(session, 'info', 'clog.closed', undefined, 'session');
   setStatus(session, 'disconnected');
   stopDashboard(session.id);
+  cancelAuthPrompts(session.id);
   session.client = null;
   // NOTIF-01: уведомить о потере уже установленного соединения (не о неудаче входа
   // и не о закрытии пользователем).
@@ -728,6 +882,7 @@ export function destroySession(sessionId: string): void {
   session.userClosed = true;
   clearSetupTimers(session);
   stopDashboard(sessionId);
+  cancelAuthPrompts(sessionId);
   session.client?.destroy();
   sessions.delete(sessionId);
 }

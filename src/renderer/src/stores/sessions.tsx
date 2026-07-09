@@ -1,6 +1,6 @@
 import type { JSX, ReactNode } from 'react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { HostKeyPrompt, SessionInfo, SessionStatus } from '@shared/ssh';
+import type { AuthPromptRequest, HostKeyPrompt, SessionInfo, SessionStatus } from '@shared/ssh';
 import type { Breadcrumb } from '@shared/breadcrumb';
 import type { DashboardMetrics } from '@shared/dashboard';
 import type { ErrorExplanation } from '@shared/content';
@@ -15,6 +15,8 @@ interface SessionsStore {
   sessions: SessionInfo[];
   activeSessionId: string | null;
   hostKeyPrompt: HostKeyPrompt | null;
+  /** Промпт пароля/passphrase прямо в терминале (SSH-06), по sessionId. */
+  authPrompts: Record<string, AuthPromptRequest>;
   breadcrumbs: Record<string, Breadcrumb>;
   dashboards: Record<string, DashboardMetrics>;
   errors: Record<string, ErrorExplanation>;
@@ -24,6 +26,7 @@ interface SessionsStore {
   closeTab: (sessionId: string) => Promise<void>;
   reconnect: (hostId: number, oldSessionId: string) => Promise<void>;
   answerHostKey: (decision: 'accept' | 'reject') => Promise<void>;
+  answerAuthPrompt: (sessionId: string, answers: string[]) => Promise<void>;
   /** Локальное переименование вкладки (TERM-02); имя не уходит в main. */
   renameTab: (sessionId: string, name: string) => void;
   /** Drag-to-reorder вкладок: переместить sessionId перед targetId (null → в конец). */
@@ -36,6 +39,7 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [hostKeyPrompt, setHostKeyPrompt] = useState<HostKeyPrompt | null>(null);
+  const [authPrompts, setAuthPrompts] = useState<Record<string, AuthPromptRequest>>({});
   const [breadcrumbs, setBreadcrumbs] = useState<Record<string, Breadcrumb>>({});
   const [dashboards, setDashboards] = useState<Record<string, DashboardMetrics>>({});
   const [errors, setErrors] = useState<Record<string, ErrorExplanation>>({});
@@ -46,9 +50,21 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
         setSessions((prev) =>
           prev.map((s) => (s.sessionId === sessionId ? { ...s, status } : s))
         );
+        // Промпт пароля актуален только пока идёт подключение (SSH-06).
+        if (status !== 'connecting') {
+          setAuthPrompts((prev) => {
+            if (!(sessionId in prev)) return prev;
+            const next = { ...prev };
+            delete next[sessionId];
+            return next;
+          });
+        }
       }
     );
     const offPrompt = window.lucidSSH.onHostKeyPrompt(setHostKeyPrompt);
+    const offAuthPrompt = window.lucidSSH.onAuthPrompt((prompt) => {
+      setAuthPrompts((prev) => ({ ...prev, [prompt.sessionId]: prompt }));
+    });
     const offCrumb = window.lucidSSH.onBreadcrumb((sessionId, crumb) => {
       setBreadcrumbs((prev) => ({ ...prev, [sessionId]: crumb }));
     });
@@ -61,6 +77,7 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
     return () => {
       offStatus();
       offPrompt();
+      offAuthPrompt();
       offCrumb();
       offDash();
       offError();
@@ -139,6 +156,11 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
         delete next[sessionId];
         return next;
       });
+      setAuthPrompts((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
     },
     []
   );
@@ -160,11 +182,26 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
     [hostKeyPrompt]
   );
 
+  const answerAuthPrompt = useCallback(
+    async (sessionId: string, answers: string[]) => {
+      const prompt = authPrompts[sessionId];
+      if (!prompt) return;
+      setAuthPrompts((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
+      await window.lucidSSH.answerAuthPrompt(prompt.requestId, answers);
+    },
+    [authPrompts]
+  );
+
   const value = useMemo<SessionsStore>(
     () => ({
       sessions,
       activeSessionId,
       hostKeyPrompt,
+      authPrompts,
       breadcrumbs,
       dashboards,
       errors,
@@ -174,6 +211,7 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       closeTab,
       reconnect,
       answerHostKey,
+      answerAuthPrompt,
       renameTab,
       reorderTab
     }),
@@ -181,6 +219,7 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       sessions,
       activeSessionId,
       hostKeyPrompt,
+      authPrompts,
       breadcrumbs,
       dashboards,
       errors,
@@ -189,6 +228,7 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       closeTab,
       reconnect,
       answerHostKey,
+      answerAuthPrompt,
       renameTab,
       reorderTab
     ]

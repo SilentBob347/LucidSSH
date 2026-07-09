@@ -3,6 +3,7 @@ import { IPC, type AppInfo } from '@shared/ipc';
 import type { Host, HostGroup, HostInput, ImportPreview } from '@shared/hosts';
 import type { ExternalImportResult, ImportedHost } from '@shared/import';
 import type {
+  AuthPromptRequest,
   ConnectionLogEntry,
   HostKeyPrompt,
   KnownHostView,
@@ -99,6 +100,8 @@ const api = {
     ipcRenderer.invoke(IPC.sessionGetLog, sessionId),
   confirmHostKey: (requestId: string, decision: 'accept' | 'reject'): Promise<void> =>
     ipcRenderer.invoke(IPC.hostKeyConfirm, requestId, decision),
+  answerAuthPrompt: (requestId: string, answers: string[]): Promise<void> =>
+    ipcRenderer.invoke(IPC.authPromptAnswer, requestId, answers),
   testConnection: (
     input: HostInput,
     secret?: string,
@@ -132,6 +135,11 @@ const api = {
     const listener = (_e: Electron.IpcRendererEvent, prompt: HostKeyPrompt): void => cb(prompt);
     ipcRenderer.on(IPC.evHostKeyPrompt, listener);
     return () => ipcRenderer.removeListener(IPC.evHostKeyPrompt, listener);
+  },
+  onAuthPrompt: (cb: (prompt: AuthPromptRequest) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, prompt: AuthPromptRequest): void => cb(prompt);
+    ipcRenderer.on(IPC.evAuthPrompt, listener);
+    return () => ipcRenderer.removeListener(IPC.evAuthPrompt, listener);
   },
   onConnectionLog: (
     cb: (sessionId: string, entry: ConnectionLogEntry) => void
@@ -208,7 +216,8 @@ const api = {
   }): Promise<{ id: number }> => ipcRenderer.invoke(IPC.snippetCreate, input),
   updateSnippet: (
     id: number,
-    input: { name?: string; command?: string; description?: string; hostId?: number }
+    // hostId: undefined — не трогать, null — явно сделать глобальным (SNIP-05)
+    input: { name?: string; command?: string; description?: string; hostId?: number | null }
   ): Promise<void> => ipcRenderer.invoke(IPC.snippetUpdate, id, input),
   deleteSnippet: (id: number): Promise<void> => ipcRenderer.invoke(IPC.snippetDelete, id),
   resolveHostSnippets: (hostId: number, action: 'delete' | 'make-global'): Promise<void> =>

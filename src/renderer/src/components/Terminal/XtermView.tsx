@@ -1,12 +1,15 @@
 import type { JSX } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import type { AppConfig } from '@shared/config';
+import type { AuthPromptRequest } from '@shared/ssh';
 import { getCurrentConfig } from '@/stores/config';
 import { attachTerminalWriter, dropTerminalBuffer } from '@/stores/terminalBuffer';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * xterm.js-вью одной сессии (TERM-01, TERM-04, TERM-07).
@@ -31,10 +34,25 @@ interface Cached {
 
 const cache = new Map<string, Cached>();
 
+/** Уведомление React-компонента о copy-on-select (создаётся в imperative-слое xterm). */
+const copyListeners = new Map<string, () => void>();
+
+/**
+ * Локальный перехват ввода на время промпта пароля/passphrase (SSH-06):
+ * пока промпт активен, нажатия НЕ уходят на сервер (шелла ещё нет) — копятся
+ * здесь и по Enter отдаются в main через answerAuthPrompt. Маскированный ввод
+ * не даёт эха — как настоящий "Password:" в консольном ssh.
+ */
+const authInterceptors = new Map<string, (data: string) => void>();
+/** requestId промптов, чей текст уже напечатан (терминал кэшируется между
+ *  переключениями вкладок — повторная печать давала бы дубль строки). */
+const printedAuthPrompts = new Set<string>();
+
 export function destroyTerminal(sessionId: string): void {
   const c = cache.get(sessionId);
   if (c) {
     dropTerminalBuffer(sessionId);
+    authInterceptors.delete(sessionId);
     c.term.dispose();
     c.container.remove();
     cache.delete(sessionId);
@@ -132,7 +150,15 @@ function createTerminal(sessionId: string): Cached {
   term.loadAddon(fit);
   term.loadAddon(search);
 
-  term.onData((data) => window.lucidSSH.sendTerminalInput(sessionId, data));
+  term.onData((data) => {
+    // Промпт пароля активен — ввод обрабатывается локально, не сервером
+    const intercept = authInterceptors.get(sessionId);
+    if (intercept) {
+      intercept(data);
+      return;
+    }
+    window.lucidSSH.sendTerminalInput(sessionId, data);
+  });
 
   // TERM-04 bell: звуковой сигнал при \a, если включён в настройках
   term.onBell(() => {
@@ -143,7 +169,10 @@ function createTerminal(sessionId: string): Cached {
   term.onSelectionChange(() => {
     if (getCurrentConfig()?.terminal.selectToCopy) {
       const sel = term.getSelection();
-      if (sel) window.lucidSSH.clipboardWrite(sel);
+      if (sel) {
+        window.lucidSSH.clipboardWrite(sel);
+        copyListeners.get(sessionId)?.();
+      }
     }
   });
 
@@ -160,15 +189,37 @@ function createTerminal(sessionId: string): Cached {
 export function XtermView({
   sessionId,
   onContextMenu,
-  onMultilinePaste
+  onMultilinePaste,
+  authPrompt,
+  onAuthAnswer
 }: {
   sessionId: string;
   onContextMenu: (x: number, y: number) => void;
   onMultilinePaste: (text: string) => void;
+  /** Активный промпт пароля/passphrase (SSH-06) — ввод в терминале, как в ssh. */
+  authPrompt?: AuthPromptRequest;
+  onAuthAnswer?: (answers: string[]) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   const hostRef = useRef<HTMLDivElement>(null);
   const cbRef = useRef({ onContextMenu, onMultilinePaste });
   cbRef.current = { onContextMenu, onMultilinePaste };
+  const onAuthAnswerRef = useRef(onAuthAnswer);
+  onAuthAnswerRef.current = onAuthAnswer;
+  const [showCopied, setShowCopied] = useState(false);
+
+  useEffect(() => {
+    copyListeners.set(sessionId, () => setShowCopied(true));
+    return () => {
+      copyListeners.delete(sessionId);
+    };
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!showCopied) return;
+    const timer = setTimeout(() => setShowCopied(false), 1100);
+    return () => clearTimeout(timer);
+  }, [showCopied]);
 
   useEffect(() => {
     const el = hostRef.current;
@@ -237,5 +288,65 @@ export function XtermView({
     };
   }, [sessionId]);
 
-  return <div ref={hostRef} className="h-full w-full" />;
+  // Промпт пароля: печатаем текст в сам терминал и перехватываем ввод до
+  // Enter — как консольный ssh. Маскированный ввод (echo=false) эха не даёт.
+  // Эффект ПОСЛЕ эффекта монтирования: тот создаёт терминал в cache.
+  useEffect(() => {
+    if (!authPrompt) return;
+    const term = cache.get(sessionId)?.term;
+    if (!term) return;
+    const { requestId, prompts } = authPrompt;
+    if (!printedAuthPrompts.has(requestId)) {
+      printedAuthPrompts.add(requestId);
+      term.write(`\r\n${prompts[0]?.text ?? ''} `);
+    }
+    let idx = 0;
+    let current = '';
+    const answers: string[] = [];
+    authInterceptors.set(sessionId, (data) => {
+      for (const ch of data) {
+        if (ch === '\r' || ch === '\n') {
+          answers.push(current);
+          current = '';
+          term.write('\r\n');
+          idx++;
+          if (idx >= prompts.length) {
+            authInterceptors.delete(sessionId);
+            printedAuthPrompts.delete(requestId);
+            onAuthAnswerRef.current?.(answers);
+            return; // хвост чанка после Enter отбрасываем
+          }
+          term.write(`${prompts[idx]?.text ?? ''} `);
+        } else if (ch === '\x7f' || ch === '\b') {
+          if (current.length > 0) {
+            current = current.slice(0, -1);
+            if (prompts[idx]?.echo) term.write('\b \b');
+          }
+        } else if (ch >= ' ') {
+          current += ch;
+          if (prompts[idx]?.echo) term.write(ch);
+        }
+        // Остальные управляющие символы (Ctrl+C, стрелки) игнорируются
+      }
+    });
+    term.focus();
+    return () => {
+      authInterceptors.delete(sessionId);
+    };
+  }, [sessionId, authPrompt]);
+
+  return (
+    <div className="relative h-full w-full">
+      <div ref={hostRef} className="h-full w-full" />
+      {showCopied && (
+        <div
+          className="animate-[esh-pop_.16s_ease] pointer-events-none absolute right-3 bottom-3 flex items-center gap-1 rounded-[20px] border border-border-strong bg-bg-elevated px-3 py-[6px] text-[11.5px] text-text-strong shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
+          aria-hidden="true"
+        >
+          <Icon name="check" size={12} className="text-success-bright" />
+          {t('terminal.copied')}
+        </div>
+      )}
+    </div>
+  );
 }

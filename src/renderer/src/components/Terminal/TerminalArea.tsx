@@ -27,8 +27,18 @@ import { usePanels } from '@/stores/panels';
  */
 export function TerminalArea(): JSX.Element {
   const { t } = useTranslation();
-  const { sessions, activeSessionId, reconnect, closeTab, breadcrumbs, dashboards, errors, dismissError } =
-    useSessions();
+  const {
+    sessions,
+    activeSessionId,
+    reconnect,
+    closeTab,
+    breadcrumbs,
+    dashboards,
+    errors,
+    dismissError,
+    authPrompts,
+    answerAuthPrompt
+  } = useSessions();
   const { config, update, markHint } = useConfig();
   const { openHistory, openSnippetDialog } = usePanels();
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -39,21 +49,36 @@ export function TerminalArea(): JSX.Element {
   const [pastePreview, setPastePreview] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [dangerPrompt, setDangerPrompt] = useState<DangerousCommandPrompt | null>(null);
-  const [hintVisible, setHintVisible] = useState(false);
+  const [activeHint, setActiveHint] = useState<'ctrlc' | 'snippet' | null>(null);
   const [onboardingDone, setOnboardingDone] = useState(false);
   const commandCounts = useRef<Map<string, number>>(new Map());
   const knownIds = useRef<Set<string>>(new Set());
+  /** Сессии, где auth-диалог (промпт пароля) уже начался — терминал у них
+   *  остаётся смонтированным на всё время подключения, без мигания. */
+  const authTouched = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const current = new Set(sessions.map((s) => s.sessionId));
     for (const id of knownIds.current) {
-      if (!current.has(id)) destroyTerminal(id);
+      if (!current.has(id)) {
+        destroyTerminal(id);
+        authTouched.current.delete(id);
+      }
     }
     knownIds.current = current;
   }, [sessions]);
 
   const active = sessions.find((s) => s.sessionId === activeSessionId);
   const showTerminal = active && active.status !== 'disconnected' && active.status !== 'connecting';
+  // Промпт пароля/passphrase показывается прямо в терминале (SSH-06) — на
+  // время подключения xterm монтируется раньше открытия шелла. Сессии, где
+  // auth-диалог уже начался, держат терминал смонтированным до конца
+  // подключения (между попытками промпта нет, но терминал не должен мигать).
+  const activeAuthPrompt =
+    active && active.status === 'connecting' ? authPrompts[active.sessionId] : undefined;
+  if (active && activeAuthPrompt) authTouched.current.add(active.sessionId);
+  const showAuthTerminal =
+    active && active.status === 'connecting' && authTouched.current.has(active.sessionId);
   // Онбординг-подсказки: до «Режима эксперта» и пока не пройдены (§5.1)
   const showOnboarding =
     !onboardingDone &&
@@ -100,12 +125,23 @@ export function TerminalArea(): JSX.Element {
       commandCounts.current.set(sessionId, n);
       const cfg = getCurrentConfig();
       if (n === 5 && cfg && !cfg.ui.expertMode && (cfg.shownCounts['snippetHint'] ?? 0) < 2) {
-        setHintVisible(true);
+        setActiveHint('snippet');
         void markHint('snippetHint');
       }
     },
     [markHint]
   );
+
+  // Одноразовая подсказка: сочетания вроде Ctrl+C работают только когда
+  // фокус в выводе терминала, не в композере (§14 фидбека, 10.07.2026) —
+  // показывается при первом фокусе в поле ввода.
+  const handleComposerFocus = useCallback(() => {
+    const cfg = getCurrentConfig();
+    if (cfg && !cfg.ui.expertMode && (cfg.shownCounts['ctrlcHint'] ?? 0) < 2) {
+      setActiveHint('ctrlc');
+      void markHint('ctrlcHint');
+    }
+  }, [markHint]);
 
   const handlePaste = useCallback((sessionId: string) => {
     void window.lucidSSH.clipboardRead().then((text) => {
@@ -146,7 +182,7 @@ export function TerminalArea(): JSX.Element {
           </div>
         ) : (
           <>
-            {showTerminal && (
+            {(showTerminal || showAuthTerminal) && (
               <div className="relative min-h-0 flex-1 px-4 py-3">
                 <XtermView
                   key={active.sessionId}
@@ -155,6 +191,8 @@ export function TerminalArea(): JSX.Element {
                     setCtxMenu({ x, y, hasSelection: getSelection(active.sessionId).length > 0 })
                   }
                   onMultilinePaste={(text) => setPastePreview(text)}
+                  authPrompt={activeAuthPrompt}
+                  onAuthAnswer={(answers) => void answerAuthPrompt(active.sessionId, answers)}
                 />
                 {searchOpen && (
                   <TerminalSearchBar
@@ -165,27 +203,43 @@ export function TerminalArea(): JSX.Element {
               </div>
             )}
 
-            {active.status === 'connecting' && (
-              <div className="flex flex-1 items-center justify-center text-[13px] font-medium text-text-body">
+            {/* absolute inset-0, не flex-1: иначе открытие «Детали подключения»
+                (нормальный flex-сиблинг снизу) сжимало эту центрированную
+                область и весь блок «прыгал» вверх (§ баг с прыжком, 10.07.2026).
+                pointer-events-none на обёртке: позиционированные элементы
+                рисуются поверх обычных независимо от порядка в DOM, иначе
+                прозрачная область перекрывала клики по панели деталей ниже —
+                включаем события точечно только там, где реально есть контролы. */}
+            {active.status === 'connecting' && !showAuthTerminal && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[13px] font-medium text-text-body">
                 {t('tabs.status.connecting')}
               </div>
             )}
 
             {active.status === 'disconnected' && (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2">
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
                 <div className="text-[13px] font-medium text-text-body">
                   {t('tabs.status.disconnected')}
                 </div>
                 <div className="text-[12px] text-text-dim">
                   {t('tabs.disconnectedNote', { name: active.hostName })}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void reconnect(active.hostId, active.sessionId)}
-                  className="mt-1 h-8 rounded-[6px] bg-accent px-4 text-[12.5px] font-medium text-white hover:bg-accent-hover"
-                >
-                  {t('tabs.reconnect')}
-                </button>
+                <div className="pointer-events-auto mt-1 flex flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void reconnect(active.hostId, active.sessionId)}
+                    className="h-8 w-[168px] rounded-[6px] bg-accent px-4 text-[12.5px] font-medium text-white hover:bg-accent-hover"
+                  >
+                    {t('tabs.reconnect')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDetailsOpen(true)}
+                    className="h-8 w-[168px] rounded-[6px] border border-border-strong px-4 text-[12.5px] font-medium text-text-body hover:bg-bg-elevated"
+                  >
+                    {t('tabs.details')}
+                  </button>
+                </div>
               </div>
             )}
           </>
@@ -213,14 +267,18 @@ export function TerminalArea(): JSX.Element {
         />
       )}
 
-      {/* Одноразовая подсказка о сниппетах (SNIP-08) — над композером */}
-      {!showOnboarding && hintVisible && showTerminal && active && !config?.terminal.inlineInput && (
-        <HintBar onClose={() => setHintVisible(false)} />
+      {/* Одноразовая подсказка (SNIP-08 или про фокус терминала) — над композером */}
+      {!showOnboarding && activeHint && showTerminal && active && !config?.terminal.inlineInput && (
+        <HintBar
+          textKey={activeHint === 'ctrlc' ? 'hint.ctrlc' : undefined}
+          onClose={() => setActiveHint(null)}
+        />
       )}
 
-      {/* Композер команд — перехватывается Стражем (GUARD-02). Показан для живой
-          сессии, кроме режима «ввод прямо в консоли» (тогда ввод идёт в pty). */}
-      {showTerminal && active && !config?.terminal.inlineInput && (
+      {/* Композер команд — перехватывается Стражем (GUARD-02). В режиме «ввод
+          прямо в консоли» поле ~$ скрыто (ввод идёт в pty), но кнопки
+          Истории/Команд остаются — иначе им негде быть (TERM-02). */}
+      {showTerminal && active && (
         <BottomInputBar
           sessionId={active.sessionId}
           onDanger={setDangerPrompt}
@@ -228,6 +286,8 @@ export function TerminalArea(): JSX.Element {
           onToggleCatalog={() => void update('ui.catalogPanelOpen', !(config?.ui.catalogPanelOpen ?? false))}
           catalogOpen={config?.ui.catalogPanelOpen ?? false}
           onCommandSent={() => handleCommandSent(active.sessionId)}
+          hideInput={config?.terminal.inlineInput}
+          onInputFocus={handleComposerFocus}
         />
       )}
 

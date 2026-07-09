@@ -153,9 +153,20 @@ describe('EchoGate — подавление эха setup-команды (MOTD б
 });
 
 describe('SHELL_INTEGRATION_SETUP', () => {
-  it('одна строка: перевод строки только в самом конце', () => {
+  it('каждая строка короче лимита редактора строки BusyBox', () => {
+    // CONFIG_FEATURE_EDITING_MAX_LEN на роутерах обычно 512: слитная строка
+    // длиннее обрезается ash молча, ломая кавычки (Keenetic/Xkeen 10.07.2026).
+    // Запас до 500 — на будущие правки.
     expect(SHELL_INTEGRATION_SETUP.endsWith('\n')).toBe(true);
-    expect(SHELL_INTEGRATION_SETUP.slice(0, -1)).not.toContain('\n');
+    const lines = SHELL_INTEGRATION_SETUP.slice(0, -1).split('\n');
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+    for (const line of lines) {
+      expect(line.length).toBeLessThan(500);
+      // каждая строка — законченная команда, начинается пробелом (HISTCONTROL)
+      expect(line.startsWith(' ')).toBe(true);
+    }
+    // финальный вызов-сигнал «настройка выполнена» — в самом конце
+    expect(lines[lines.length - 1]!.endsWith('__lucidssh_mark')).toBe(true);
   });
 
   it('без сырых управляющих байт: US/ESC только октавами внутри printf', () => {

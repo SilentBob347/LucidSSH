@@ -61,6 +61,7 @@ export const IPC = {
   sessionResize: 'session:resize',
   sessionTestConnection: 'session:test-connection',
   hostKeyConfirm: 'session:host-key-confirm',
+  authPromptAnswer: 'session:auth-prompt-answer',
 
   // --- Страж опасных команд (GUARD-01…06) ---
   guardSubmit: 'guard:submit',
@@ -106,6 +107,7 @@ export const IPC = {
   evWindowMaximized: 'ev:window-maximized',
   evSessionStatus: 'ev:session-status',
   evHostKeyPrompt: 'ev:host-key-prompt',
+  evAuthPrompt: 'ev:auth-prompt',
   evConnectionLog: 'ev:connection-log',
   evTerminalData: 'ev:terminal-data',
   evConfirmWindowClose: 'ev:confirm-window-close',

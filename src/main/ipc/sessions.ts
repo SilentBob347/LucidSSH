@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type { ConnectionLogEntry, SessionStatus, TestConnectionResult } from '@shared/ssh';
 import {
+  answerAuthPrompt,
   confirmHostKey,
   connectHost,
   destroySession,
@@ -139,6 +140,24 @@ export function registerSessionIpcHandlers(): void {
         throw new IpcValidationError('decision: accept|reject expected');
       }
       confirmHostKey(requestId, rawDecision);
+    }
+  );
+
+  // Ответ пользователя на промпт пароля/passphrase, введённый прямо в
+  // терминале (SSH-06). Ограничение длины — как у пароля хоста (validateSecret).
+  ipcMain.handle(
+    IPC.authPromptAnswer,
+    (event, rawRequestId: unknown, rawAnswers: unknown): void => {
+      assertSenderIsMainWindow(event);
+      const requestId = assertString(rawRequestId, 'requestId', 36, UUID_RE);
+      if (
+        !Array.isArray(rawAnswers) ||
+        rawAnswers.length > 10 ||
+        rawAnswers.some((a) => typeof a !== 'string' || a.length > 1024)
+      ) {
+        throw new IpcValidationError('answers: invalid');
+      }
+      answerAuthPrompt(requestId, rawAnswers as string[]);
     }
   );
 
