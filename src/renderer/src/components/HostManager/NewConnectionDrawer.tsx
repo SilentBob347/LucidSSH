@@ -6,6 +6,7 @@ import type { TestConnectionResult } from '@shared/ssh';
 import { useHosts } from '@/stores/hosts';
 import { useSessions } from '@/stores/sessions';
 import { Icon } from '@/components/common/Icon';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 
 /**
  * Drawer «Новое подключение» (скриншот 03-Newconn, Design_Brief §3.5):
@@ -35,6 +36,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
+  const [deleteSecretConfirmOpen, setDeleteSecretConfirmOpen] = useState(false);
 
   const editHost = drawer.editHost;
 
@@ -110,6 +112,13 @@ export function NewConnectionDrawer(): JSX.Element | null {
 
   const secretOrUndef = (): string | undefined =>
     form.secret.length > 0 ? form.secret : undefined;
+
+  const deleteSecret = async (): Promise<void> => {
+    if (!editHost) return;
+    await window.lucidSSH.hostDeleteSecret(editHost.id);
+    setHasSavedSecret(false);
+    setDeleteSecretConfirmOpen(false);
+  };
 
   /** Сохранить хост; при connect=true — сразу подключиться (кнопка «Подключить»). */
   const save = async (doConnect: boolean): Promise<void> => {
@@ -285,6 +294,15 @@ export function NewConnectionDrawer(): JSX.Element | null {
               <div className={helper}>
                 {hasSavedSecret ? t('conn.passwordSavedHelper') : t('conn.passwordHelper')}
               </div>
+              {hasSavedSecret && (
+                <button
+                  type="button"
+                  onClick={() => setDeleteSecretConfirmOpen(true)}
+                  className="mt-1 text-[11px] text-danger-text hover:underline"
+                >
+                  {t('conn.deleteSecret')}
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -330,6 +348,15 @@ export function NewConnectionDrawer(): JSX.Element | null {
                 <div className={helper}>
                   {hasSavedSecret ? t('conn.passwordSavedHelper') : t('conn.passphraseHelper')}
                 </div>
+                {hasSavedSecret && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleteSecretConfirmOpen(true)}
+                    className="mt-1 text-[11px] text-danger-text hover:underline"
+                  >
+                    {t('conn.deleteSecret')}
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -392,6 +419,18 @@ export function NewConnectionDrawer(): JSX.Element | null {
           </button>
         </div>
       </aside>
+
+      {deleteSecretConfirmOpen && (
+        <ConfirmDialog
+          title={t('conn.deleteSecretConfirm.title')}
+          confirmLabel={t('conn.deleteSecretConfirm.confirm')}
+          danger
+          onConfirm={() => void deleteSecret()}
+          onCancel={() => setDeleteSecretConfirmOpen(false)}
+        >
+          {t('conn.deleteSecretConfirm.body')}
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

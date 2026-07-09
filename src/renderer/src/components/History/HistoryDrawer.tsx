@@ -2,9 +2,11 @@ import type { JSX } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HistoryEntry } from '@shared/history';
+import { isSignalExitCode } from '@shared/ssh';
 import { insertIntoComposer } from '@/stores/composerBus';
 import { usePanels } from '@/stores/panels';
 import { Icon } from '@/components/common/Icon';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 
 /**
  * Панель истории команд (HistoryDrawer, Design_Brief §3.5; скриншот 06).
@@ -35,6 +37,13 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
   const [noteEditing, setNoteEditing] = useState<number | null>(null);
   const [noteText, setNoteText] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+
+  const clearAll = async (): Promise<void> => {
+    await window.lucidSSH.clearHistory();
+    setClearConfirmOpen(false);
+    refreshHistory();
+  };
 
   const refreshHistory = useCallback(() => {
     void window.lucidSSH.listHistory(query ? { text: query } : undefined).then(setEntries);
@@ -128,7 +137,7 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-2">
               {visible.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 px-6 pt-[54px] text-center">
-                  <Icon name="history" size={34} strokeWidth={1.6} className="text-text-faint" />
+                  <Icon name="save" size={34} strokeWidth={1.6} className="text-text-faint" />
                   <div className="text-[13px] font-medium text-text-body">
                     {query ? t('history.noMatches') : t('history.empty.title')}
                   </div>
@@ -167,25 +176,30 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
                         </span>
                       )}
                       <div className="flex shrink-0 gap-1">
-                        <IconBtn title={t('history.copy')} onClick={() => window.lucidSSH.clipboardWrite(e.command)}><Icon name="copy" size={13} /></IconBtn>
-                        <IconBtn title={t('history.insert')} onClick={() => insertIntoComposer(e.command)}><Icon name="insert" size={13} /></IconBtn>
-                        <button
-                          type="button"
-                          title={t('history.saveSnippet')}
-                          aria-label={t('history.saveSnippet')}
-                          onClick={() => openSnippetDialog(e.command)}
-                          className="relative flex size-[24px] shrink-0 items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-text-strong"
+                        <IconBtn
+                          title={t('history.copy')}
+                          hoverColorClass="hover:text-info"
+                          onClick={() => window.lucidSSH.clipboardWrite(e.command)}
                         >
-                          <Icon name="save" size={15} />
-                          <span className="pointer-events-none absolute -right-[1px] -bottom-[1px] flex size-[11px] items-center justify-center">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth={4} strokeLinecap="round" aria-hidden="true">
-                              <path d="M12 6v12" />
-                              <path d="M6 12h12" />
-                            </svg>
-                          </span>
-                        </button>
+                          <Icon name="copy" size={13} />
+                        </IconBtn>
+                        <IconBtn
+                          title={t('history.insert')}
+                          hoverColorClass="hover:text-success-bright"
+                          onClick={() => insertIntoComposer(e.command)}
+                        >
+                          <Icon name="insert" size={13} />
+                        </IconBtn>
+                        <IconBtn
+                          title={t('history.saveSnippet')}
+                          hoverColorClass="hover:text-lavender"
+                          onClick={() => openSnippetDialog(e.command)}
+                        >
+                          <Icon name="save" size={13} />
+                        </IconBtn>
                         <IconBtn
                           title={t('history.delete')}
+                          hoverColorClass="hover:text-danger"
                           onClick={() => void window.lucidSSH.deleteHistoryEntry(e.id).then(refreshHistory)}
                         >
                           <Icon name="trash" size={13} />
@@ -194,7 +208,11 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted">
                       <span
-                        className={`size-[7px] rounded-full ${e.exitCode === 0 || e.exitCode === undefined ? 'bg-success' : 'bg-danger'}`}
+                        className={`size-[7px] rounded-full ${
+                          e.exitCode === 0 || e.exitCode === undefined || isSignalExitCode(e.exitCode)
+                            ? 'bg-success'
+                            : 'bg-danger'
+                        }`}
                       />
                       <span>
                         {e.hostName} · {e.username} · {relativeTime(e.startedAt, t)}
@@ -210,7 +228,7 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
                           {t('history.blocked')}
                         </span>
                       )}
-                      {e.exitCode !== undefined && e.exitCode !== 0 && (
+                      {e.exitCode !== undefined && e.exitCode !== 0 && !isSignalExitCode(e.exitCode) && (
                         <span className="rounded-[4px] bg-danger/15 px-2 py-[1px] text-[10px] text-danger">
                           {t('history.error')}
                         </span>
@@ -290,10 +308,34 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
               )}
             </div>
 
-        <div className="shrink-0 border-t border-border-default px-[16px] py-[10px] font-mono text-[11.5px] text-text-muted">
-          {t('history.footer', { shown: visible.length, total })}
+        <div className="flex shrink-0 items-center justify-between border-t border-border-default px-[16px] py-[10px]">
+          <span className="font-mono text-[11.5px] text-text-muted">
+            {t('history.footer', { shown: visible.length, total })}
+          </span>
+          {total > 0 && (
+            <button
+              type="button"
+              onClick={() => setClearConfirmOpen(true)}
+              className="flex items-center gap-1 rounded-[4px] px-2 py-1 text-[11.5px] text-text-dim hover:bg-danger/10 hover:text-danger"
+            >
+              <Icon name="trash" size={12} />
+              {t('history.clear')}
+            </button>
+          )}
         </div>
       </aside>
+
+      {clearConfirmOpen && (
+        <ConfirmDialog
+          title={t('history.clearConfirm.title')}
+          confirmLabel={t('history.clearConfirm.confirm')}
+          danger
+          onConfirm={() => void clearAll()}
+          onCancel={() => setClearConfirmOpen(false)}
+        >
+          {t('history.clearConfirm.body', { total })}
+        </ConfirmDialog>
+      )}
     </div>
   );
 }
@@ -325,10 +367,13 @@ function Chip({
 function IconBtn({
   title,
   onClick,
+  hoverColorClass,
   children
 }: {
   title: string;
   onClick: () => void;
+  /** Цвет иконки на hover (как у SnippetRow в каталоге — только цвет, без фона). */
+  hoverColorClass: string;
   children: React.ReactNode;
 }): JSX.Element {
   return (
@@ -337,7 +382,7 @@ function IconBtn({
       title={title}
       aria-label={title}
       onClick={onClick}
-      className="flex size-[24px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-text-strong"
+      className={`flex size-[24px] items-center justify-center rounded-[4px] text-text-dim ${hoverColorClass}`}
     >
       {children}
     </button>

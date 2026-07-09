@@ -408,7 +408,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
         )}
       </div>
 
-      <div className="flex shrink-0 gap-[6px] border-t border-border-default px-[10px] py-2">
+      <div className="flex h-10 shrink-0 items-center gap-[6px] border-t border-border-default px-[10px]">
         <button
           type="button"
           onClick={openSettings}

@@ -91,12 +91,9 @@ export function registerHistoryIpcHandlers(): void {
       name: str(r['name'], 'name', 100, false),
       command: str(r['command'], 'command', 10000, false),
       description: str(r['description'], 'description', 2000, false),
+      // undefined (поле не передано) — не трогать; null — явно сделать глобальным (SNIP-05)
       hostId:
-        r['hostId'] === null
-          ? undefined
-          : r['hostId'] === undefined
-            ? undefined
-            : validateId(r['hostId'], 'hostId')
+        r['hostId'] === undefined ? undefined : r['hostId'] === null ? null : validateId(r['hostId'], 'hostId')
     });
   });
 

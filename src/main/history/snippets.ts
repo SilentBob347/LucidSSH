@@ -62,7 +62,10 @@ export function createSnippet(input: SnippetInput): { id: number } {
 
 export function updateSnippet(
   id: number,
-  input: Partial<Pick<SnippetInput, 'name' | 'command' | 'description' | 'hostId'>>
+  input: Partial<Pick<SnippetInput, 'name' | 'command' | 'description'>> & {
+    // undefined = поле не трогать, null = явно сделать глобальным (SNIP-05)
+    hostId?: number | null;
+  }
 ): void {
   const existing = openHistoryDb().prepare('SELECT * FROM snippets WHERE id = ?').get(id) as
     | SnippetRow

@@ -41,9 +41,7 @@ export function SnippetList({
   if (snippets.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-1 px-5 py-[44px] text-center">
-        <Icon name="bookmark" size={26} className="text-text-faint" />
         <div className="text-[13px] font-semibold text-text-body">{t('snippet.empty.title')}</div>
-        <div className="text-[12px] text-text-dim">{t('snippet.empty.description')}</div>
       </div>
     );
   }
@@ -136,15 +134,15 @@ function SnippetRow({
       <div className="flex shrink-0 gap-[1px]">
         <button
           type="button"
-          title={t('snippet.play')}
-          aria-label={t('snippet.play')}
+          title={t('snippet.insert')}
+          aria-label={t('snippet.insert')}
           onClick={(e) => {
             e.stopPropagation();
             insertIntoComposer(snippet.command);
           }}
           className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:text-success-bright"
         >
-          <Icon name="play" size={13} />
+          <Icon name="insert" size={13} />
         </button>
         <button
           type="button"

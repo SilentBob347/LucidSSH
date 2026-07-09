@@ -59,7 +59,9 @@ export function SnippetSaveDialog({
         await window.lucidSSH.updateSnippet(editSnippet.id, {
           name: name.trim(),
           description: description.trim() || undefined,
-          hostId: targetHostId
+          // null — явный сигнал «сделать глобальным» (undefined main трактует
+          // как «поле не трогать», иначе смена области на глобальную не сохранялась)
+          hostId: targetHostId ?? null
         });
       } else {
         await window.lucidSSH.createSnippet({
