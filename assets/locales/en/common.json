@@ -92,6 +92,12 @@
     "password": "Server password",
     "passwordHelper": "Stored in Windows Credential Manager, not in app files",
     "passwordSavedHelper": "Password is saved. Leave empty to keep it",
+    "deleteSecret": "Delete saved password",
+    "deleteSecretConfirm": {
+      "title": "Delete saved password?",
+      "body": "The password will be removed from Windows Credential Manager. You'll need to enter it again next time you connect.",
+      "confirm": "Delete"
+    },
     "keyPath": "Key file",
     "keyPathHelper": "Private key file (usually id_rsa or id_ed25519). The public key must be added to the server",
     "browse": "Browse…",
@@ -154,7 +160,8 @@
     "empty": {
       "title": "No active session",
       "description": "Select a server on the left to connect."
-    }
+    },
+    "copied": "Copied"
   },
   "breadcrumb": {
     "sudoBadge": "sudo",
@@ -291,6 +298,12 @@
       "needs-passphrase": "The key is encrypted — set a passphrase in the connection settings"
     }
   },
+  "sshAuth": {
+    "passwordPrompt": "Password for {{username}}@{{address}}:",
+    "passwordPromptRetry": "Permission denied, please try again. Password for {{username}}@{{address}}:",
+    "passphrasePrompt": "Passphrase for the key:",
+    "passphrasePromptRetry": "Wrong passphrase, please try again:"
+  },
   "catalog": {
     "title": "Commands",
     "tabCatalog": "Catalog",
@@ -354,6 +367,11 @@
     "notePlaceholder": "Note for the command…",
     "delete": "Delete entry",
     "clear": "Clear history",
+    "clearConfirm": {
+      "title": "Clear all history?",
+      "body": "All {{total}} command history entries will be permanently deleted. This action cannot be undone.",
+      "confirm": "Clear"
+    },
     "exit": "exit {{code}}",
     "footer": "Showing {{shown}} of {{total}} commands",
     "empty": {
@@ -390,13 +408,14 @@
     "cancel": "Cancel",
     "groupNormal": "Normal",
     "groupDanger": "Dangerous",
-    "play": "Insert",
+    "insert": "Insert",
     "edit": "Edit",
     "delete": "Delete",
     "searchPlaceholder": "Search saved",
     "empty": {
       "title": "No saved commands yet",
-      "description": "Right-click in the terminal → Save command"
+      "description": "Right-click in the terminal → Save command",
+      "descriptionPasteMode": "Save a command from history — using the button next to it"
     },
     "chipServer": "server",
     "chipGlobal": "global"
@@ -575,7 +594,9 @@
     }
   },
   "hint": {
-    "snippet": "Use this command often? Save it — 🔖 in history or right-click in the terminal."
+    "snippet": "Use this command often? Save it — a button in history or right-click in the terminal.",
+    "snippetPasteMode": "Use this command often? Save it using the button next to it in history.",
+    "ctrlc": "Keyboard shortcuts (Ctrl+C and others) work when the terminal output is focused, not this field — click the output to switch."
   },
   "tips": {
     "tip1": "Click a path segment in the breadcrumb above — it inserts “cd …” into the input.",
