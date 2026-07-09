@@ -56,9 +56,11 @@ export function ErrorDetector({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-[13px]">
-        <div className="mt-[9px] rounded-[4px] bg-bg-panel px-[10px] py-[6px] font-mono text-[12px] text-text-muted">
-          {explanation.command}
-        </div>
+        {explanation.command && (
+          <div className="mt-[9px] rounded-[4px] bg-bg-panel px-[10px] py-[6px] font-mono text-[12px] text-text-muted">
+            {explanation.command}
+          </div>
+        )}
         <p className="mt-[10px] text-[12.5px] leading-[1.55] text-text-body">
           {explanation.explanation}
         </p>

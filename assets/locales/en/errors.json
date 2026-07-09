@@ -53,5 +53,10 @@
     "title": "Connection timed out",
     "explanation": "The server did not respond in time. It may be off, unreachable, or blocked by a firewall.",
     "checks": ["Check network reachability"]
+  },
+  "ssh-nologin-shell": {
+    "title": "Shell login unavailable",
+    "explanation": "The password or key was accepted and the connection was established successfully — but this account's login shell is set to nologin on the server, so no interactive session can be opened. Contact the server administrator or use a different account.",
+    "checks": []
   }
 }

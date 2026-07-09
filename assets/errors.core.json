@@ -101,6 +101,13 @@
       "checks": [
         { "command": "ping -c 3 {target}" }
       ]
+    },
+    {
+      "id": "ssh-nologin-shell",
+      "match": "(?i)(this account is currently not available|account is not available)",
+      "category": "shell",
+      "scope": "ssh-connection",
+      "checks": []
     }
   ]
 }

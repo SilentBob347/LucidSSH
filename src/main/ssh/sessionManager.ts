@@ -68,6 +68,9 @@ interface ManagedSession {
   setupCapTimer?: NodeJS.Timeout;
   /** Страховка: shell без bash/zsh не пришлёт маркер — показать накопленное. */
   echoFlushTimer?: NodeJS.Timeout;
+  /** Канал закрылся с распознанной ssh-connection-ошибкой (nologin и т.п.) —
+   *  автопереподключение бессмысленно, см. client.on('close', ...). */
+  shellUnavailable?: boolean;
 }
 
 interface PendingHostKey {
@@ -279,7 +282,7 @@ async function establish(session: ManagedSession, host: Host): Promise<void> {
   });
 
   client.on('close', () => {
-    if (session.userClosed) {
+    if (session.userClosed || session.shellUnavailable) {
       finishDisconnected(session);
       return;
     }
@@ -437,6 +440,7 @@ function openShell(session: ManagedSession, client: Client): void {
         clearSetupTimers(session);
         session.shell = null;
         stopDashboard(session.id);
+        checkShellUnavailable(session);
       });
 
       // Кап на случай сервера без MOTD/приглашения: настройка уйдёт даже
@@ -450,6 +454,27 @@ function openShell(session: ManagedSession, client: Client): void {
       );
     }
   );
+}
+
+/**
+ * Некоторые серверы аутентифицируют успешно, но не могут открыть интерактивную
+ * сессию (login shell = nologin и т.п.) — канал сразу закрывается, ssh2 не
+ * эмитит 'error' (это не ошибка аутентификации). Наш маркер breadcrumb в таком
+ * случае никогда не приходит, поэтому обычный путь детектора (по exit code
+ * команды) не срабатывает. Текст, который сервер успел прислать перед
+ * закрытием канала, сверяется с базой паттернов scope 'ssh-connection';
+ * совпадение показывается как отдельное объяснение, а сессия помечается, чтобы
+ * client.on('close', ...) не пытался переподключиться — повтор бесполезен.
+ */
+function checkShellUnavailable(session: ManagedSession): void {
+  const output = session.outputSinceMark;
+  if (!output.trim()) return;
+  const patterns = loadErrorPatterns(loadConfig().language);
+  const result = detectError(patterns, 'ssh-connection', output, null, '');
+  if (result.matched) {
+    session.shellUnavailable = true;
+    send(IPC.evError, session.id, result.explanation);
+  }
 }
 
 /**
