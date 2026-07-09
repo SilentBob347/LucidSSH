@@ -8,7 +8,7 @@
   /* Поверхности */
   --color-bg-base: #0f0f13;
   --color-bg-base-deep: #0b0b0f;
-  --color-bg-panel: #16161d;
+  --color-bg-panel: #191920;
   --color-bg-terminal: #1a1a22;
   --color-bg-elevated: #1e1e28;
   --color-bg-elevated-2: #232330;
@@ -19,9 +19,9 @@
   --color-text-primary: #f1f5f9;
   --color-text-strong: #e2e8f0;
   --color-text-body: #cbd5e1;
-  --color-text-muted: #94a3b8;
-  --color-text-dim: #64748b;
-  --color-text-faint: #475569;
+  --color-text-muted: #a3b2c7;
+  --color-text-dim: #73839a;
+  --color-text-faint: #5a687c;
 
   /* Акценты */
   --color-accent: #6366f1;
@@ -42,7 +42,7 @@
 
   /* Границы */
   --color-border-hairline: rgba(255, 255, 255, 0.05);
-  --color-border-default: rgba(255, 255, 255, 0.08);
+  --color-border-default: rgba(255, 255, 255, 0.11);
   --color-border-strong: rgba(255, 255, 255, 0.12);
   --color-border-accent: rgba(99, 102, 241, 0.4);
 

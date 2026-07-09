@@ -40,7 +40,7 @@ export function ConnectionLogPanel({
   } as const;
 
   return (
-    <div className="flex max-h-[220px] shrink-0 flex-col border-t border-border-default bg-bg-panel">
+    <div className="mt-auto flex max-h-[220px] shrink-0 flex-col border-t border-border-default bg-bg-panel">
       <div className="flex h-8 shrink-0 items-center justify-between px-3">
         <span className="text-[11px] font-semibold tracking-[0.04em] text-text-muted uppercase">
           {t('clog.title')}

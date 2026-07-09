@@ -32,6 +32,7 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
     const [tab, setTab] = useState<'catalog' | 'server' | 'global'>('catalog');
     const [snippets, setSnippets] = useState<Snippet[]>([]);
     const catStripRef = useRef<HTMLDivElement>(null);
+    const tabStripRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
       void window.lucidSSH.getCommandCatalog().then((d) => {
@@ -92,6 +93,27 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
       document.addEventListener('mouseup', onUp);
     };
 
+    // Прокрутка вкладок Каталог/[хост]/Глобальные зажатой кнопкой мыши — тот
+    // же приём, что и у строки категорий выше (тут нет reorder, в отличие от
+    // вкладок сессий, поэтому drag-скролл ничему не мешает).
+    const tabDragState = useRef<{ startX: number; startLeft: number } | null>(null);
+    const onTabStripMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
+      const el = tabStripRef.current;
+      if (!el) return;
+      tabDragState.current = { startX: e.clientX, startLeft: el.scrollLeft };
+      const onMove = (mv: MouseEvent): void => {
+        if (!tabDragState.current || !tabStripRef.current) return;
+        tabStripRef.current.scrollLeft = tabDragState.current.startLeft - (mv.clientX - tabDragState.current.startX);
+      };
+      const onUp = (): void => {
+        tabDragState.current = null;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    };
+
     return (
       <aside
         ref={ref}
@@ -114,7 +136,12 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
         </div>
 
         {/* Вкладки: Каталог · [хост] · Глобальные (SNIP-05) */}
-        <div className="flex h-[32px] shrink-0 items-end gap-[2px] overflow-x-auto border-b border-border-default px-3 [scrollbar-width:none]">
+        <div
+          ref={tabStripRef}
+          onMouseDown={onTabStripMouseDown}
+          title={t('catalog.dragScroll')}
+          className="flex h-[32px] shrink-0 cursor-grab items-end gap-[2px] overflow-x-auto border-b border-border-default px-3 select-none [scrollbar-width:none]"
+        >
           <TabButton active={tab === 'catalog'} onClick={() => setTab('catalog')}>
             {t('catalog.tabCatalog')}
           </TabButton>

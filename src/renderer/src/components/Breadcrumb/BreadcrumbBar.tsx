@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Breadcrumb } from '@shared/breadcrumb';
 import type { DashboardMetrics } from '@shared/dashboard';
@@ -88,10 +89,39 @@ export function BreadcrumbBar({
       ? (metrics.ramUsedMb / metrics.ramTotalMb) * 100
       : null;
 
+  const stripRef = useRef<HTMLDivElement>(null);
+  // Прокрутка зажатой кнопкой мыши, как в панели каталога — иначе горизонтальный
+  // скролл был доступен только Shift+колесом, что неочевидно.
+  const dragState = useRef<{ startX: number; startLeft: number } | null>(null);
+  const onStripMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
+    const el = stripRef.current;
+    if (!el) return;
+    dragState.current = { startX: e.clientX, startLeft: el.scrollLeft };
+    const onMove = (mv: MouseEvent): void => {
+      if (!dragState.current || !stripRef.current) return;
+      stripRef.current.scrollLeft = dragState.current.startLeft - (mv.clientX - dragState.current.startX);
+    };
+    const onUp = (): void => {
+      dragState.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
   return (
     <div className="flex h-12 shrink-0 items-center gap-3 border-b border-border-default bg-bg-panel px-4">
-      {/* Breadcrumb */}
-      <div className="flex min-w-0 flex-1 items-center gap-[7px] font-mono text-[13px]">
+      {/* Breadcrumb: ряд не переносится на вторую строку — при нехватке места
+          скроллится горизонтально (иначе сжатый текст переносился и раздувал
+          высоту 48px-полосы, наезжая на дашборд). Прокрутка — зажатой кнопкой
+          мыши (клики по сегментам путей по-прежнему работают, как в каталоге). */}
+      <div
+        ref={stripRef}
+        onMouseDown={onStripMouseDown}
+        title={t('catalog.dragScroll')}
+        className="flex min-w-0 flex-1 cursor-grab items-center gap-[7px] overflow-x-auto font-mono text-[13px] whitespace-nowrap select-none [scrollbar-width:none]"
+      >
         {crumb ? (
           <>
             {priv === 'root' && (
@@ -101,20 +131,20 @@ export function BreadcrumbBar({
               />
             )}
             {priv === 'sudo' && <span className="size-[7px] shrink-0 rounded-full bg-warning" />}
-            <span className={userColor}>{crumb.username}</span>
+            <span className={`shrink-0 ${userColor}`}>{crumb.username}</span>
             {priv === 'sudo' && (
-              <span className="rounded-[4px] bg-[rgba(245,158,11,0.14)] px-[7px] py-[1px] font-sans text-[11px] text-warning">
+              <span className="shrink-0 rounded-[4px] bg-[rgba(245,158,11,0.14)] px-[7px] py-[1px] font-sans text-[11px] text-warning">
                 {t('breadcrumb.sudoBadge')}
               </span>
             )}
-            <span className="text-text-dim">@</span>
-            <span className="text-text-body">{crumb.host}</span>
-            <span className="mx-[2px] text-accent">&gt;</span>
-            <div className="flex min-w-0 items-center">
+            <span className="shrink-0 text-text-dim">@</span>
+            <span className="shrink-0 text-text-body">{crumb.host}</span>
+            <span className="mx-[2px] shrink-0 text-accent">&gt;</span>
+            <div className="flex shrink-0 items-center">
               {pathSegments(crumb.path).map((seg, i, arr) => {
                 const isLast = i === arr.length - 1;
                 return (
-                  <span key={i} className="flex items-center">
+                  <span key={i} className="flex shrink-0 items-center">
                     {i > 0 && seg.label !== '~' && <span className="text-accent">/</span>}
                     <button
                       type="button"

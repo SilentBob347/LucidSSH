@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { DangerousCommandPrompt } from '@shared/guard';
 import { setComposerInsertHandler, setComposerValueGetter } from '@/stores/composerBus';
 import { Icon } from '@/components/common/Icon';
+import { pasteText } from './XtermView';
 
 /**
  * Композер команд (BottomInputBar, Design_Brief §3.3): `~$` + ввод + История +
@@ -18,7 +19,9 @@ export function BottomInputBar({
   onOpenHistory,
   onToggleCatalog,
   catalogOpen,
-  onCommandSent
+  onCommandSent,
+  hideInput,
+  onInputFocus
 }: {
   sessionId: string;
   onDanger: (prompt: DangerousCommandPrompt) => void;
@@ -28,6 +31,11 @@ export function BottomInputBar({
   catalogOpen?: boolean;
   /** Вызывается после успешной отправки команды на сервер (для SNIP-08). */
   onCommandSent?: () => void;
+  /** «Ввод прямо в консоли» — поле ~$ скрыто, но кнопки Истории/Команд остаются
+   *  (TERM-02): вставка команд из каталога/истории/сниппетов идёт прямо в терминал. */
+  hideInput?: boolean;
+  /** Первый фокус в поле ввода — повод показать подсказку про Ctrl+C (§14). */
+  onInputFocus?: () => void;
 }): JSX.Element {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
@@ -38,16 +46,21 @@ export function BottomInputBar({
   valueRef.current = value;
 
   useEffect(() => {
-    setComposerInsertHandler((text) => {
-      setValue(text);
-      inputRef.current?.focus();
-    });
+    if (hideInput) {
+      // Поля для предпросмотра нет — вставка уходит прямо в терминал.
+      setComposerInsertHandler((text) => pasteText(sessionId, text));
+    } else {
+      setComposerInsertHandler((text) => {
+        setValue(text);
+        inputRef.current?.focus();
+      });
+    }
     setComposerValueGetter(() => valueRef.current);
     return () => {
       setComposerInsertHandler(null);
       setComposerValueGetter(null);
     };
-  }, []);
+  }, [hideInput, sessionId]);
 
   const submit = async (): Promise<void> => {
     const command = value;
@@ -62,18 +75,25 @@ export function BottomInputBar({
   };
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-2 border-t border-border-default bg-bg-panel px-[14px]">
-      <span className="font-mono text-[13px] font-semibold text-accent">~$</span>
-      <input
-        ref={inputRef}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') void submit();
-        }}
-        placeholder={t('input.placeholder')}
-        className="h-full min-w-0 flex-1 bg-transparent font-mono text-[13px] text-text-strong outline-none placeholder:text-text-dim"
-      />
+    <div
+      className={`flex h-10 shrink-0 items-center gap-2 border-t border-border-default bg-bg-panel px-[14px] ${hideInput ? 'justify-end' : ''}`}
+    >
+      {!hideInput && (
+        <>
+          <span className="font-mono text-[13px] font-semibold text-accent">~$</span>
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void submit();
+            }}
+            onFocus={onInputFocus}
+            placeholder={t('input.placeholder')}
+            className="h-full min-w-0 flex-1 bg-transparent font-mono text-[13px] text-text-strong outline-none placeholder:text-text-dim"
+          />
+        </>
+      )}
       <button
         type="button"
         onClick={onOpenHistory}
