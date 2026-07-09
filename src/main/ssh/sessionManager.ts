@@ -14,7 +14,7 @@ import {
   replaceKnownKey,
   sha256Fingerprint
 } from './knownHosts';
-import { BreadcrumbParser, EchoGate, SHELL_INTEGRATION_SETUP } from './shellIntegration';
+import { BreadcrumbParser, CommandGate, EchoGate, SHELL_INTEGRATION_SETUP } from './shellIntegration';
 import { startDashboard, stopDashboard } from './dashboard';
 import { loadErrorPatterns } from '../content/loader';
 import { detectError, isEmptyOutput } from '../errors/detector';
@@ -60,6 +60,8 @@ interface ManagedSession {
   firstMarkSeen: boolean;
   /** Гейт подавления эха setup-команды: MOTD виден, эхо настройки — нет. */
   echoGate: EchoGate;
+  /** Гейт «команда выполнялась»: отсекает маркеры от перерисовок приглашения. */
+  commandGate: CommandGate;
   /** Отправлена ли настройка shell integration в текущий shell. */
   setupSent: boolean;
   /** Пауза в выводе после MOTD — сигнал отправить настройку. */
@@ -124,6 +126,15 @@ function log(
   send(IPC.evConnectionLog, s.id, entry);
 }
 
+/** Накопление вывода между маркерами с тем же капом, что и раньше (ERR-01). */
+function appendOutput(session: ManagedSession, text: string): void {
+  if (!text) return;
+  session.outputSinceMark += text;
+  if (session.outputSinceMark.length > 65536) {
+    session.outputSinceMark = session.outputSinceMark.slice(-65536);
+  }
+}
+
 /** Тип ключа из блоба host key (первое length-prefixed поле). */
 function keyTypeFromBlob(blob: Buffer): string {
   try {
@@ -183,6 +194,7 @@ export async function connectHost(hostId: number): Promise<{ sessionId: string }
     everConnected: false,
     firstMarkSeen: false,
     echoGate: new EchoGate(),
+    commandGate: new CommandGate(),
     setupSent: false
   };
   sessions.set(session.id, session);
@@ -403,8 +415,9 @@ function openShell(session: ManagedSession, client: Client): void {
       session.shell = stream;
       session.everConnected = true;
       // Новый shell (в т.ч. после переподключения) — настройка ещё не отправлена,
-      // гейт и таймеры прошлого shell сбрасываются.
+      // гейты и таймеры прошлого shell сбрасываются.
       session.setupSent = false;
+      session.commandGate.reset();
       clearSetupTimers(session);
       setStatus(session, 'connected');
       log(session, 'info', 'clog.shellOpen', undefined, 'session');
@@ -420,18 +433,20 @@ function openShell(session: ManagedSession, client: Client): void {
           clearTimeout(session.setupSilenceTimer);
           session.setupSilenceTimer = setTimeout(() => sendShellSetup(session), SETUP_SILENCE_MS);
         }
-        const forward = session.echoGate.filter(pieces, marks.length);
-        if (forward) {
-          send(IPC.evTerminalData, session.id, forward);
-          session.outputSinceMark += forward;
-          if (session.outputSinceMark.length > 65536) {
-            session.outputSinceMark = session.outputSinceMark.slice(-65536);
-          }
+        const effective = session.echoGate.filter(pieces, marks.length);
+        const display = effective.join('');
+        if (display) {
+          send(IPC.evTerminalData, session.id, display);
         }
-        for (const mark of marks) {
-          send(IPC.evBreadcrumb, session.id, mark.crumb);
-          handleCommandFinished(session, mark.exitCode);
+        // Приписываем вывод СВОЕМУ маркеру: effective[i] — это то, что пришло
+        // между (i-1)-м и i-м маркером в этом чанке. Несколько маркеров могут
+        // прийти в одном data-событии (см. баг: два маркера одним пакетом).
+        for (let i = 0; i < marks.length; i++) {
+          appendOutput(session, effective[i] ?? '');
+          send(IPC.evBreadcrumb, session.id, marks[i]!.crumb);
+          handleCommandFinished(session, marks[i]!.exitCode);
         }
+        appendOutput(session, effective[effective.length - 1] ?? '');
       });
       stream.stderr?.on('data', (data: Buffer) => {
         send(IPC.evTerminalData, session.id, data.toString('utf8'));
@@ -491,6 +506,14 @@ function handleCommandFinished(session: ManagedSession, exitCode: number | null)
     return;
   }
 
+  // Маркер без Enter'а с прошлого маркера — перерисовка приглашения, а не
+  // завершение команды (см. CommandGate). Открытие/закрытие самой панели
+  // детектора вызывает resize → SIGWINCH → readline перепечатывает промпт
+  // вместе со встроенным в PS1 маркером и СТАРЫМ $? — без этой проверки
+  // панель затирается fallback'ом и переоткрывается сама по кругу.
+  const cycle = session.commandGate.consume();
+  if (!cycle.ran) return;
+
   // Команда, которая только что завершилась — нужна и для истории, и для
   // подстановки {original}/{target} в шагах детектора ниже. Читаем ДО очистки
   // session.lastCommand (следующий блок её обнуляет).
@@ -508,6 +531,8 @@ function handleCommandFinished(session: ManagedSession, exitCode: number | null)
   }
 
   if (exitCode === null || exitCode === 0) return;
+  // Пустой Enter: команды не было, $? унаследован от предыдущей — не детектор.
+  if (!cycle.typed && !command) return;
   if (!loadConfig().ui.hints.errorPanel) return; // отключено в «Интерфейсе»
 
   const patterns = loadErrorPatterns(loadConfig().language);
@@ -613,6 +638,9 @@ export function sendInput(sessionId: string, data: string): void {
   // первой отдельной строкой, ввод следом: bash выполнит её раньше, эхо ввода
   // придёт уже после маркера и подавлено не будет.
   if (!session.setupSent) sendShellSetup(session);
+  // Настройка выше пишется мимо этого учёта (session.shell.write) — её маркер
+  // и так съедается firstMarkSeen, кредит ей не нужен.
+  session.commandGate.noteInput(data);
   session.shell.write(data);
 }
 

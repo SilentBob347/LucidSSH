@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ErrorExplanation } from '@shared/content';
 import { Icon } from '@/components/common/Icon';
@@ -23,6 +23,16 @@ export function ErrorDetector({
 
   void sessionId;
 
+  // Esc должен закрывать панель независимо от фокуса — обычно он у терминала
+  // (xterm), а не у самой панели, поэтому слушатель на div её не ловит.
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [onClose]);
+
   const copy = (cmd: string, idx: number): void => {
     window.lucidSSH.clipboardWrite(cmd);
     setCopiedIdx(idx);
@@ -32,9 +42,6 @@ export function ErrorDetector({
   return (
     <div
       className="animate-[esh-slideup_.2s_ease] flex max-h-[212px] shrink-0 flex-col border-t border-l-[3px] border-t-[rgba(255,255,255,0.1)] border-l-danger bg-bg-elevated"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onClose();
-      }}
       role="region"
       aria-label={explanation.title}
     >

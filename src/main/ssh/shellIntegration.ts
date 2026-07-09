@@ -50,12 +50,17 @@ export const SHELL_INTEGRATION_SETUP =
   ` __lucidssh_mark() { __lc=$?; printf '\\033_lucidssh\\037%s\\037%s\\037%s\\037%s\\037%s\\033\\\\' ` +
   `"\${USER:-$(id -un 2>/dev/null)}" "\${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD" "$(id -u 2>/dev/null)" "$__lc"; }; ` +
   `if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __lucidssh_mark 2>/dev/null || eval 'precmd_functions+=(__lucidssh_mark)'; ` +
-  // PROMPT_COMMAND — bash-специфика: ash (BusyBox, роутеры) её не читает вовсе,
-  // маркер тогда срабатывает только один раз (явный вызов ниже) и не приходит
-  // после реальных команд — breadcrumb/история молча замирают на connect-time.
-  // Встраивание в PS1 ($(...) переразворачивается перед каждым приглашением) —
-  // POSIX-совместимый способ, работает и в ash/dash, и в bash — единый путь
-  // вместо PROMPT_COMMAND (найдено на реальном Keenetic/ash-сервере 09.07.2026).
+  // bash: маркер через PROMPT_COMMAND, НЕ через встраивание в PS1. Маркер в PS1
+  // становится частью СТРОКИ приглашения: readline перепечатывает её при
+  // SIGWINCH/Ctrl+L/completion — повторный маркер со старым $? (источник бага
+  // с самопереоткрытием детектора ошибок), а невидимые APC-байты вне \[ \]
+  // ломают readline'у подсчёт ширины промпта (глюки переноса длинных команд).
+  // Вывод PROMPT_COMMAND в строку приглашения не входит и не перепечатывается.
+  `elif [ -n "$BASH_VERSION" ]; then case "$PROMPT_COMMAND" in *__lucidssh_mark*) ;; *) PROMPT_COMMAND="__lucidssh_mark\${PROMPT_COMMAND:+;$PROMPT_COMMAND}";; esac; ` +
+  // ash/dash (BusyBox, роутеры): ни PROMPT_COMMAND, ни precmd нет — остаётся
+  // встраивание в PS1 ($(...) переразворачивается перед каждым приглашением;
+  // найдено на реальном Keenetic/ash-сервере 09.07.2026). Повторные маркеры от
+  // перерисовок приглашения отсекает CommandGate на стороне main.
   `else case "$PS1" in *__lucidssh_mark*) ;; *) PS1='$(__lucidssh_mark)'"$PS1";; esac; fi; ` +
   `__lucidssh_mark\n`;
 
@@ -160,16 +165,24 @@ export class EchoGate {
     this.buffer = '';
   }
 
-  /** Фильтр очередного чанка: что из него реально переслать в xterm. */
-  filter(pieces: string[], markCount: number): string {
-    if (!this.suppressing) return pieces.join('');
+  /**
+   * Фильтр очередного чанка: возвращает массив той же длины, что и pieces —
+   * i-й элемент - эффективное (после подавления эха) содержимое i-го куска.
+   * join() всего результата даёт то же, что раньше возвращала единая строка;
+   * поэлементно нужен sessionManager, чтобы верно приписать вывод СВОЕМУ
+   * маркеру, когда в одном чанке их несколько (иначе весь текст чанка
+   * достаётся только первому маркеру, а остальные получают пустой вывод и
+   * ошибочно уходят в fallback детектора).
+   */
+  filter(pieces: string[], markCount: number): string[] {
+    if (!this.suppressing) return pieces;
     if (markCount === 0) {
       this.buffer += pieces.join('');
-      return '';
+      return pieces.map(() => '');
     }
     this.suppressing = false;
     this.buffer = '';
-    return '\r\x1b[K' + pieces.slice(1).join('');
+    return pieces.map((p, i) => (i === 0 ? '\r\x1b[K' : p));
   }
 
   /** Аварийный сброс по таймауту: вернуть накопленное, выключить подавление. */
@@ -178,6 +191,53 @@ export class EchoGate {
     this.buffer = '';
     this.suppressing = false;
     return buffered;
+  }
+}
+
+/**
+ * Гейт «команда действительно выполнялась» (баг: детектор переоткрывается сам).
+ *
+ * Маркер встроен в PS1, т.е. является частью СТРОКИ приглашения. Readline (bash)
+ * перепечатывает приглашение при SIGWINCH, Ctrl+L и tab-completion — вместе с
+ * APC-маркером и СТАРЫМ $?. Открытие/закрытие панели детектора меняет размер
+ * xterm → resize pty → SIGWINCH → «новый» маркер со старым ненулевым exit code →
+ * панель переоткрывается сама, по кругу. То же с пустым Enter: $? не сбрасывается.
+ *
+ * Отличительный признак настоящего завершения команды: с момента прошлого
+ * маркера в pty был отправлен Enter (перерисовки происходят без ввода).
+ * noteInput() считает Enter'ы («кредиты» — многострочная вставка даёт маркер на
+ * каждую строку), consume() тратит кредит на маркер. Кредиты капятся: Enter'ы,
+ * съеденные интерактивной программой (не shell'ом), не должны копиться вечно.
+ */
+export class CommandGate {
+  private credits = 0;
+  private hadContent = false;
+
+  noteInput(data: string): void {
+    const enters = data.match(/\r\n|\r|\n/g);
+    if (enters) this.credits = Math.min(this.credits + enters.length, 20);
+    if (/[^\s]/.test(data)) this.hadContent = true;
+  }
+
+  /**
+   * Вызывается на каждый маркер. ran=false — перерисовка приглашения, команда
+   * не выполнялась. typed=false при ran=true — «пустой» Enter без единого
+   * печатного символа: команды не было, $? в маркере остался от предыдущей.
+   */
+  consume(): { ran: boolean; typed: boolean } {
+    if (this.credits === 0) return { ran: false, typed: false };
+    this.credits -= 1;
+    const typed = this.hadContent;
+    // Пока есть кредиты (многострочная вставка), введённый текст относится и к
+    // следующим маркерам; сбрасываем признак только когда кредиты исчерпаны.
+    if (this.credits === 0) this.hadContent = false;
+    return { ran: true, typed };
+  }
+
+  /** Новый shell (переподключение) — прежний ввод не в счёт. */
+  reset(): void {
+    this.credits = 0;
+    this.hadContent = false;
   }
 }
 
