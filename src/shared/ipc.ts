@@ -35,6 +35,7 @@ export const IPC = {
   hostHasSecret: 'hosts:has-secret',
   hostDeleteSecret: 'hosts:delete-secret',
   hostPickKeyFile: 'hosts:pick-key-file',
+  hostsReorder: 'hosts:reorder',
   groupsList: 'groups:list',
   groupCreate: 'groups:create',
   groupRename: 'groups:rename',

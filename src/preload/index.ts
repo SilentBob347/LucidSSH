@@ -59,6 +59,8 @@ const api = {
   updateHost: (id: number, input: HostInput, secret?: string): Promise<void> =>
     ipcRenderer.invoke(IPC.hostUpdate, id, input, secret),
   deleteHost: (id: number): Promise<void> => ipcRenderer.invoke(IPC.hostDelete, id),
+  reorderHosts: (orderedIds: number[]): Promise<void> =>
+    ipcRenderer.invoke(IPC.hostsReorder, orderedIds),
   hostHasSecret: (id: number): Promise<boolean> => ipcRenderer.invoke(IPC.hostHasSecret, id),
   hostDeleteSecret: (id: number): Promise<void> => ipcRenderer.invoke(IPC.hostDeleteSecret, id),
   pickKeyFile: (): Promise<string | null> => ipcRenderer.invoke(IPC.hostPickKeyFile),

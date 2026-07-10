@@ -41,6 +41,21 @@ export function registerHostIpcHandlers(): void {
     return repo.listHosts();
   });
 
+  ipcMain.handle(IPC.hostsReorder, (event, rawIds: unknown): void => {
+    assertSenderIsMainWindow(event);
+    if (!Array.isArray(rawIds) || rawIds.length === 0 || rawIds.length > 1000) {
+      throw new IpcValidationError('orderedIds: non-empty array expected');
+    }
+    const ids = rawIds.map((id) => validateId(id, 'orderedIds[]'));
+    // Все id должны существовать и принадлежать одной группе — иначе можно
+    // было бы переносить хосты между группами в обход createHost/updateHost.
+    const found = ids.map((id) => repo.getHost(id));
+    if (found.some((h) => h === null)) throw new IpcValidationError('orderedIds: host not found');
+    const groupIds = new Set(found.map((h) => h!.groupId ?? null));
+    if (groupIds.size > 1) throw new IpcValidationError('orderedIds: hosts span multiple groups');
+    repo.reorderHosts(ids);
+  });
+
   ipcMain.handle(IPC.groupsList, (event): HostGroup[] => {
     assertSenderIsMainWindow(event);
     return repo.listGroups();

@@ -28,34 +28,72 @@ function HostRow({
   host,
   connected,
   selected,
+  isDragging,
+  dropIndicator,
   onOpen,
   onSelect,
   onEdit,
-  onDelete
+  onDelete,
+  onDragStartReorder,
+  onDragOverReorder,
+  onDropReorder,
+  onDragEndReorder
 }: {
   host: Host;
   connected: boolean;
   selected: boolean;
+  isDragging: boolean;
+  dropIndicator: 'before' | 'after' | null;
   onOpen: () => void;
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onDragStartReorder: () => void;
+  onDragOverReorder: (position: 'before' | 'after') => void;
+  onDropReorder: () => void;
+  onDragEndReorder: () => void;
 }): JSX.Element {
   const { t } = useTranslation();
+  // ::before занят акцентной полосой выбранной строки — индикатор вставки
+  // всегда на ::after, позиция (верх/низ) переключается модификатором.
+  const indicatorClass =
+    dropIndicator === 'before'
+      ? 'after:absolute after:inset-x-2 after:top-0 after:h-[2px] after:rounded-full after:bg-accent after:content-[""]'
+      : dropIndicator === 'after'
+        ? 'after:absolute after:inset-x-2 after:bottom-0 after:h-[2px] after:rounded-full after:bg-accent after:content-[""]'
+        : '';
   return (
     <div
-      // Draggable на таб-бар: открывает/фокусирует сессию (Design_Brief §4.4)
+      // Draggable и на таб-бар (открыть сессию, Design_Brief §4.4), и для
+      // переупорядочивания внутри группы (тот же native drag, два типа данных).
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData('application/x-lucidssh-host', String(host.id));
-        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('application/x-lucidssh-reorder', String(host.id));
+        e.dataTransfer.effectAllowed = 'copyMove';
+        onDragStartReorder();
       }}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes('application/x-lucidssh-reorder')) return;
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        const position = e.clientY - rect.top < rect.height / 2 ? 'before' : 'after';
+        onDragOverReorder(position);
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.types.includes('application/x-lucidssh-reorder')) return;
+        e.preventDefault();
+        onDropReorder();
+      }}
+      onDragEnd={onDragEndReorder}
       onClick={onSelect}
       onDoubleClick={onOpen}
       className={
-        selected
+        (selected
           ? 'group relative my-px flex cursor-default items-center gap-2 rounded-[5px] py-[6px] pr-[6px] pl-2 before:absolute before:top-1 before:bottom-1 before:left-0 before:w-[2px] before:rounded-full before:bg-accent before:content-[""] bg-[rgba(99,102,241,0.12)]'
-          : 'group relative my-px flex cursor-default items-center gap-2 rounded-[5px] py-[6px] pr-[6px] pl-2 hover:bg-bg-elevated'
+          : 'group relative my-px flex cursor-default items-center gap-2 rounded-[5px] py-[6px] pr-[6px] pl-2 hover:bg-bg-elevated') +
+        (isDragging ? ' opacity-40' : '') +
+        (indicatorClass ? ` ${indicatorClass}` : '')
       }
     >
       {connected ? (
@@ -145,6 +183,13 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
   const [snippetHostTarget, setSnippetHostTarget] = useState<Host | null>(null);
   const [extImportOpen, setExtImportOpen] = useState(false);
 
+  // Переупорядочивание хостов внутри группы перетаскиванием (только внутри
+  // одной и той же группы/«без группы» — перенос между группами делает Edit).
+  const [dragHost, setDragHost] = useState<{ id: number; groupId: number | null } | null>(null);
+  const [overRow, setOverRow] = useState<{ id: number; position: 'before' | 'after' } | null>(
+    null
+  );
+
   const q = query.trim();
 
   const groupByIdName = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
@@ -214,6 +259,21 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
     await window.lucidSSH.resolveHostSnippets(host.id, action);
     await window.lucidSSH.deleteHost(host.id);
     setSnippetHostTarget(null);
+    await refresh();
+  };
+
+  const dropOnRow = async (groupHostsList: Host[], targetId: number): Promise<void> => {
+    if (!dragHost || !overRow || overRow.id !== targetId || dragHost.id === targetId) return;
+    const ids = groupHostsList.map((h) => h.id);
+    const from = ids.indexOf(dragHost.id);
+    if (from === -1) return;
+    ids.splice(from, 1);
+    let to = ids.indexOf(targetId);
+    if (overRow.position === 'after') to += 1;
+    ids.splice(to, 0, dragHost.id);
+    setDragHost(null);
+    setOverRow(null);
+    await window.lucidSSH.reorderHosts(ids);
     await refresh();
   };
 
@@ -383,10 +443,22 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
                         host={h}
                         connected={connectedHostIds.has(h.id)}
                         selected={selectedHostId === h.id}
+                        isDragging={dragHost?.id === h.id}
+                        dropIndicator={overRow?.id === h.id ? overRow.position : null}
                         onOpen={() => void connect(h.id)}
                         onSelect={() => setSelectedHostId(h.id)}
                         onEdit={() => openDrawer({ editHost: h })}
                         onDelete={() => setDeleteTarget(h)}
+                        onDragStartReorder={() => setDragHost({ id: h.id, groupId: h.groupId ?? null })}
+                        onDragOverReorder={(position) => {
+                          if (dragHost?.groupId !== (h.groupId ?? null)) return;
+                          setOverRow({ id: h.id, position });
+                        }}
+                        onDropReorder={() => void dropOnRow(groupHosts, h.id)}
+                        onDragEndReorder={() => {
+                          setDragHost(null);
+                          setOverRow(null);
+                        }}
                       />
                     ))}
                 </div>
@@ -398,10 +470,22 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
                 host={h}
                 connected={connectedHostIds.has(h.id)}
                 selected={selectedHostId === h.id}
+                isDragging={dragHost?.id === h.id}
+                dropIndicator={overRow?.id === h.id ? overRow.position : null}
                 onOpen={() => void connect(h.id)}
                 onSelect={() => setSelectedHostId(h.id)}
                 onEdit={() => openDrawer({ editHost: h })}
                 onDelete={() => setDeleteTarget(h)}
+                onDragStartReorder={() => setDragHost({ id: h.id, groupId: h.groupId ?? null })}
+                onDragOverReorder={(position) => {
+                  if (dragHost?.groupId !== (h.groupId ?? null)) return;
+                  setOverRow({ id: h.id, position });
+                }}
+                onDropReorder={() => void dropOnRow(ungrouped, h.id)}
+                onDragEndReorder={() => {
+                  setDragHost(null);
+                  setOverRow(null);
+                }}
               />
             ))}
           </>

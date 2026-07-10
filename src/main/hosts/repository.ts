@@ -131,6 +131,16 @@ export function deleteHost(id: number): void {
   openHostsDb().prepare('DELETE FROM hosts WHERE id = ?').run(id);
 }
 
+/** Порядок хостов внутри группы (drag-and-drop в сайдбаре). */
+export function reorderHosts(orderedIds: number[]): void {
+  const db = openHostsDb();
+  const update = db.prepare('UPDATE hosts SET sort_order = ? WHERE id = ?');
+  const run = db.transaction((ids: number[]) => {
+    ids.forEach((id, index) => update.run(index, id));
+  });
+  run(orderedIds);
+}
+
 /** Для показа имени сервера рядом с known_hosts (SET-04). */
 export function findHostByAddressPort(address: string, port: number): Host | null {
   const row = openHostsDb()
