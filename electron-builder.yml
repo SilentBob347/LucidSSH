@@ -28,6 +28,9 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  # Не пересоздавать удалённый пользователем ярлык рабочего стола при
+  # переустановке/обновлении — см. build/installer.nsh.
+  include: build/installer.nsh
 # Источник обновлений (OQ-08): публичный GitHub Releases, без токена (SIGN-02).
 # owner/repo — плейсхолдеры, подставляются перед первым релизом. Из этого блока
 # electron-builder генерирует app-update.yml, который читает electron-updater.
