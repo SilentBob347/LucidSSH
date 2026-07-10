@@ -55,6 +55,7 @@ CREATE TABLE hosts (
   group_id      INTEGER REFERENCES groups(id) ON DELETE SET NULL,
   proxy_jump    TEXT,                        -- host id или строка ProxyJump (SSH-05)
   note          TEXT,
+  color_tag     TEXT,                        -- 'red'|'orange'|'green'|'blue'|'gray'|NULL (без метки), HM-08
   guard_enabled INTEGER NOT NULL DEFAULT 1,  -- отключение стража на хост (GUARD-05)
   sort_order    INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT    NOT NULL,
@@ -68,6 +69,7 @@ CREATE TABLE hosts (
 
 ```ts
 type AuthMethod = 'password' | 'key';
+type HostColorTag = 'red' | 'orange' | 'green' | 'blue' | 'gray'; // HM-08
 
 interface HostGroup {
   id: number;
@@ -88,6 +90,7 @@ interface Host {
   groupId?: number;
   proxyJump?: string;
   note?: string;
+  colorTag?: HostColorTag;  // HM-08, undefined/null = без метки
   guardEnabled: boolean;
   sortOrder: number;
   createdAt: string;
@@ -209,6 +212,7 @@ CREATE TABLE snippets (
                                             -- при удалении хоста: NULL (перевести в глобальные)
                                             -- или запись удаляется — по выбору пользователя (SNIP-07)
   danger      INTEGER NOT NULL DEFAULT 0,   -- 1 если команда матчит паттерн опасных команд
+  sort_order  INTEGER NOT NULL DEFAULT 0,   -- ручной порядок в рамках своей группы (host_id или NULL); SNIP-10
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );
@@ -216,6 +220,8 @@ CREATE TABLE snippets (
 CREATE INDEX idx_snippets_host ON snippets(host_id);
 CREATE INDEX idx_snippets_danger ON snippets(danger);
 ```
+
+> **sort_order (SNIP-10):** уникален и последователен в пределах группы (все записи с одинаковым `host_id`, включая NULL для глобальных); при вставке новой записи присваивается `max(sort_order)+1` в своей группе.
 
 ```ts
 interface Snippet {
@@ -225,6 +231,7 @@ interface Snippet {
   description?: string;
   hostId?: number;        // undefined / null = глобальный; число = серверный (SNIP-05)
   danger: boolean;        // true если команда матчит паттерн опасных команд (определяется при сохранении)
+  sortOrder: number;      // ручной порядок в рамках своей группы (SNIP-10)
   createdAt: string;
   updatedAt: string;
 }
@@ -462,6 +469,7 @@ interface LucidSSHBridge {
   deleteSnippet(id: number): Promise<void>;
   // Вызывается перед удалением хоста, если у него есть серверные сниппеты (SNIP-07)
   resolveHostSnippets(hostId: number, action: 'delete' | 'make-global'): Promise<void>;
+  reorderSnippets(hostId: number | null, orderedIds: number[]): Promise<void>; // SNIP-10, атомарно переписывает sort_order в пределах группы
 
   // --- Лог соединения ---
   getConnectionLog(sessionId: string): Promise<ConnectionLogEntry[]>;
