@@ -437,8 +437,9 @@ function SecuritySection({ config, update }: { config: AppConfig; update: Update
                 className="flex items-center gap-3 rounded-[6px] border border-[rgba(255,255,255,0.07)] bg-bg-base px-3 py-[9px]"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12.5px] text-text-strong">{h.host}</div>
+                  <div className="truncate text-[12.5px] text-text-strong">{h.name ?? h.host}</div>
                   <div className="truncate font-mono text-[11px] text-text-dim">
+                    {h.name ? `${h.host} · ` : ''}
                     {h.keyType} · {h.fingerprint}
                   </div>
                 </div>

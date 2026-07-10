@@ -46,6 +46,8 @@ export interface TestConnectionResult {
 export interface KnownHostView {
   line: number;
   host: string;
+  /** Имя сервера из менеджера хостов, если найден по адресу+порту (иначе — нет). */
+  name?: string;
   keyType: string;
   fingerprint: string; // SHA256:...
 }

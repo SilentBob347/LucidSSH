@@ -131,6 +131,14 @@ export function deleteHost(id: number): void {
   openHostsDb().prepare('DELETE FROM hosts WHERE id = ?').run(id);
 }
 
+/** Для показа имени сервера рядом с known_hosts (SET-04). */
+export function findHostByAddressPort(address: string, port: number): Host | null {
+  const row = openHostsDb()
+    .prepare('SELECT * FROM hosts WHERE address = ? AND port = ? LIMIT 1')
+    .get(address, port) as HostRow | undefined;
+  return row ? rowToHost(row) : null;
+}
+
 export function hostExists(address: string, username: string): boolean {
   const row = openHostsDb()
     .prepare('SELECT 1 FROM hosts WHERE address = ? AND username = ? LIMIT 1')

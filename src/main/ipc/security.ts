@@ -3,7 +3,8 @@ import { ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type { AppConfig } from '@shared/config';
 import type { KnownHostView } from '@shared/ssh';
-import { listKnownHosts, removeKnownHostLine, sha256Fingerprint } from '../ssh/knownHosts';
+import { listKnownHosts, parseHostToken, removeKnownHostLine, sha256Fingerprint } from '../ssh/knownHosts';
+import { findHostByAddressPort } from '../hosts/repository';
 import { resetConfig } from '../config/store';
 import { assertSenderIsMainWindow, IpcValidationError } from './validate';
 
@@ -16,12 +17,18 @@ import { assertSenderIsMainWindow, IpcValidationError } from './validate';
 export function registerSecurityIpcHandlers(): void {
   ipcMain.handle(IPC.knownHostsList, (event): KnownHostView[] => {
     assertSenderIsMainWindow(event);
-    return listKnownHosts().map((e) => ({
-      line: e.line,
-      host: e.hostPattern,
-      keyType: e.keyType,
-      fingerprint: sha256Fingerprint(Buffer.from(e.keyBase64, 'base64'))
-    }));
+    return listKnownHosts().map((e) => {
+      // hostPattern может содержать несколько алиасов через запятую — имя ищем по первому.
+      const { address, port } = parseHostToken(e.hostPattern.split(',')[0]!);
+      const host = findHostByAddressPort(address, port);
+      return {
+        line: e.line,
+        host: e.hostPattern,
+        name: host?.name,
+        keyType: e.keyType,
+        fingerprint: sha256Fingerprint(Buffer.from(e.keyBase64, 'base64'))
+      };
+    });
   });
 
   ipcMain.handle(IPC.knownHostsDelete, (event, rawLine: unknown): void => {

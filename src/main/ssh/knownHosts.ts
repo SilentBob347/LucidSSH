@@ -25,6 +25,13 @@ function hostToken(address: string, port: number): string {
   return port === 22 ? address : `[${address}]:${port}`;
 }
 
+/** Обратное к hostToken: разбирает `[address]:port` либо просто `address` (порт 22). */
+export function parseHostToken(token: string): { address: string; port: number } {
+  const m = /^\[(.+)]:(\d+)$/.exec(token);
+  if (m) return { address: m[1]!, port: Number(m[2]) };
+  return { address: token, port: 22 };
+}
+
 export function sha256Fingerprint(rawKey: Buffer): string {
   return 'SHA256:' + createHash('sha256').update(rawKey).digest('base64').replace(/=+$/, '');
 }
