@@ -10,13 +10,18 @@ appId: app.lucidssh
 productName: LucidSSH
 directories:
   output: release
-# 1024x1024 PNG — electron-builder сам генерирует .ico со всеми размерами.
+# 1024x1024 PNG — источник иконки для macOS/Linux (electron-builder сам
+# генерирует .icns/.png-сеты). Для Windows используется win.icon ниже —
+# отдельно собранный .ico с рендером под каждый размер (16–256px) из SVG,
+# чтобы мелкие размеры в панели задач/меню «Пуск» не размывались при
+# простом ресайзе одного большого PNG.
 icon: resources/icon.png
 files:
   - out/**
   - assets/**
   - package.json
 win:
+  icon: resources/icon.ico
   target:
     - nsis
     - portable
