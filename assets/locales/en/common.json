@@ -261,7 +261,10 @@
     "previous": "Was",
     "current": "Now",
     "ackChanged": "I verified the new fingerprint via an independent source",
-    "confirmChanged": "Replace key and connect"
+    "confirmChanged": "Replace key and connect",
+    "whereToFind": "Where do I find it",
+    "whereToFindText": "If your hosting provider shows the fingerprint (e.g. in the server console) — compare it against this one. If it doesn't — that's normal for many hosting providers, and you can trust this connection. If the fingerprint changes later, LucidSSH will block the connection and warn you.",
+    "whereToFindMore": "Learn more →"
   },
   "clog": {
     "title": "Connection details",
@@ -620,7 +623,14 @@
       "body": "LucidSSH is a safe SSH client for everyday server work. Manage connections, keep commands at hand, and don't fear dangerous operations — the Guard warns in advance and the error detector tells you what to check.",
       "item1": "Add a server: click + in the Servers panel and enter address, port and credentials.",
       "item2": "Connect: double-click a server or drag it onto the tabs.",
-      "item3": "Work: type commands in the bottom input; the path above is clickable."
+      "item3": "Work: type commands in the bottom input; the path above is clickable.",
+      "fingerprintTitle": "How to verify a server's fingerprint",
+      "fingerprintIntro": "A fingerprint is a short digest of the server's key that confirms you're connecting to your own server, not an impostor.",
+      "fingerprintWhereLabel": "Where to look",
+      "fingerprintWhereVps": "VPS hosting (DigitalOcean, Hetzner, Vultr, Timeweb and similar) — open the server's web console (\"Console\" / \"VNC\") in the control panel and reboot the server: the fingerprint appears in the boot log.",
+      "fingerprintWhereAws": "AWS EC2 — \"Get system log\" in the instance monitoring section.",
+      "fingerprintWhereSelf": "Your own server, home NAS, Raspberry Pi — run this on the server itself:",
+      "fingerprintFallback": "If you couldn't find it anywhere — that's normal, many budget hosting providers don't publish the fingerprint. In that case you can trust the first connection. LucidSSH will remember this fingerprint and warn you if it changes on future connections — protecting you from server impersonation later, even if you can't verify it now."
     },
     "saved": {
       "title": "Saved commands",

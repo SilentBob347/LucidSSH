@@ -13,6 +13,12 @@ interface SnippetDialogState {
   editSnippet?: Snippet;
 }
 
+/** Куда открыть окно справки: конкретная вкладка + опциональный якорь внутри неё. */
+interface HelpTarget {
+  tab?: string;
+  anchor?: string;
+}
+
 interface PanelsStore {
   historyOpen: boolean;
   openHistory: () => void;
@@ -24,7 +30,8 @@ interface PanelsStore {
   openGuide: () => void;
   closeGuide: () => void;
   helpOpen: boolean;
-  openHelp: () => void;
+  helpTarget: HelpTarget | null;
+  openHelp: (target?: HelpTarget) => void;
   closeHelp: () => void;
   snippetDialog: SnippetDialogState | null;
   openSnippetDialog: (command: string, editSnippet?: Snippet) => void;
@@ -44,6 +51,7 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [helpTarget, setHelpTarget] = useState<HelpTarget | null>(null);
   const [snippetDialog, setSnippetDialog] = useState<SnippetDialogState | null>(null);
   const [snippetsRevision, setSnippetsRevision] = useState(0);
   const [historyRevision, setHistoryRevision] = useState(0);
@@ -64,7 +72,11 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
       openGuide: () => setGuideOpen(true),
       closeGuide: () => setGuideOpen(false),
       helpOpen,
-      openHelp: () => setHelpOpen(true),
+      helpTarget,
+      openHelp: (target) => {
+        setHelpTarget(target ?? null);
+        setHelpOpen(true);
+      },
       closeHelp: () => setHelpOpen(false),
       snippetDialog,
       openSnippetDialog: (command, editSnippet) => setSnippetDialog({ command, editSnippet }),
@@ -73,7 +85,16 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
       bumpSnippets: () => setSnippetsRevision((v) => v + 1),
       historyRevision
     }),
-    [historyOpen, settingsOpen, guideOpen, helpOpen, snippetDialog, snippetsRevision, historyRevision]
+    [
+      historyOpen,
+      settingsOpen,
+      guideOpen,
+      helpOpen,
+      helpTarget,
+      snippetDialog,
+      snippetsRevision,
+      historyRevision
+    ]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { usePanels } from '@/stores/panels';
 import { Icon } from '@/components/common/Icon';
@@ -23,8 +23,19 @@ const HOTKEYS: { keys: string; key: string }[] = [
 
 export function HelpScreen(): JSX.Element {
   const { t } = useTranslation();
-  const { closeHelp } = usePanels();
-  const [tab, setTab] = useState<Tab>('start');
+  const { closeHelp, helpTarget } = usePanels();
+  const [tab, setTab] = useState<Tab>((helpTarget?.tab as Tab | undefined) ?? 'start');
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (helpTarget?.tab) setTab(helpTarget.tab as Tab);
+  }, [helpTarget]);
+
+  useEffect(() => {
+    if (!helpTarget?.anchor) return;
+    const el = contentRef.current?.querySelector(`#${helpTarget.anchor}`);
+    el?.scrollIntoView({ block: 'start' });
+  }, [helpTarget, tab]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -87,7 +98,7 @@ export function HelpScreen(): JSX.Element {
           ))}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-[28px] py-6">
+        <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-[28px] py-6">
           {tab === 'hotkeys' ? (
             <>
               <H2>{t('help.tabs.hotkeys')}</H2>
@@ -124,6 +135,34 @@ export function HelpScreen(): JSX.Element {
                   ) : null;
                 })}
               </ul>
+
+              {tab === 'start' && (
+                <div id="fingerprint-help" className="mt-[26px] max-w-[640px] scroll-mt-6">
+                  <h3 className="text-[15px] font-semibold text-text-strong">
+                    {t('help.start.fingerprintTitle')}
+                  </h3>
+                  <p className="mt-[10px] text-[13px] leading-[1.6] text-text-body">
+                    {t('help.start.fingerprintIntro')}
+                  </p>
+                  <div className="mt-[12px] text-[12.5px] font-semibold text-text-dim uppercase">
+                    {t('help.start.fingerprintWhereLabel')}
+                  </div>
+                  <ul className="mt-[8px] flex flex-col gap-[8px] text-[12.5px] leading-[1.55] text-text-muted">
+                    <li>— {t('help.start.fingerprintWhereVps')}</li>
+                    <li>— {t('help.start.fingerprintWhereAws')}</li>
+                    <li>
+                      — {t('help.start.fingerprintWhereSelf')}
+                      <br />
+                      <code className="mt-[4px] inline-block rounded-[4px] border border-border-strong bg-bg-panel px-[8px] py-[3px] font-mono text-[11.5px] text-text-body">
+                        ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+                      </code>
+                    </li>
+                  </ul>
+                  <p className="mt-[12px] text-[12.5px] leading-[1.6] text-text-muted">
+                    {t('help.start.fingerprintFallback')}
+                  </p>
+                </div>
+              )}
             </>
           )}
         </div>

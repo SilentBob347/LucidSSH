@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HostKeyPrompt } from '@shared/ssh';
+import { usePanels } from '@/stores/panels';
 
 /**
  * Модалка проверки отпечатка (SSH-03/04; скриншот 04-Fingerprint).
@@ -17,8 +18,10 @@ export function FingerprintModal({
   onAnswer: (decision: 'accept' | 'reject') => void;
 }): JSX.Element {
   const { t } = useTranslation();
+  const { openHelp } = usePanels();
   const [copied, setCopied] = useState(false);
   const [acked, setAcked] = useState(false);
+  const [fpHelpOpen, setFpHelpOpen] = useState(false);
 
   const copy = (): void => {
     window.lucidSSH.clipboardWrite(prompt.fingerprintSha256);
@@ -48,6 +51,32 @@ export function FingerprintModal({
             ? t('fp.bodyChanged', { host: `${prompt.hostName} (${prompt.address})` })
             : t('fp.bodyFirst')}
         </div>
+
+        {!changed && (
+          <div className="px-[18px] pt-[10px]">
+            <button
+              type="button"
+              onClick={() => setFpHelpOpen((v) => !v)}
+              className="text-[12px] text-lavender-light underline-offset-2 hover:text-[#A5B4FC] hover:underline"
+            >
+              {t('fp.whereToFind')} {fpHelpOpen ? '▴' : '▾'}
+            </button>
+            {fpHelpOpen && (
+              <div className="animate-[esh-fade_.14s_ease] mt-[8px] rounded-[4px] border border-[rgba(255,255,255,0.1)] bg-bg-panel px-3 py-[10px]">
+                <p className="text-[12px] leading-[1.55] text-text-muted">
+                  {t('fp.whereToFindText')}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openHelp({ tab: 'start', anchor: 'fingerprint-help' })}
+                  className="mt-[8px] text-[12px] text-lavender-light underline-offset-2 hover:text-[#A5B4FC] hover:underline"
+                >
+                  {t('fp.whereToFindMore')}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {changed && prompt.previousFingerprint && (
           <div className="mx-[18px] mt-[14px] rounded-[4px] border border-[rgba(255,255,255,0.1)] bg-bg-panel px-3 py-[10px]">
