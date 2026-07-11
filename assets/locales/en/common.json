@@ -173,6 +173,7 @@
     "ram": "RAM",
     "disk": "Disk",
     "uptime": "Uptime",
+    "ping": "Ping",
     "na": "—",
     "toggle": "Hide/show metrics",
     "openModal": "Open server dashboard",

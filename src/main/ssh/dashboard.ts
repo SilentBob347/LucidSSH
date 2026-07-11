@@ -146,7 +146,12 @@ function poll(sessionId: string): void {
     finish({ ...EMPTY_METRICS });
   }, EXEC_TIMEOUT_MS);
 
+  // TERM-08: пинг — время открытия exec-канала (CHANNEL_OPEN → CHANNEL_OPEN_CONFIRMATION),
+  // побочный замер уже идущего опроса дашборда, без отдельных запросов к серверу.
+  // Не время до stream 'close' — там сидит серверный `sleep 0.4` из METRICS_COMMAND.
+  const execStartedAt = Date.now();
   state.client.exec(METRICS_COMMAND, (err, stream) => {
+    const pingMs = Date.now() - execStartedAt;
     if (err) {
       clearTimeout(timeout);
       logProblem('clog.dashboardExecError', { error: err.message });
@@ -160,6 +165,7 @@ function poll(sessionId: string): void {
     stream.on('close', () => {
       clearTimeout(timeout);
       const metrics = parseMetrics(output);
+      metrics.pingMs = pingMs;
       const empty =
         metrics.cpuPercent === null &&
         metrics.ramUsedMb === null &&

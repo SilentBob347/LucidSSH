@@ -17,6 +17,7 @@ describe('parseMetrics (DASH-02)', () => {
       loadAvg15: 0.48,
       netUpKbps: 1.2,
       netDownKbps: 8.4,
+      pingMs: null,
       topProcesses: [
         { pid: 1234, user: 'root', cmd: 'nginx', cpuPercent: 12.5, memPercent: 3.1 },
         { pid: 5678, user: 'www-data', cmd: 'php-fpm', cpuPercent: 8.0, memPercent: 5.5 }
@@ -54,6 +55,7 @@ describe('parseMetrics (DASH-02)', () => {
       loadAvg15: null,
       netUpKbps: null,
       netDownKbps: null,
+      pingMs: null,
       topProcesses: []
     });
   });

@@ -200,6 +200,10 @@ export function ServerDashboardModal({
             />
             <MetaTile label={t('dashboard.modal.loadAvg')} value={loadValue} />
             <MetaTile label={t('dashboard.modal.network')} value={netValue} />
+            <MetaTile
+              label={t('dashboard.ping')}
+              value={metrics?.pingMs == null ? '—' : `${metrics.pingMs}ms`}
+            />
           </div>
 
           <div>

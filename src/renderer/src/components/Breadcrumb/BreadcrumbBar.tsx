@@ -10,7 +10,7 @@ import { useConfig } from '@/stores/config';
  * Ряд breadcrumb + мини-дашборд, 48px (Design_Brief §2.1, §3.3).
  * Breadcrumb: user@host > path с кликабельными сегментами (вставка `cd` через
  * Стража, BRD-02). Привилегия дублируется цветом И текстом (BRD-03, §7 брифа).
- * Дашборд: инлайн CPU/RAM/Disk/uptime, пороги, «—» при недоступности (DASH-03/05).
+ * Дашборд: инлайн CPU/RAM/Disk/пинг, пороги, «—» при недоступности (DASH-03/05).
  */
 
 /** Клик по сегменту → `cd <path до сегмента>` в композер (проходит через Стража). */
@@ -28,16 +28,6 @@ function pathSegments(path: string): { label: string; full: string }[] {
     return [{ label: '~', full: '~' }, ...segs];
   }
   return segs;
-}
-
-function uptimeParts(seconds: number | null): { key: string; params: Record<string, number> } | null {
-  if (seconds === null) return null;
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  return days > 0
-    ? { key: 'dashboard.uptimeDays', params: { days, hours } }
-    : { key: 'dashboard.uptimeHours', params: { hours, mins } };
 }
 
 function Metric({
@@ -199,13 +189,10 @@ export function BreadcrumbBar({
             danger={disk !== null && disk > 90}
           />
           <span className="h-3 w-px bg-[rgba(255,255,255,0.1)]" />
-          <span className="font-mono text-[12px] text-text-muted">
-            ↑{' '}
-            {(() => {
-              const up = uptimeParts(metrics?.uptimeSeconds ?? null);
-              return up ? t(up.key, up.params) : '—';
-            })()}
-          </span>
+          <Metric
+            label={t('dashboard.ping')}
+            value={metrics?.pingMs == null ? '—' : `${metrics.pingMs}ms`}
+          />
         </button>
       )}
     </div>

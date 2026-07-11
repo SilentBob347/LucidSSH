@@ -22,6 +22,8 @@ export interface DashboardMetrics {
   loadAvg15: number | null;
   netUpKbps: number | null;
   netDownKbps: number | null;
+  /** Пинг (TERM-08) — время открытия exec-канала опроса дашборда, мс. */
+  pingMs: number | null;
   /** Топ по CPU, до 5 строк (пусто, если ps недоступен или сервер недоступен). */
   topProcesses: DashboardProcess[];
 }
@@ -37,5 +39,6 @@ export const EMPTY_METRICS: DashboardMetrics = {
   loadAvg15: null,
   netUpKbps: null,
   netDownKbps: null,
+  pingMs: null,
   topProcesses: []
 };
