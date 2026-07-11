@@ -60,18 +60,13 @@ export function HelpScreen(): JSX.Element {
       role="presentation"
     >
       <div
-        className="animate-[esh-pop_.18s_ease] flex h-[600px] max-h-[94%] w-[800px] max-w-[96%] flex-col overflow-hidden rounded-[8px] border border-border-strong bg-bg-base shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
+        className="animate-[esh-pop_.18s_ease] flex h-[680px] max-h-[94%] w-[920px] max-w-[96%] flex-col overflow-hidden rounded-[8px] border border-border-strong bg-bg-base shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
         role="dialog"
         aria-modal="true"
         aria-label={t('help.title')}
       >
         <div className="flex h-9 min-h-9 shrink-0 items-center justify-between border-b border-[rgba(255,255,255,0.06)] bg-bg-panel pr-2 pl-3">
-          <div className="flex items-center gap-2">
-            <span className="flex size-[18px] items-center justify-center rounded-[5px] bg-accent">
-              <Icon name="terminal" size={11} strokeWidth={2.4} className="text-white" />
-            </span>
-            <span className="text-[12.5px] font-semibold text-text-body">{t('help.title')}</span>
-          </div>
+          <span className="text-[12.5px] font-semibold text-text-body">{t('help.title')}</span>
           <button
             type="button"
             aria-label={t('common.close')}
