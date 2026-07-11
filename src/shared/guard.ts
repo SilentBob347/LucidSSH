@@ -11,7 +11,9 @@ export interface DangerousCommandPrompt {
   patternId: string;
   target: string; // реальный путь/объект (GUARD-03)
   scope: DangerScope;
-  /** Что ввести для подтверждения: имя объекта или слово ПОДТВЕРЖДАЮ. */
+  /** 'target' — подтверждение именем объекта, 'word' — общим словом подтверждения. */
+  confirmationKind: 'target' | 'word';
+  /** Текст, который нужно ввести для подтверждения (уже локализован). */
   confirmationText: string;
 }
 

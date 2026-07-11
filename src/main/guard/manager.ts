@@ -9,6 +9,7 @@ import {
   setLastCommand
 } from '../ssh/sessionManager';
 import { analyzeCommand } from './patterns';
+import { t } from '../i18n';
 
 /**
  * Перехват команд Стражем в main process ДО отправки по SSH (GUARD-02).
@@ -47,10 +48,14 @@ export function submitCommand(sessionId: string, command: string): SubmitResult 
     const danger = analyzeCommand(command);
     if (danger) {
       const requestId = randomUUID();
+      // Слово подтверждения (в отличие от имени объекта) — UI-текст, локализуется
+      // здесь через i18n main-процесса; patterns.ts намеренно его не решает (§5a).
+      const confirmationText =
+        danger.confirmationKind === 'word' ? t('guard.confirmWord') : danger.confirmationText;
       pending.set(requestId, {
         sessionId,
         command,
-        confirmationText: danger.confirmationText
+        confirmationText
       });
       const prompt: DangerousCommandPrompt = {
         requestId,
@@ -59,7 +64,8 @@ export function submitCommand(sessionId: string, command: string): SubmitResult 
         patternId: danger.patternId,
         target: danger.target,
         scope: danger.scope,
-        confirmationText: danger.confirmationText
+        confirmationKind: danger.confirmationKind,
+        confirmationText
       };
       return { status: 'blocked', prompt };
     }

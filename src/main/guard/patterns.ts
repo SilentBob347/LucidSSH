@@ -15,7 +15,10 @@ export interface DangerMatch {
   /** Реальная цель из команды (GUARD-03) */
   target: string;
   scope: DangerScope;
-  /** Что нужно ввести для подтверждения: имя объекта или слово ПОДТВЕРЖДАЮ */
+  /** 'target' — подтверждение именем объекта, 'word' — общим словом подтверждения. */
+  confirmationKind: 'target' | 'word';
+  /** Для kind='target' — итоговый текст. Для kind='word' — внутренний плейсхолдер
+   *  (CONFIRM_WORD), реальный локализованный текст подставляет guard/manager.ts. */
   confirmationText: string;
 }
 
@@ -169,6 +172,7 @@ function matchPatterns(part: string): DangerMatch | null {
       patternId: pattern.id,
       target,
       scope,
+      confirmationKind: rawTarget ? 'target' : 'word',
       confirmationText: rawTarget ? lastSegment(rawTarget) : CONFIRM_WORD
     };
   }

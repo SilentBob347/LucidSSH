@@ -324,12 +324,13 @@
   "guard": {
     "title": "Dangerous command",
     "targetLabel": "Affected object:",
+    "confirmWord": "CONFIRM",
     "confirmPrompt": {
       "directory": "Type the folder name to confirm:",
       "file": "Type the file name to confirm:",
       "disk": "Type the device name to confirm:",
       "other": "Type the object name to confirm:",
-      "word": "Type the word ПОДТВЕРЖДАЮ to confirm:"
+      "word": "Type the word {{word}} to confirm:"
     },
     "cancel": "Cancel",
     "confirmDelete": "Delete",

@@ -7,7 +7,7 @@ import type { DangerousCommandPrompt } from '@shared/guard';
  * Модалка Стража (GUARD-02, GUARD-03; скриншот 05-Danger).
  * Красный верхний border, реальная команда с целью, поле type-to-confirm.
  * Кнопка подтверждения активна только когда введённый текст точно совпадает
- * с именем объекта (или словом ПОДТВЕРЖДАЮ).
+ * с именем объекта (или словом подтверждения, локализованным в main).
  */
 export function DangerGuardModal({
   prompt,
@@ -21,9 +21,9 @@ export function DangerGuardModal({
   const { t } = useTranslation();
   const [value, setValue] = useState('');
 
-  const isWord = prompt.confirmationText === 'ПОДТВЕРЖДАЮ';
+  const isWord = prompt.confirmationKind === 'word';
   const promptLabel = isWord
-    ? t('guard.confirmPrompt.word')
+    ? t('guard.confirmPrompt.word', { word: prompt.confirmationText })
     : t(`guard.confirmPrompt.${prompt.scope}`);
   const explanation = t([`guard.explain.${prompt.patternId}`, 'guard.explain.generic'], {
     target: prompt.target

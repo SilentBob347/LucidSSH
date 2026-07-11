@@ -11,6 +11,7 @@ describe('analyzeCommand — срабатывание (GUARD-01)', () => {
     const m = analyzeCommand('rm -rf /var/www');
     expect(m).toMatchObject({ patternId: 'rm-recursive', target: '/var/www', scope: 'directory' });
     expect(m?.confirmationText).toBe('www'); // GUARD-03: реальное имя объекта
+    expect(m?.confirmationKind).toBe('target');
   });
 
   it('rm -fr (другой порядок флагов) и rm -r', () => {
@@ -59,6 +60,7 @@ describe('analyzeCommand — срабатывание (GUARD-01)', () => {
     const m = analyzeCommand(':(){ :|:& };:');
     expect(m?.patternId).toBe('fork-bomb');
     expect(m?.confirmationText).toBe(CONFIRM_WORD);
+    expect(m?.confirmationKind).toBe('word');
   });
 
   it('drop database', () => {
