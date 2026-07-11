@@ -29,6 +29,10 @@ interface PanelsStore {
   guideOpen: boolean;
   openGuide: () => void;
   closeGuide: () => void;
+  /** HM-11: модалка «Быстрое подключение» (Ctrl+K / кнопка в футере хостов). */
+  quickConnectOpen: boolean;
+  openQuickConnect: () => void;
+  closeQuickConnect: () => void;
   helpOpen: boolean;
   helpTarget: HelpTarget | null;
   openHelp: (target?: HelpTarget) => void;
@@ -50,6 +54,7 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [quickConnectOpen, setQuickConnectOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpTarget, setHelpTarget] = useState<HelpTarget | null>(null);
   const [snippetDialog, setSnippetDialog] = useState<SnippetDialogState | null>(null);
@@ -71,6 +76,9 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
       guideOpen,
       openGuide: () => setGuideOpen(true),
       closeGuide: () => setGuideOpen(false),
+      quickConnectOpen,
+      openQuickConnect: () => setQuickConnectOpen(true),
+      closeQuickConnect: () => setQuickConnectOpen(false),
       helpOpen,
       helpTarget,
       openHelp: (target) => {
@@ -89,6 +97,7 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
       historyOpen,
       settingsOpen,
       guideOpen,
+      quickConnectOpen,
       helpOpen,
       helpTarget,
       snippetDialog,

@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { forwardRef, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Host, HostGroup } from '@shared/hosts';
+import { parseQuickConnect } from '@shared/quickConnect';
 import { useHosts } from '@/stores/hosts';
 import { useSessions } from '@/stores/sessions';
 import { usePanels } from '@/stores/panels';
@@ -167,8 +168,8 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
 ): JSX.Element {
   const { t } = useTranslation();
   const { hosts, groups, refresh, openDrawer } = useHosts();
-  const { sessions, connect } = useSessions();
-  const { openSettings } = usePanels();
+  const { sessions, connect, connectQuick } = useSessions();
+  const { openSettings, openQuickConnect } = usePanels();
   const [query, setQuery] = useState('');
   const [selectedHostId, setSelectedHostId] = useState<number | null>(null);
 
@@ -191,6 +192,15 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
   );
 
   const q = query.trim();
+
+  // HM-11 (третий вход): строка вида user@host[:port] в поиске — отдельный
+  // пункт-переход в существующий Quick Connect, не влияет на обычный поиск.
+  const quickConnectMatch = useMemo(() => (q === '' ? null : parseQuickConnect(q)), [q]);
+  const doQuickConnect = (): void => {
+    if (!quickConnectMatch) return;
+    void connectQuick(q);
+    setQuery('');
+  };
 
   const groupByIdName = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
 
@@ -312,6 +322,15 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
             <Icon name="folders" size={15} />
             <AddBadge />
           </button>
+          <button
+            type="button"
+            title={t('hosts.footer.quickConnect')}
+            aria-label={t('hosts.footer.quickConnect')}
+            onClick={openQuickConnect}
+            className="flex size-[22px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated hover:text-text-strong"
+          >
+            <Icon name="zap" size={15} />
+          </button>
         </div>
       </div>
 
@@ -321,11 +340,26 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
           placeholder={t('hosts.searchPlaceholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && quickConnectMatch) doQuickConnect();
+          }}
           className="h-7 w-full rounded-[4px] border border-border-default bg-bg-base px-[9px] text-[12px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent"
         />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-[6px] pt-[2px] pb-2">
+        {quickConnectMatch && (
+          <button
+            type="button"
+            onClick={doQuickConnect}
+            className="my-px flex w-full items-center gap-2 rounded-[5px] bg-accent/10 py-[6px] pr-[6px] pl-2 text-left hover:bg-accent/15"
+          >
+            <span className="shrink-0 text-[12px] text-accent">→</span>
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-accent">
+              {t('hosts.quickConnectPrefix')} <span className="font-mono">{q}</span>
+            </span>
+          </button>
+        )}
         {newGroupOpen && (
           <div className="animate-[esh-fade_.12s_ease] pt-[2px] pb-1">
             <div className="flex items-center gap-[6px] rounded-[5px] border border-border-accent bg-accent/10 px-[6px] py-[5px]">

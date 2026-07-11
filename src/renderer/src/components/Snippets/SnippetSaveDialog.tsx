@@ -33,12 +33,13 @@ export function SnippetSaveDialog({
   const { t } = useTranslation();
   const [name, setName] = useState(editSnippet?.name ?? '');
   const [description, setDescription] = useState(editSnippet?.description ?? '');
-  // По умолчанию «Для сервера», если есть активный хост (SNIP-05)
+  // По умолчанию «Для сервера», если есть активный хост (SNIP-05).
+  // hostId=0 — Quick Connect (HM-11), считается «нет хоста», как undefined.
   const initialScope: 'server' | 'global' = editSnippet
     ? editSnippet.hostId != null
       ? 'server'
       : 'global'
-    : hostId != null
+    : hostId != null && hostId !== 0
       ? 'server'
       : 'global';
   const [scope, setScope] = useState<'server' | 'global'>(initialScope);
@@ -47,7 +48,9 @@ export function SnippetSaveDialog({
   const cmd = editSnippet?.command ?? command;
   const danger = DANGER_HINT.test(cmd);
   const canSave = name.trim().length > 0 && !busy;
-  const canPickServer = hostId != null || editSnippet?.hostId != null;
+  // hostId=0 — Quick Connect (HM-11), нет реального хоста: серверный скоуп недоступен,
+  // иначе снипет «приклеится» ко всем последующим Quick Connect сессиям (общий сентинел).
+  const canPickServer = (hostId != null && hostId !== 0) || editSnippet?.hostId != null;
   const serverHostId = hostId ?? editSnippet?.hostId;
 
   const save = async (): Promise<void> => {

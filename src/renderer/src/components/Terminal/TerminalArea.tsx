@@ -40,7 +40,7 @@ export function TerminalArea(): JSX.Element {
     answerAuthPrompt
   } = useSessions();
   const { config, update, markHint } = useConfig();
-  const { openHistory, openSnippetDialog } = usePanels();
+  const { openHistory, openSnippetDialog, openQuickConnect } = usePanels();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [dashboardModalOpen, setDashboardModalOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(
@@ -179,6 +179,13 @@ export function TerminalArea(): JSX.Element {
           <div className="flex flex-1 flex-col items-center justify-center gap-1">
             <div className="text-[14px] font-medium text-text-dim">{t('terminal.empty.title')}</div>
             <div className="text-[12px] text-text-faint">{t('terminal.empty.description')}</div>
+            <button
+              type="button"
+              onClick={openQuickConnect}
+              className="mt-[14px] text-[12px] text-lavender hover:underline"
+            >
+              {t('terminal.empty.quickConnectPrefix')} <span className="font-mono">user@host</span>
+            </button>
           </div>
         ) : (
           <>
@@ -225,13 +232,17 @@ export function TerminalArea(): JSX.Element {
                   {t('tabs.disconnectedNote', { name: active.hostName })}
                 </div>
                 <div className="pointer-events-auto mt-1 flex flex-col items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void reconnect(active.hostId, active.sessionId)}
-                    className="h-8 w-[168px] rounded-[6px] bg-accent px-4 text-[12.5px] font-medium text-white hover:bg-accent-hover"
-                  >
-                    {t('tabs.reconnect')}
-                  </button>
+                  {/* HM-11: у Quick Connect сессии (hostId=0) нет сохранённого хоста —
+                      переподключаться нечем, только «Закрыть» (крестик на вкладке) и детали. */}
+                  {active.hostId !== 0 && (
+                    <button
+                      type="button"
+                      onClick={() => void reconnect(active.hostId, active.sessionId)}
+                      className="h-8 w-[168px] rounded-[6px] bg-accent px-4 text-[12.5px] font-medium text-white hover:bg-accent-hover"
+                    >
+                      {t('tabs.reconnect')}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setDetailsOpen(true)}

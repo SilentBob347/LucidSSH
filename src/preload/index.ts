@@ -93,6 +93,8 @@ const api = {
   // --- SSH-сессии (SSH-01…07, CLOG) ---
   connectHost: (hostId: number): Promise<{ sessionId: string }> =>
     ipcRenderer.invoke(IPC.sessionConnect, hostId),
+  connectQuick: (input: string): Promise<{ sessionId: string }> =>
+    ipcRenderer.invoke(IPC.sessionConnectQuick, input),
   disconnectSession: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke(IPC.sessionDisconnect, sessionId),
   destroySession: (sessionId: string): Promise<void> =>

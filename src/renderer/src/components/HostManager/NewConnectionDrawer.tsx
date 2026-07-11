@@ -61,18 +61,19 @@ export function NewConnectionDrawer(): JSX.Element | null {
       });
       void window.lucidSSH.hostHasSecret(editHost.id).then(setHasSavedSecret);
     } else {
+      const preset = drawer.presetQuickConnect;
       setForm({
-        name: '',
-        address: '',
-        port: '22',
-        username: '',
+        name: preset ? `${preset.username}@${preset.address}` : '',
+        address: preset?.address ?? '',
+        port: preset ? String(preset.port) : '22',
+        username: preset?.username ?? '',
         authMethod: 'password',
         keyPath: '',
         groupId: drawer.presetGroupId !== undefined ? String(drawer.presetGroupId) : '',
         secret: ''
       });
     }
-  }, [drawer.open, editHost, drawer.presetGroupId]);
+  }, [drawer.open, editHost, drawer.presetGroupId, drawer.presetQuickConnect]);
 
   useEffect(() => {
     if (!drawer.open) return;

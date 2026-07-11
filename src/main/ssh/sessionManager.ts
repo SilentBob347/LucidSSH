@@ -74,6 +74,9 @@ interface ManagedSession {
   /** Канал закрылся с распознанной ssh-connection-ошибкой (nologin и т.п.) —
    *  автопереподключение бессмысленно, см. client.on('close', ...). */
   shellUnavailable?: boolean;
+  /** Имя пользователя для Quick Connect (HM-11, hostId=0 — нет строки в hosts,
+   *  getHost(0) всегда null) — фоллбэк для recordCommand, где обычно берётся из host. */
+  quickConnectUsername?: string;
 }
 
 interface PendingHostKey {
@@ -217,6 +220,61 @@ export async function connectHost(hostId: number): Promise<{ sessionId: string }
 }
 
 /**
+ * Quick Connect (HM-11): подключение по `user@host[:port]` без записи в hosts.
+ * `id: 0` — безопасный sentinel (SQLite AUTOINCREMENT начинается с 1, getHost(0)
+ * всегда null), только пароль (без сохранённого секрета — establish() уже умеет
+ * спрашивать пароль интерактивно, когда getSecretForConnection() ничего не находит).
+ */
+export async function connectQuickHost(
+  address: string,
+  port: number,
+  username: string
+): Promise<{ sessionId: string }> {
+  const host: Host = {
+    id: 0,
+    name: `${username}@${address}`,
+    address,
+    port,
+    username,
+    authMethod: 'password',
+    guardEnabled: true,
+    sortOrder: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  const session: ManagedSession = {
+    id: randomUUID(),
+    hostId: 0,
+    hostName: host.name,
+    client: null,
+    shell: null,
+    cols: 80,
+    rows: 24,
+    status: 'connecting',
+    log: [],
+    userClosed: false,
+    reconnectAttempts: 0,
+    connectStartedAt: Date.now(),
+    breadcrumbParser: new BreadcrumbParser(),
+    outputSinceMark: '',
+    lastCommand: '',
+    lastCommandStartedAt: 0,
+    everConnected: false,
+    firstMarkSeen: false,
+    echoGate: new EchoGate(),
+    commandGate: new CommandGate(),
+    setupSent: false,
+    quickConnectUsername: username
+  };
+  sessions.set(session.id, session);
+  setStatus(session, 'connecting');
+
+  void establish(session, host);
+  return { sessionId: session.id };
+}
+
+/**
  * Один заход на подключение: создаёт Client, вешает все обработчики, зовёт
  * connect(). Возвращает 'ready' при успехе (openShell уже вызван внутри),
  * 'auth-failed' — сервер отклонил аутентификацию ДО открытия сессии и
@@ -315,11 +373,13 @@ function attemptConnect(
           finishDisconnected(session);
           return;
         }
-        if (session.status === 'connected' && loadConfig().connection.autoreconnect) {
+        // HM-11: Quick Connect (hostId=0) не переподключается автоматически —
+        // хост нигде не сохранён, getHost(0) всегда null, реконнектить нечем.
+        if (session.hostId !== 0 && session.status === 'connected' && loadConfig().connection.autoreconnect) {
           scheduleReconnect(session);
           return;
         }
-        if (session.status === 'reconnecting') {
+        if (session.hostId !== 0 && session.status === 'reconnecting') {
           scheduleReconnect(session);
           return;
         }
@@ -690,7 +750,7 @@ function recordCommand(
     command,
     hostId: session.hostId,
     hostName: session.hostName,
-    username: host?.username ?? '',
+    username: host?.username ?? session.quickConnectUsername ?? '',
     exitCode: exitCode ?? undefined,
     guardStatus,
     output

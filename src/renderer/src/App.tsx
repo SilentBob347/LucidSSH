@@ -4,6 +4,8 @@ import { TitleBar } from './components/chrome/TitleBar';
 import { StatusBar } from './components/chrome/StatusBar';
 import { HostPanel } from './components/HostManager/HostPanel';
 import { NewConnectionDrawer } from './components/HostManager/NewConnectionDrawer';
+import { QuickConnectDialog } from './components/HostManager/QuickConnectDialog';
+import { SaveAsHostToast } from './components/HostManager/SaveAsHostToast';
 import { TerminalArea } from './components/Terminal/TerminalArea';
 import { FingerprintModal } from './components/Terminal/FingerprintModal';
 import { CatalogPanel } from './components/CommandCatalog/CatalogPanel';
@@ -29,7 +31,15 @@ import { UpdatesProvider } from './stores/updates';
  */
 function AppBody(): JSX.Element {
   const { hosts, loaded, openDrawer } = useHosts();
-  const { hostKeyPrompt, answerHostKey, sessions, activeSessionId } = useSessions();
+  const {
+    hostKeyPrompt,
+    answerHostKey,
+    sessions,
+    activeSessionId,
+    connectQuick,
+    saveAsHostPrompt,
+    dismissSaveAsHostPrompt
+  } = useSessions();
   const { config, update } = useConfig();
   const {
     historyOpen,
@@ -42,7 +52,10 @@ function AppBody(): JSX.Element {
     guideOpen,
     openGuide,
     closeGuide,
-    helpOpen
+    helpOpen,
+    quickConnectOpen,
+    openQuickConnect,
+    closeQuickConnect
   } = usePanels();
   const { addFingerprintEvent } = useEvents();
   const [previewWelcome, setPreviewWelcome] = useState(false);
@@ -64,6 +77,9 @@ function AppBody(): JSX.Element {
       } else if (e.key === 'F1') {
         e.preventDefault();
         openGuide();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        openQuickConnect();
       } else if (
         // ВРЕМЕННЫЙ dev-хук для визуальной проверки WelcomeScreen без удаления
         // хостов (пачка 9 дизайн-аудита) — import.meta.env.DEV вырезается
@@ -80,7 +96,7 @@ function AppBody(): JSX.Element {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [openSettings, openHistory, openGuide]);
+  }, [openSettings, openHistory, openGuide, openQuickConnect]);
 
   const activeSession = sessions.find((s) => s.sessionId === activeSessionId);
   const leftRef = useRef<HTMLElement>(null);
@@ -129,6 +145,19 @@ function AppBody(): JSX.Element {
       )}
       <StatusBar />
       <NewConnectionDrawer />
+      {quickConnectOpen && (
+        <QuickConnectDialog onConnect={connectQuick} onClose={closeQuickConnect} />
+      )}
+      {saveAsHostPrompt && (
+        <SaveAsHostToast
+          prompt={saveAsHostPrompt}
+          onSave={() => {
+            openDrawer({ presetQuickConnect: saveAsHostPrompt });
+            dismissSaveAsHostPrompt();
+          }}
+          onDismiss={dismissSaveAsHostPrompt}
+        />
+      )}
       {guideOpen && <FeatureGuide onClose={closeGuide} />}
       {helpOpen && <HelpScreen />}
       {hostKeyPrompt && (

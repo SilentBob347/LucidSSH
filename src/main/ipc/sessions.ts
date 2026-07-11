@@ -1,10 +1,12 @@
 import { ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type { ConnectionLogEntry, SessionStatus, TestConnectionResult } from '@shared/ssh';
+import { parseQuickConnect } from '@shared/quickConnect';
 import {
   answerAuthPrompt,
   confirmHostKey,
   connectHost,
+  connectQuickHost,
   destroySession,
   disconnectSession,
   getSession,
@@ -47,6 +49,14 @@ export function registerSessionIpcHandlers(): void {
     assertSenderIsMainWindow(event);
     const hostId = validateId(rawHostId, 'hostId');
     return connectHost(hostId);
+  });
+
+  ipcMain.handle(IPC.sessionConnectQuick, (event, rawInput: unknown): Promise<{ sessionId: string }> => {
+    assertSenderIsMainWindow(event);
+    const input = assertString(rawInput, 'quickConnect', 320);
+    const parsed = parseQuickConnect(input);
+    if (!parsed) throw new IpcValidationError('quickConnect: invalid format');
+    return connectQuickHost(parsed.address, parsed.port, parsed.username);
   });
 
   ipcMain.handle(IPC.sessionDisconnect, (event, rawSessionId: unknown): void => {

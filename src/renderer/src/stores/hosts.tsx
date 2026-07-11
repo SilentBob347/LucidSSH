@@ -11,6 +11,8 @@ export interface DrawerState {
   open: boolean;
   editHost?: Host;
   presetGroupId?: number;
+  /** HM-11: предзаполнение из Quick Connect — хост ещё не существует. */
+  presetQuickConnect?: { address: string; port: number; username: string };
 }
 
 interface HostsStore {

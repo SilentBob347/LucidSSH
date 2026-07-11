@@ -1,15 +1,24 @@
 import type { JSX, ReactNode } from 'react';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthPromptRequest, HostKeyPrompt, SessionInfo, SessionStatus } from '@shared/ssh';
 import type { Breadcrumb } from '@shared/breadcrumb';
 import type { DashboardMetrics } from '@shared/dashboard';
 import type { ErrorExplanation } from '@shared/content';
+import { parseQuickConnect } from '@shared/quickConnect';
 
 /**
  * Стор SSH-сессий: список вкладок, активная сессия, ожидающие подтверждения
  * host key, breadcrumb и метрики дашборда по сессии. Renderer знает только
  * sessionId, статусы и данные-значения (SEC-05).
  */
+
+/** HM-11: предложение сохранить как хост после первого разрешения Quick Connect. */
+export interface SaveAsHostPrompt {
+  sessionId: string;
+  address: string;
+  port: number;
+  username: string;
+}
 
 interface SessionsStore {
   sessions: SessionInfo[];
@@ -22,6 +31,10 @@ interface SessionsStore {
   errors: Record<string, ErrorExplanation>;
   dismissError: (sessionId: string) => void;
   connect: (hostId: number) => Promise<void>;
+  /** HM-11: подключение по `user@host[:port]` без сохранённого хоста. */
+  connectQuick: (input: string) => Promise<void>;
+  saveAsHostPrompt: SaveAsHostPrompt | null;
+  dismissSaveAsHostPrompt: () => void;
   select: (sessionId: string) => void;
   closeTab: (sessionId: string) => Promise<void>;
   reconnect: (hostId: number, oldSessionId: string) => Promise<void>;
@@ -43,6 +56,11 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
   const [breadcrumbs, setBreadcrumbs] = useState<Record<string, Breadcrumb>>({});
   const [dashboards, setDashboards] = useState<Record<string, DashboardMetrics>>({});
   const [errors, setErrors] = useState<Record<string, ErrorExplanation>>({});
+  // HM-11: sessionId → детали Quick Connect, ждущие первого connected/disconnected,
+  // чтобы один раз предложить «Сохранить как хост?». Не влияет на рендер само по
+  // себе — только читается/чистится, наружу отдаётся производный saveAsHostPrompt.
+  const quickConnectPending = useRef(new Map<string, { address: string; port: number; username: string }>());
+  const [saveAsHostPrompt, setSaveAsHostPrompt] = useState<SaveAsHostPrompt | null>(null);
 
   useEffect(() => {
     const offStatus = window.lucidSSH.onSessionStatus(
@@ -58,6 +76,14 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
             delete next[sessionId];
             return next;
           });
+        }
+        // HM-11: первое разрешение (успех или неуспех) — предложить сохранить хост.
+        if (status === 'connected' || status === 'disconnected') {
+          const pending = quickConnectPending.current.get(sessionId);
+          if (pending) {
+            quickConnectPending.current.delete(sessionId);
+            setSaveAsHostPrompt({ sessionId, ...pending });
+          }
         }
       }
     );
@@ -109,6 +135,21 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
     },
     [applyLabels, labels]
   );
+
+  const connectQuick = useCallback(
+    async (input: string) => {
+      const parsed = parseQuickConnect(input);
+      if (!parsed) throw new Error('invalid quick-connect input');
+      const { sessionId } = await window.lucidSSH.connectQuick(input);
+      quickConnectPending.current.set(sessionId, parsed);
+      const list = await window.lucidSSH.listSessions();
+      setSessions(applyLabels(list, labels));
+      setActiveSessionId(sessionId);
+    },
+    [applyLabels, labels]
+  );
+
+  const dismissSaveAsHostPrompt = useCallback(() => setSaveAsHostPrompt(null), []);
 
   const renameTab = useCallback((sessionId: string, name: string) => {
     const trimmed = name.trim().slice(0, 60);
@@ -207,6 +248,9 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       errors,
       dismissError,
       connect,
+      connectQuick,
+      saveAsHostPrompt,
+      dismissSaveAsHostPrompt,
       select: setActiveSessionId,
       closeTab,
       reconnect,
@@ -225,6 +269,9 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       errors,
       dismissError,
       connect,
+      connectQuick,
+      saveAsHostPrompt,
+      dismissSaveAsHostPrompt,
       closeTab,
       reconnect,
       answerHostKey,

@@ -19,6 +19,7 @@
   "hosts": {
     "title": "Servers",
     "searchPlaceholder": "Search servers",
+    "quickConnectPrefix": "Connect to",
     "addServer": "Add server",
     "addGroup": "Create group",
     "groupCount": "{{count}} srv.",
@@ -53,7 +54,8 @@
     },
     "footer": {
       "settings": "Settings",
-      "importPutty": "Import PuTTY"
+      "importPutty": "Import PuTTY",
+      "quickConnect": "Quick Connect (Ctrl+K)"
     },
     "export": {
       "button": "Export hosts",
@@ -111,6 +113,16 @@
     "testOk": "Connection successful",
     "connect": "Connect"
   },
+  "quickConnect": {
+    "title": "Quick Connect",
+    "placeholder": "user@192.0.2.10",
+    "helper": "Connects right away, no host is saved. We'll ask for a password if needed.",
+    "error": "Could not connect. Check the address and try again.",
+    "connecting": "Connecting…",
+    "connect": "Connect",
+    "saveAsHostPrompt": "Save {{target}} as a host?",
+    "saveAsHost": "Save"
+  },
   "welcome": {
     "title": "Welcome to LucidSSH",
     "subtitle": "A simple SSH client for managing servers. Add your first server to connect and start working in the terminal.",
@@ -159,7 +171,8 @@
   "terminal": {
     "empty": {
       "title": "No active session",
-      "description": "Select a server on the left to connect."
+      "description": "Select a server on the left to connect.",
+      "quickConnectPrefix": "or connect directly:"
     },
     "copied": "Copied"
   },
@@ -511,6 +524,7 @@
       "searchPlaceholder": "Search by action or key…",
       "noMatches": "Nothing found",
       "readOnlyNote": "In 1.0 the list is view-only.",
+      "quickConnect": "Quick Connect",
       "openSettings": "Open settings",
       "openHistory": "Open command history",
       "openCatalog": "Open command catalog",
@@ -632,7 +646,16 @@
       "fingerprintWhereVps": "VPS hosting (DigitalOcean, Hetzner, Vultr, Timeweb and similar) — open the server's web console (\"Console\" / \"VNC\") in the control panel and reboot the server: the fingerprint appears in the boot log.",
       "fingerprintWhereAws": "AWS EC2 — \"Get system log\" in the instance monitoring section.",
       "fingerprintWhereSelf": "Your own server, home NAS, Raspberry Pi — run this on the server itself:",
-      "fingerprintFallback": "If you couldn't find it anywhere — that's normal, many budget hosting providers don't publish the fingerprint. In that case you can trust the first connection. LucidSSH will remember this fingerprint and warn you if it changes on future connections — protecting you from server impersonation later, even if you can't verify it now."
+      "fingerprintFallback": "If you couldn't find it anywhere — that's normal, many budget hosting providers don't publish the fingerprint. In that case you can trust the first connection. LucidSSH will remember this fingerprint and warn you if it changes on future connections — protecting you from server impersonation later, even if you can't verify it now.",
+      "quickConnectTitle": "Quick Connect without saving a host",
+      "quickConnectIntro": "For a one-off connection — say, to check out a new server — you don't need to add it to the list. Enter the address as user@host or user@host:port (e.g. root@192.0.2.10:2222), and LucidSSH connects right away.",
+      "quickConnectWaysLabel": "You can open Quick Connect four ways:",
+      "quickConnectWay1": "the ⚡ button in the servers panel header",
+      "quickConnectWay2": "the keyboard shortcut",
+      "quickConnectWay3": "the \"connect directly\" link on the no-active-session screen",
+      "quickConnectWay4": "just start typing user@host in the server search box — a \"Connect\" item appears as the first result",
+      "quickConnectSaveNote": "This kind of connection isn't saved to the server list. After the session, LucidSSH offers to save the server as a host — accept if you plan to connect again: the password goes into Windows' protected credential store, and the server appears in the list on the left.",
+      "quickConnectFingerprintNote": "Fingerprint verification works here too: on first connect you'll see the same confirmation prompt as for saved hosts."
     },
     "saved": {
       "title": "Saved commands",

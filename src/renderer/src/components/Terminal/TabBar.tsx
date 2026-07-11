@@ -186,17 +186,20 @@ export function TabBar({ onToggleDetails }: { onToggleDetails: () => void }): JS
           >
             {t('tabs.rename')}
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              void connect(menu.session.hostId); // дублирование — новая сессия к тому же хосту
-              setMenu(null);
-            }}
-            className="w-full px-3 py-[6px] text-left text-[12.5px] text-text-body hover:bg-bg-elevated-2 hover:text-text-strong"
-          >
-            {t('tabs.duplicate')}
-          </button>
+          {/* HM-11: у Quick Connect сессии (hostId=0) нет хоста, дублировать некуда */}
+          {menu.session.hostId !== 0 && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                void connect(menu.session.hostId); // дублирование — новая сессия к тому же хосту
+                setMenu(null);
+              }}
+              className="w-full px-3 py-[6px] text-left text-[12.5px] text-text-body hover:bg-bg-elevated-2 hover:text-text-strong"
+            >
+              {t('tabs.duplicate')}
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"

@@ -54,6 +54,7 @@ export const IPC = {
 
   // --- SSH-сессии (SSH-01…07, CLOG) ---
   sessionConnect: 'session:connect',
+  sessionConnectQuick: 'session:connect-quick',
   sessionDisconnect: 'session:disconnect',
   sessionDestroy: 'session:destroy',
   sessionList: 'session:list',

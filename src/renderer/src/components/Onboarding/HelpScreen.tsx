@@ -13,6 +13,7 @@ import { Icon } from '@/components/common/Icon';
 type Tab = 'start' | 'saved' | 'guard' | 'error' | 'hotkeys';
 
 const HOTKEYS: { keys: string; key: string }[] = [
+  { keys: 'Ctrl + K', key: 'quickConnect' },
   { keys: 'Ctrl + ,', key: 'openSettings' },
   { keys: 'Ctrl + H', key: 'openHistory' },
   { keys: 'Ctrl + L', key: 'openCatalog' },
@@ -160,6 +161,37 @@ export function HelpScreen(): JSX.Element {
                   </ul>
                   <p className="mt-[12px] text-[12.5px] leading-[1.6] text-text-muted">
                     {t('help.start.fingerprintFallback')}
+                  </p>
+                </div>
+              )}
+
+              {tab === 'start' && (
+                <div id="quick-connect-help" className="mt-[26px] max-w-[640px] scroll-mt-6">
+                  <h3 className="text-[15px] font-semibold text-text-strong">
+                    {t('help.start.quickConnectTitle')}
+                  </h3>
+                  <p className="mt-[10px] text-[13px] leading-[1.6] text-text-body">
+                    {t('help.start.quickConnectIntro')}
+                  </p>
+                  <div className="mt-[12px] text-[12.5px] font-semibold text-text-dim uppercase">
+                    {t('help.start.quickConnectWaysLabel')}
+                  </div>
+                  <ul className="mt-[8px] flex flex-col gap-[8px] text-[12.5px] leading-[1.55] text-text-muted">
+                    <li>— {t('help.start.quickConnectWay1')}</li>
+                    <li>
+                      — {t('help.start.quickConnectWay2')}{' '}
+                      <span className="rounded-[4px] border border-border-strong px-[6px] py-[2px] font-mono text-[11.5px] text-text-body">
+                        Ctrl+K
+                      </span>
+                    </li>
+                    <li>— {t('help.start.quickConnectWay3')}</li>
+                    <li>— {t('help.start.quickConnectWay4')}</li>
+                  </ul>
+                  <p className="mt-[12px] text-[12.5px] leading-[1.6] text-text-muted">
+                    {t('help.start.quickConnectSaveNote')}
+                  </p>
+                  <p className="mt-[12px] text-[12.5px] leading-[1.6] text-text-muted">
+                    {t('help.start.quickConnectFingerprintNote')}
                   </p>
                 </div>
               )}

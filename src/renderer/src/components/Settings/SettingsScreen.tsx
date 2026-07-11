@@ -636,6 +636,7 @@ function HotkeysSection(): JSX.Element {
   const [q, setQ] = useState('');
   const all: Hotkey[] = useMemo(
     () => [
+      { keys: 'Ctrl + K', action: t('settings.hk.quickConnect') },
       { keys: 'Ctrl + ,', action: t('settings.hk.openSettings') },
       { keys: 'Ctrl + H', action: t('settings.hk.openHistory') },
       { keys: 'Ctrl + L', action: t('settings.hk.openCatalog') },
