@@ -8,7 +8,7 @@ import { useSessions } from '@/stores/sessions';
 import { usePanels } from '@/stores/panels';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Icon } from '@/components/common/Icon';
-import { ExternalImportDialog } from './ExternalImportDialog';
+import { AddBadge } from '@/components/common/AddBadge';
 
 /**
  * Левая панель — менеджер хостов (HM-01, HM-02, HM-05; Design_Brief §3.2):
@@ -146,22 +146,6 @@ function HostRow({
   );
 }
 
-/**
- * Бейдж-плюс в углу иконки (шапка «Серверы»): без кружка-подложки — на таком
- * размере (10-11px) он не читался, оставлен только сам плюс акцентным цветом
- * (решение разработчика 07.07.2026).
- */
-function AddBadge(): JSX.Element {
-  return (
-    <span className="pointer-events-none absolute -right-[1px] -bottom-[1px] flex size-[10px] items-center justify-center">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth={4} strokeLinecap="round" aria-hidden="true">
-        <path d="M12 6v12" />
-        <path d="M6 12h12" />
-      </svg>
-    </span>
-  );
-}
-
 export const HostPanel = forwardRef<HTMLElement, { width: number }>(function HostPanel(
   { width },
   ref
@@ -169,7 +153,7 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
   const { t } = useTranslation();
   const { hosts, groups, refresh, openDrawer } = useHosts();
   const { sessions, connect, connectQuick } = useSessions();
-  const { openSettings, openQuickConnect } = usePanels();
+  const { openQuickConnect } = usePanels();
   const [query, setQuery] = useState('');
   const [selectedHostId, setSelectedHostId] = useState<number | null>(null);
 
@@ -182,7 +166,6 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
   const [deleteTarget, setDeleteTarget] = useState<Host | null>(null);
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<HostGroup | null>(null);
   const [snippetHostTarget, setSnippetHostTarget] = useState<Host | null>(null);
-  const [extImportOpen, setExtImportOpen] = useState(false);
 
   // Переупорядочивание хостов внутри группы перетаскиванием (только внутри
   // одной и той же группы/«без группы» — перенос между группами делает Edit).
@@ -525,25 +508,6 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
           </>
         )}
       </div>
-
-      <div className="flex h-10 shrink-0 items-center gap-[6px] border-t border-border-default px-[10px]">
-        <button
-          type="button"
-          onClick={openSettings}
-          className="h-7 flex-1 rounded-[4px] text-[11.5px] text-text-body hover:bg-bg-elevated"
-        >
-          {t('hosts.footer.settings')}
-        </button>
-        <button
-          type="button"
-          onClick={() => setExtImportOpen(true)}
-          className="h-7 flex-1 rounded-[4px] text-[11.5px] text-text-body hover:bg-bg-elevated"
-        >
-          {t('hosts.footer.importPutty')}
-        </button>
-      </div>
-
-      {extImportOpen && <ExternalImportDialog onClose={() => setExtImportOpen(false)} />}
 
       {deleteGroupTarget && (
         <ConfirmDialog

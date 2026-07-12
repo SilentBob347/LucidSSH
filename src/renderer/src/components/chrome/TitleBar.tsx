@@ -12,7 +12,7 @@ import { usePanels } from '@/stores/panels';
  */
 export function TitleBar(): JSX.Element {
   const { t } = useTranslation();
-  const { openGuide } = usePanels();
+  const { openGuide, openSettings } = usePanels();
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -33,6 +33,15 @@ export function TitleBar(): JSX.Element {
           <Icon name="help" size={16} />
         </button>
         <EventsMenu />
+        <button
+          type="button"
+          title={t('titleBar.settings')}
+          aria-label={t('titleBar.settings')}
+          onClick={openSettings}
+          className="app-no-drag flex size-[22px] shrink-0 items-center justify-center rounded-full text-text-muted hover:bg-bg-elevated hover:text-lavender-light"
+        >
+          <Icon name="settings" size={16} />
+        </button>
       </div>
       <div className="flex-1" />
       <div className="app-no-drag flex h-full">

@@ -11,6 +11,7 @@
   },
   "titleBar": {
     "help": "Справка",
+    "settings": "Настройки (Ctrl+,)",
     "minimize": "Свернуть",
     "maximize": "Развернуть",
     "restore": "Восстановить",
@@ -22,6 +23,9 @@
     "quickConnectPrefix": "Подключиться к",
     "addServer": "Добавить сервер",
     "addGroup": "Создать группу",
+    "addHostMenu": {
+      "createHost": "Создать хост"
+    },
     "groupCount": "{{count}} серв.",
     "noGroup": "Без группы",
     "empty": {
@@ -451,6 +455,7 @@
       "connection": "Подключение",
       "security": "Безопасность",
       "interface": "Интерфейс",
+      "import": "Импорт",
       "hotkeys": "Горячие клавиши",
       "about": "О программе"
     },
@@ -496,6 +501,11 @@
       "hostDataDesc": "Экспорт и импорт списка серверов в JSON. Пароли и ключи не экспортируются — только путь к файлу ключа.",
       "exportHosts": "Экспортировать",
       "importHosts": "Импортировать"
+    },
+    "import": {
+      "external": "Импорт из внешних источников",
+      "externalDesc": "PuTTY, ~/.ssh/config. Список источников расширяется по мере поддержки новых программ.",
+      "externalBtn": "Открыть импорт"
     },
     "interface": {
       "language": "Язык интерфейса",

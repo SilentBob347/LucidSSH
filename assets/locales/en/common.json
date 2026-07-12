@@ -11,6 +11,7 @@
   },
   "titleBar": {
     "help": "Help",
+    "settings": "Settings (Ctrl+,)",
     "minimize": "Minimize",
     "maximize": "Maximize",
     "restore": "Restore",
@@ -22,6 +23,9 @@
     "quickConnectPrefix": "Connect to",
     "addServer": "Add server",
     "addGroup": "Create group",
+    "addHostMenu": {
+      "createHost": "Create host"
+    },
     "groupCount": "{{count}} srv.",
     "noGroup": "No group",
     "empty": {
@@ -451,6 +455,7 @@
       "connection": "Connection",
       "security": "Security",
       "interface": "Interface",
+      "import": "Import",
       "hotkeys": "Hotkeys",
       "about": "About"
     },
@@ -496,6 +501,11 @@
       "hostDataDesc": "Export and import the server list as JSON. Passwords and keys are not exported — only the key file path.",
       "exportHosts": "Export",
       "importHosts": "Import"
+    },
+    "import": {
+      "external": "Import from external sources",
+      "externalDesc": "PuTTY, ~/.ssh/config. The list of sources grows as more programs are supported.",
+      "externalBtn": "Open import"
     },
     "interface": {
       "language": "Interface language",

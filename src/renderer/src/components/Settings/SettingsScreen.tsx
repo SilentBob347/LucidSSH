@@ -5,6 +5,7 @@ import type { AppConfig } from '@shared/config';
 import type { KnownHostView } from '@shared/ssh';
 import type { ImportPreview } from '@shared/hosts';
 import { ImportDialog } from '@/components/HostManager/ImportDialog';
+import { ExternalImportDialog } from '@/components/HostManager/ExternalImportDialog';
 import { useConfig, getCurrentConfig } from '@/stores/config';
 import { usePanels } from '@/stores/panels';
 import { useUpdates } from '@/stores/updates';
@@ -21,7 +22,7 @@ import { LogoMark } from '@/components/common/LogoMark';
  * О программе. Запись немедленная (SET-07) — кнопки «Сохранить» нет.
  */
 
-type Section = 'terminal' | 'connection' | 'security' | 'interface' | 'hotkeys' | 'about';
+type Section = 'terminal' | 'connection' | 'security' | 'interface' | 'import' | 'hotkeys' | 'about';
 
 const FONTS = ['JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code'];
 const SIZE_MAP: Record<'small' | 'medium' | 'large', number> = { small: 12, medium: 14, large: 16 };
@@ -71,6 +72,7 @@ export function SettingsScreen({ onOpenGuide }: { onOpenGuide: () => void }): JS
     { k: 'terminal', label: t('settings.sections.terminal') },
     { k: 'connection', label: t('settings.sections.connection') },
     { k: 'security', label: t('settings.sections.security') },
+    { k: 'import', label: t('settings.sections.import') },
     { k: 'hotkeys', label: t('settings.sections.hotkeys') },
     { k: 'about', label: t('settings.sections.about') }
   ];
@@ -124,6 +126,7 @@ export function SettingsScreen({ onOpenGuide }: { onOpenGuide: () => void }): JS
             {section === 'connection' && <ConnectionSection config={config} update={update} />}
             {section === 'security' && <SecuritySection config={config} update={update} />}
             {section === 'interface' && <InterfaceSection config={config} update={update} />}
+            {section === 'import' && <ImportSection />}
             {section === 'hotkeys' && <HotkeysSection />}
             {section === 'about' && <AboutSection onOpenGuide={onOpenGuide} />}
           </div>
@@ -386,21 +389,6 @@ function SecuritySection({ config, update }: { config: AppConfig; update: Update
   const refresh = useCallback(() => void window.lucidSSH.listKnownHosts().then(setHosts), []);
   useEffect(() => refresh(), [refresh]);
 
-  // Экспорт/импорт хостов JSON (EXP-01…04) — по дизайну живут в настройках, не в шапке.
-  const [importState, setImportState] = useState<{ json: string; preview: ImportPreview } | null>(
-    null
-  );
-  const [importError, setImportError] = useState(false);
-  const pickImport = async (): Promise<void> => {
-    setImportError(false);
-    try {
-      const res = await window.lucidSSH.pickImportHosts();
-      if (res) setImportState(res);
-    } catch {
-      setImportError(true);
-    }
-  };
-
   return (
     <>
       <SectionTitle>{t('settings.sections.security')}</SectionTitle>
@@ -457,6 +445,47 @@ function SecuritySection({ config, update }: { config: AppConfig; update: Update
         )}
       </div>
 
+    </>
+  );
+}
+
+/** Импорт хостов (Design_Brief §3.6, решение 11.07.2026): внешние источники
+ *  (PuTTY, ~/.ssh/config — HM-03/HM-04) и собственный JSON-формат LucidSSH
+ *  (EXP-01…04) — карточка JSON раньше жила в «Безопасности», перенесена сюда,
+ *  т.к. про импорт списка хостов, а не про безопасность. Список внешних
+ *  источников расширяется по мере реализации HM-09, HM-10. */
+function ImportSection(): JSX.Element {
+  const { t } = useTranslation();
+  const [extImportOpen, setExtImportOpen] = useState(false);
+  const [importState, setImportState] = useState<{ json: string; preview: ImportPreview } | null>(
+    null
+  );
+  const [importError, setImportError] = useState(false);
+  const pickImport = async (): Promise<void> => {
+    setImportError(false);
+    try {
+      const res = await window.lucidSSH.pickImportHosts();
+      if (res) setImportState(res);
+    } catch {
+      setImportError(true);
+    }
+  };
+
+  return (
+    <>
+      <SectionTitle>{t('settings.sections.import')}</SectionTitle>
+
+      <Card title={t('settings.import.external')}>
+        <div className="mb-2 text-[12px] text-text-muted">{t('settings.import.externalDesc')}</div>
+        <button
+          type="button"
+          onClick={() => setExtImportOpen(true)}
+          className="flex h-[32px] items-center gap-2 rounded-[6px] border border-border-strong bg-bg-base px-3 text-[12.5px] text-text-body hover:text-text-strong"
+        >
+          <Icon name="download" size={14} /> {t('settings.import.externalBtn')}
+        </button>
+      </Card>
+
       <Card title={t('settings.security.hostData')}>
         <div className="mb-2 text-[12px] text-text-muted">{t('settings.security.hostDataDesc')}</div>
         <div className="flex gap-2">
@@ -479,6 +508,8 @@ function SecuritySection({ config, update }: { config: AppConfig; update: Update
           <div className="mt-2 text-[11.5px] text-danger-text">{t('hosts.import.invalidFile')}</div>
         )}
       </Card>
+
+      {extImportOpen && <ExternalImportDialog onClose={() => setExtImportOpen(false)} />}
 
       {importState && (
         <ImportDialog
