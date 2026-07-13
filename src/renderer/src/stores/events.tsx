@@ -3,13 +3,15 @@ import { createContext, useCallback, useContext, useMemo, useState } from 'react
 
 /**
  * Лента событий приложения для иконки в шапке (NOTIF-03): изменение отпечатка
- * сервера (красное, требует действия) и доступное обновление (синее, Этап 9).
- * Хранится в памяти — это не история, а активные оповещения.
+ * сервера (красное, требует действия), доступное обновление (синее, Этап 9)
+ * и неопределённое состояние Стража на хосте (оранжевое — см. XtermView
+ * shellStateUnknown, единый терминал-ввод). Хранится в памяти — это не
+ * история, а активные оповещения.
  */
 
 export interface AppEvent {
   id: string;
-  type: 'fingerprint' | 'update';
+  type: 'fingerprint' | 'update' | 'guardUncertain';
   hostName?: string;
   version?: string;
   createdAt: number;
@@ -19,6 +21,8 @@ interface EventsStore {
   events: AppEvent[];
   addFingerprintEvent: (hostName: string) => void;
   addUpdateEvent: (version: string) => void;
+  addGuardUncertainEvent: (hostName: string) => void;
+  removeGuardUncertainEvent: (hostName: string) => void;
   removeEvent: (id: string) => void;
   clearEvents: () => void;
 }
@@ -49,6 +53,20 @@ export function EventsProvider({ children }: { children: ReactNode }): JSX.Eleme
     });
   }, []);
 
+  const addGuardUncertainEvent = useCallback((hostName: string) => {
+    setEvents((prev) => {
+      if (prev.some((e) => e.type === 'guardUncertain' && e.hostName === hostName)) return prev;
+      return [
+        { id: `gu-${hostName}`, type: 'guardUncertain', hostName, createdAt: Date.now() },
+        ...prev
+      ];
+    });
+  }, []);
+
+  const removeGuardUncertainEvent = useCallback((hostName: string) => {
+    setEvents((prev) => prev.filter((e) => !(e.type === 'guardUncertain' && e.hostName === hostName)));
+  }, []);
+
   const removeEvent = useCallback((id: string) => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
   }, []);
@@ -56,8 +74,24 @@ export function EventsProvider({ children }: { children: ReactNode }): JSX.Eleme
   const clearEvents = useCallback(() => setEvents([]), []);
 
   const value = useMemo<EventsStore>(
-    () => ({ events, addFingerprintEvent, addUpdateEvent, removeEvent, clearEvents }),
-    [events, addFingerprintEvent, addUpdateEvent, removeEvent, clearEvents]
+    () => ({
+      events,
+      addFingerprintEvent,
+      addUpdateEvent,
+      addGuardUncertainEvent,
+      removeGuardUncertainEvent,
+      removeEvent,
+      clearEvents
+    }),
+    [
+      events,
+      addFingerprintEvent,
+      addUpdateEvent,
+      addGuardUncertainEvent,
+      removeGuardUncertainEvent,
+      removeEvent,
+      clearEvents
+    ]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -5,20 +5,30 @@ import { useSessions } from '@/stores/sessions';
 import { TabBar } from './TabBar';
 import { ConnectionLogPanel } from './ConnectionLogPanel';
 import type { DangerousCommandPrompt } from '@shared/guard';
-import { XtermView, destroyTerminal, copySelection, getSelection, pasteText } from './XtermView';
+import {
+  XtermView,
+  destroyTerminal,
+  copySelection,
+  getSelection,
+  insertText,
+  getPendingLine,
+  confirmPendingLine,
+  pasteText
+} from './XtermView';
 import { PastePreviewDialog } from './PastePreviewDialog';
 import { TerminalContextMenu } from './TerminalContextMenu';
 import { TerminalSearchBar } from './TerminalSearchBar';
-import { BottomInputBar } from './BottomInputBar';
 import { HintBar } from './HintBar';
 import { OnboardingHints } from './OnboardingHints';
 import { DangerGuardModal } from '@/components/Guard/DangerGuardModal';
 import { BreadcrumbBar } from '@/components/Breadcrumb/BreadcrumbBar';
 import { ServerDashboardModal } from './ServerDashboardModal';
 import { ErrorDetector } from './ErrorDetector';
-import { insertIntoComposer, getComposerValue } from '@/stores/composerBus';
 import { useConfig, getCurrentConfig } from '@/stores/config';
 import { usePanels } from '@/stores/panels';
+import { useHosts } from '@/stores/hosts';
+import { useEvents } from '@/stores/events';
+import { setComposerInsertHandler, setComposerValueGetter } from '@/stores/composerBus';
 
 /**
  * Центральная область (Design_Brief §3.3): таб-бар, xterm.js, контекстное меню
@@ -40,7 +50,9 @@ export function TerminalArea(): JSX.Element {
     answerAuthPrompt
   } = useSessions();
   const { config, update, markHint } = useConfig();
-  const { openHistory, openSnippetDialog, openQuickConnect } = usePanels();
+  const { openSnippetDialog, openQuickConnect, openSettings } = usePanels();
+  const { hosts, openDrawer } = useHosts();
+  const { addGuardUncertainEvent, removeGuardUncertainEvent } = useEvents();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [dashboardModalOpen, setDashboardModalOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(
@@ -49,8 +61,11 @@ export function TerminalArea(): JSX.Element {
   const [pastePreview, setPastePreview] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [dangerPrompt, setDangerPrompt] = useState<DangerousCommandPrompt | null>(null);
-  const [activeHint, setActiveHint] = useState<'ctrlc' | 'snippet' | null>(null);
+  const [activeHint, setActiveHint] = useState<'snippet' | null>(null);
   const [onboardingDone, setOnboardingDone] = useState(false);
+  /** Не удалось определить «на промпте ли» сессия (busybox без shell-интеграции
+   *  и т.п.) — индикатор в BreadcrumbBar (§ плана «единый терминал-ввод»). */
+  const [shellStateUnknown, setShellStateUnknown] = useState<Record<string, boolean>>({});
   const commandCounts = useRef<Map<string, number>>(new Map());
   const knownIds = useRef<Set<string>>(new Set());
   /** Сессии, где auth-диалог (промпт пароля) уже начался — терминал у них
@@ -69,6 +84,26 @@ export function TerminalArea(): JSX.Element {
   }, [sessions]);
 
   const active = sessions.find((s) => s.sessionId === activeSessionId);
+
+  // Мост composerBus → терминал активной сессии: каталог/история/сниппеты/
+  // breadcrumb-«cd» по-прежнему зовут insertIntoComposer/getComposerValue, не
+  // зная о sessionId — раньше это разруливал BottomInputBar, теперь роль
+  // «текущего поля ввода» у терминала активной сессии (GUARD-04).
+  useEffect(() => {
+    if (!active) {
+      setComposerInsertHandler(null);
+      setComposerValueGetter(null);
+      return;
+    }
+    const sessionId = active.sessionId;
+    setComposerInsertHandler((text) => insertText(sessionId, text));
+    setComposerValueGetter(() => getPendingLine(sessionId));
+    return () => {
+      setComposerInsertHandler(null);
+      setComposerValueGetter(null);
+    };
+  }, [active?.sessionId]);
+
   const showTerminal = active && active.status !== 'disconnected' && active.status !== 'connecting';
   // Промпт пароля/passphrase показывается прямо в терминале (SSH-06) — на
   // время подключения xterm монтируется раньше открытия шелла. Сессии, где
@@ -132,31 +167,24 @@ export function TerminalArea(): JSX.Element {
     [markHint]
   );
 
-  // Одноразовая подсказка: сочетания вроде Ctrl+C работают только когда
-  // фокус в выводе терминала, не в композере (§14 фидбека, 10.07.2026) —
-  // показывается при первом фокусе в поле ввода.
-  const handleComposerFocus = useCallback(() => {
-    const cfg = getCurrentConfig();
-    if (cfg && !cfg.ui.expertMode && (cfg.shownCounts['ctrlcHint'] ?? 0) < 2) {
-      setActiveHint('ctrlc');
-      void markHint('ctrlcHint');
-    }
-  }, [markHint]);
-
   const handlePaste = useCallback((sessionId: string) => {
     void window.lucidSSH.clipboardRead().then((text) => {
       if (!text) return;
       if (text.includes('\n') || text.includes('\r')) {
         setPastePreview(text); // многострочная — предпросмотр (TERM-05)
       } else {
-        pasteText(sessionId, text);
+        insertText(sessionId, text);
       }
     });
   }, []);
 
   return (
     <main className="flex min-w-0 flex-1 flex-col">
-      <TabBar onToggleDetails={() => setDetailsOpen((v) => !v)} />
+      <TabBar
+        onToggleDetails={() => setDetailsOpen((v) => !v)}
+        onToggleCatalog={() => void update('ui.catalogPanelOpen', !(config?.ui.catalogPanelOpen ?? false))}
+        catalogOpen={config?.ui.catalogPanelOpen ?? false}
+      />
 
       {/* Breadcrumb + мини-дашборд (BRD-01, DASH-01) — для живой сессии */}
       {showTerminal && active && (
@@ -164,6 +192,28 @@ export function TerminalArea(): JSX.Element {
           crumb={breadcrumbs[active.sessionId]}
           metrics={dashboards[active.sessionId]}
           onOpenDashboard={() => setDashboardModalOpen(true)}
+          guardEnabled={
+            (config?.guard.globalEnabled ?? true) &&
+            (hosts.find((h) => h.id === active.hostId)?.guardEnabled ?? true)
+          }
+          guardOffReason={
+            !(config?.guard.globalEnabled ?? true)
+              ? 'global'
+              : !(hosts.find((h) => h.id === active.hostId)?.guardEnabled ?? true)
+                ? 'host'
+                : undefined
+          }
+          shellStateUnknown={shellStateUnknown[active.sessionId] ?? false}
+          onOpenGuardSettings={
+            !(config?.guard.globalEnabled ?? true)
+              ? () => openSettings('security')
+              : active.hostId !== 0
+                ? () => {
+                    const host = hosts.find((h) => h.id === active.hostId);
+                    if (host) openDrawer({ editHost: host });
+                  }
+                : undefined
+          }
         />
       )}
       {active && dashboardModalOpen && (
@@ -200,6 +250,13 @@ export function TerminalArea(): JSX.Element {
                   onMultilinePaste={(text) => setPastePreview(text)}
                   authPrompt={activeAuthPrompt}
                   onAuthAnswer={(answers) => void answerAuthPrompt(active.sessionId, answers)}
+                  onDanger={setDangerPrompt}
+                  onCommandSent={() => handleCommandSent(active.sessionId)}
+                  onShellStateChange={(unknown) => {
+                    setShellStateUnknown((prev) => ({ ...prev, [active.sessionId]: unknown }));
+                    if (unknown) addGuardUncertainEvent(active.hostName);
+                    else removeGuardUncertainEvent(active.hostName);
+                  }}
                 />
                 {searchOpen && (
                   <TerminalSearchBar
@@ -268,8 +325,8 @@ export function TerminalArea(): JSX.Element {
         )}
       </div>
 
-      {/* Онбординг-подсказки «Совет N из 3» — над композером, до режима эксперта (§5.1) */}
-      {showOnboarding && showTerminal && active && !config?.terminal.inlineInput && (
+      {/* Онбординг-подсказки «Совет N из 3» (§5.1) */}
+      {showOnboarding && showTerminal && active && (
         <OnboardingHints
           onDone={() => {
             setOnboardingDone(true);
@@ -278,28 +335,9 @@ export function TerminalArea(): JSX.Element {
         />
       )}
 
-      {/* Одноразовая подсказка (SNIP-08 или про фокус терминала) — над композером */}
-      {!showOnboarding && activeHint && showTerminal && active && !config?.terminal.inlineInput && (
-        <HintBar
-          textKey={activeHint === 'ctrlc' ? 'hint.ctrlc' : undefined}
-          onClose={() => setActiveHint(null)}
-        />
-      )}
-
-      {/* Композер команд — перехватывается Стражем (GUARD-02). В режиме «ввод
-          прямо в консоли» поле ~$ скрыто (ввод идёт в pty), но кнопки
-          Истории/Команд остаются — иначе им негде быть (TERM-02). */}
-      {showTerminal && active && (
-        <BottomInputBar
-          sessionId={active.sessionId}
-          onDanger={setDangerPrompt}
-          onOpenHistory={openHistory}
-          onToggleCatalog={() => void update('ui.catalogPanelOpen', !(config?.ui.catalogPanelOpen ?? false))}
-          catalogOpen={config?.ui.catalogPanelOpen ?? false}
-          onCommandSent={() => handleCommandSent(active.sessionId)}
-          hideInput={config?.terminal.inlineInput}
-          onInputFocus={handleComposerFocus}
-        />
+      {/* Одноразовая подсказка SNIP-08 */}
+      {!showOnboarding && activeHint && showTerminal && active && (
+        <HintBar onClose={() => setActiveHint(null)} />
       )}
 
       {ctxMenu && active && (
@@ -310,8 +348,8 @@ export function TerminalArea(): JSX.Element {
           onCopy={() => copySelection(active.sessionId)}
           onPaste={() => handlePaste(active.sessionId)}
           onSaveSnippet={() => {
-            // Сохраняем выделение терминала или текущий ввод композера (SNIP-02)
-            const text = getSelection(active.sessionId) || getComposerValue();
+            // Сохраняем выделение терминала или текущий незавершённый ввод (SNIP-02)
+            const text = getSelection(active.sessionId) || getPendingLine(active.sessionId);
             if (text.trim()) openSnippetDialog(text.trim());
           }}
           onFind={() => setSearchOpen(true)}
@@ -335,7 +373,7 @@ export function TerminalArea(): JSX.Element {
           prompt={dangerPrompt}
           onConfirm={(text) => {
             void window.lucidSSH.confirmDangerousCommand(dangerPrompt.requestId, text);
-            insertIntoComposer(''); // команда ушла на сервер — очищаем композер
+            confirmPendingLine(dangerPrompt.sessionId); // команда ушла на сервер — чистим буфер терминала
             setDangerPrompt(null);
           }}
           onCancel={() => {

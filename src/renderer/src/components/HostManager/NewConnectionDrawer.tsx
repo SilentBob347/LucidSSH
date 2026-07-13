@@ -7,6 +7,7 @@ import { useHosts } from '@/stores/hosts';
 import { useSessions } from '@/stores/sessions';
 import { Icon } from '@/components/common/Icon';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { ToggleRow } from '@/components/Settings/controls';
 
 /**
  * Drawer «Новое подключение» (скриншот 03-Newconn, Design_Brief §3.5):
@@ -24,6 +25,7 @@ interface FormState {
   keyPath: string;
   groupId: string; // '' = без группы
   secret: string; // пароль или passphrase; не хранится дольше сабмита
+  guardEnabled: boolean; // GUARD-05
 }
 
 export function NewConnectionDrawer(): JSX.Element | null {
@@ -57,7 +59,8 @@ export function NewConnectionDrawer(): JSX.Element | null {
         authMethod: editHost.authMethod,
         keyPath: editHost.keyPath ?? '',
         groupId: editHost.groupId !== undefined ? String(editHost.groupId) : '',
-        secret: ''
+        secret: '',
+        guardEnabled: editHost.guardEnabled
       });
       void window.lucidSSH.hostHasSecret(editHost.id).then(setHasSavedSecret);
     } else {
@@ -70,7 +73,8 @@ export function NewConnectionDrawer(): JSX.Element | null {
         authMethod: 'password',
         keyPath: '',
         groupId: drawer.presetGroupId !== undefined ? String(drawer.presetGroupId) : '',
-        secret: ''
+        secret: '',
+        guardEnabled: true
       });
     }
   }, [drawer.open, editHost, drawer.presetGroupId, drawer.presetQuickConnect]);
@@ -106,7 +110,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
     authMethod: form.authMethod,
     keyPath: form.authMethod === 'key' ? form.keyPath.trim() : undefined,
     groupId: form.groupId !== '' ? Number(form.groupId) : undefined,
-    guardEnabled: editHost?.guardEnabled ?? true,
+    guardEnabled: form.guardEnabled,
     proxyJump: editHost?.proxyJump,
     note: editHost?.note
   });
@@ -380,6 +384,13 @@ export function NewConnectionDrawer(): JSX.Element | null {
               ))}
             </select>
           </div>
+
+          <ToggleRow
+            title={t('conn.guardEnabled')}
+            desc={t('conn.guardEnabledDesc')}
+            on={form.guardEnabled}
+            onChange={(v) => set({ guardEnabled: v })}
+          />
 
           {error && (
             <div className="rounded-[6px] border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger-text">

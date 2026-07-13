@@ -7,6 +7,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import type { AppConfig } from '@shared/config';
 import type { AuthPromptRequest } from '@shared/ssh';
+import type { DangerousCommandPrompt } from '@shared/guard';
 import { getCurrentConfig } from '@/stores/config';
 import { attachTerminalWriter, dropTerminalBuffer } from '@/stores/terminalBuffer';
 import { Icon } from '@/components/common/Icon';
@@ -48,11 +49,244 @@ const authInterceptors = new Map<string, (data: string) => void>();
  *  переключениями вкладок — повторная печать давала бы дубль строки). */
 const printedAuthPrompts = new Set<string>();
 
+/**
+ * Единый ввод: терминал сам решает, гнать ли строку через Стража, или
+ * пропускать ввод сырым (см. план «Единый терминал-ввод», 13.07.2026).
+ *
+ * Пока сессия «на промпте» (atPromptState) — печатные символы копятся в
+ * commandBuffers и локально эхуются в xterm (term.write), НЕ уходя на сервер
+ * посимвольно; Enter прогоняет накопленную строку через submitCommand (тот же
+ * IPC, что раньше дёргал композер). Когда сессия НЕ на промпте — считаем, что
+ * шелл занят интерактивной программой (vim/htop): сырой ввод идёт напрямую,
+ * без буферизации, иначе такие программы не будут реагировать на клавиши.
+ *
+ * «На промпте» узнаём из уже существующего сигнала breadcrumb (маркер
+ * shell-интеграции прилетает на КАЖДОЕ приглашение, см. shellIntegration.ts) —
+ * отдельный IPC-канал не нужен. Дефолт — true (fail-safe: пока сигналов не
+ * было, считаем себя на промпте и проверяем).
+ */
+const commandBuffers = new Map<string, string>();
+const atPromptState = new Map<string, boolean>();
+const shellStateUnknown = new Map<string, boolean>();
+const promptTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+const dangerListeners = new Map<string, (prompt: DangerousCommandPrompt) => void>();
+const commandSentListeners = new Map<string, () => void>();
+const shellStateListeners = new Map<string, (unknown: boolean) => void>();
+
+/** Локальная история команд (по стрелкам ↑/↓, как в обычном терминале) — не
+ *  замена реальной shell-истории (нет tab-completion/reverse-search), просто
+ *  последние отправленные строки текущей сессии. */
+const commandHistories = new Map<string, string[]>();
+const MAX_LOCAL_HISTORY = 200;
+/** Индекс просматриваемой записи истории; undefined — не листаем сейчас. */
+const historyIndex = new Map<string, number>();
+/** Черновик текущей строки на момент начала пролистывания — восстанавливается
+ *  при возврате стрелкой вниз ниже самой новой записи. */
+const historyDraft = new Map<string, string>();
+
+/** Сколько ждём маркер breadcrumb после ПЕРВОЙ отправленной в сессии команды,
+ *  прежде чем решить, что shell-интеграция на этом хосте не работает (busybox
+ *  без PROMPT_COMMAND/PS1-fallback и т.п.) — см. план, раздел про fail-safe.
+ *  Таймаут взводится только пока breadcrumb ни разу не приходил: после первого
+ *  подтверждённого маркера механизм считается рабочим, и «нет маркера, пока
+ *  висит долгая интерактивная программа (htop/vim)» — это нормальное
+ *  состояние, а не сигнал поломки (баг из ручного теста 13.07.2026: таймаут
+ *  ложно взводился на КАЖДУЮ команду и вырывал управление у htop через 4с). */
+const PROMPT_TIMEOUT_MS = 4000;
+/** Сессии, где хоть один breadcrumb-маркер уже подтверждённо приходил —
+ *  дальше «нет маркера» просто значит «шелл занят», без таймаута. */
+const shellIntegrationConfirmed = new Set<string>();
+
+function isAtPrompt(sessionId: string): boolean {
+  return atPromptState.get(sessionId) ?? true;
+}
+
+function setShellStateUnknown(sessionId: string, v: boolean): void {
+  if (shellStateUnknown.get(sessionId) === v) return;
+  shellStateUnknown.set(sessionId, v);
+  shellStateListeners.get(sessionId)?.(v);
+}
+
+/** Вызывается на каждый breadcrumb-маркер сессии — «мы точно на промпте». */
+function markAtPrompt(sessionId: string): void {
+  atPromptState.set(sessionId, true);
+  shellIntegrationConfirmed.add(sessionId);
+  const timer = promptTimeouts.get(sessionId);
+  if (timer) {
+    clearTimeout(timer);
+    promptTimeouts.delete(sessionId);
+  }
+  setShellStateUnknown(sessionId, false);
+}
+
+function armPromptTimeout(sessionId: string): void {
+  // Механизм уже подтверждён рабочим — «нет маркера» означает «команда/
+  // программа ещё выполняется», это нормально сколь угодно долго (htop, vim,
+  // вложенный ssh…), таймаут тут не нужен и был бы источником ложных срабатываний.
+  if (shellIntegrationConfirmed.has(sessionId)) return;
+  const existing = promptTimeouts.get(sessionId);
+  if (existing) clearTimeout(existing);
+  promptTimeouts.set(
+    sessionId,
+    setTimeout(() => {
+      promptTimeouts.delete(sessionId);
+      if (!atPromptState.get(sessionId)) {
+        // Маркер так и не пришёл на первую же команду — считаем shell-
+        // интеграцию нерабочей на этом хосте: fail-safe возвращаем проверку
+        // и предупреждаем пользователя (дальше таймаут больше не взводится).
+        atPromptState.set(sessionId, true);
+        setShellStateUnknown(sessionId, true);
+      }
+    }, PROMPT_TIMEOUT_MS)
+  );
+}
+
+let breadcrumbSubscribed = false;
+function ensureBreadcrumbSubscription(): void {
+  if (breadcrumbSubscribed) return;
+  breadcrumbSubscribed = true;
+  window.lucidSSH.onBreadcrumb((sessionId) => markAtPrompt(sessionId));
+}
+
+function clearSessionInputState(sessionId: string): void {
+  commandBuffers.delete(sessionId);
+  atPromptState.delete(sessionId);
+  shellStateUnknown.delete(sessionId);
+  const timer = promptTimeouts.get(sessionId);
+  if (timer) clearTimeout(timer);
+  promptTimeouts.delete(sessionId);
+  commandHistories.delete(sessionId);
+  historyIndex.delete(sessionId);
+  historyDraft.delete(sessionId);
+  shellIntegrationConfirmed.delete(sessionId);
+}
+
+/** Заменяет текущую набранную (но ещё не отправленную) строку на newText —
+ *  стирает старое эхо посимвольным backspace и печатает новое. */
+function setBufferLine(sessionId: string, newText: string): void {
+  const term = cache.get(sessionId)?.term;
+  const old = commandBuffers.get(sessionId) ?? '';
+  if (old.length > 0) term?.write('\b \b'.repeat(old.length));
+  commandBuffers.set(sessionId, newText);
+  if (newText) term?.write(newText);
+}
+
+function historyUp(sessionId: string): void {
+  const hist = commandHistories.get(sessionId) ?? [];
+  if (hist.length === 0) return;
+  let idx = historyIndex.get(sessionId);
+  if (idx === undefined) {
+    historyDraft.set(sessionId, commandBuffers.get(sessionId) ?? '');
+    idx = hist.length;
+  }
+  if (idx <= 0) return;
+  idx -= 1;
+  historyIndex.set(sessionId, idx);
+  setBufferLine(sessionId, hist[idx]!);
+}
+
+function historyDown(sessionId: string): void {
+  const hist = commandHistories.get(sessionId) ?? [];
+  const idx = historyIndex.get(sessionId);
+  if (idx === undefined) return;
+  if (idx >= hist.length - 1) {
+    historyIndex.delete(sessionId);
+    setBufferLine(sessionId, historyDraft.get(sessionId) ?? '');
+    historyDraft.delete(sessionId);
+    return;
+  }
+  const next = idx + 1;
+  historyIndex.set(sessionId, next);
+  setBufferLine(sessionId, hist[next]!);
+}
+
+function finalizeLine(sessionId: string): void {
+  const sent = commandBuffers.get(sessionId) ?? '';
+  commandBuffers.set(sessionId, '');
+  cache.get(sessionId)?.term.write('\r\n');
+  atPromptState.set(sessionId, false);
+  armPromptTimeout(sessionId);
+  historyIndex.delete(sessionId);
+  historyDraft.delete(sessionId);
+  if (sent.trim().length > 0) {
+    const hist = commandHistories.get(sessionId) ?? [];
+    if (hist[hist.length - 1] !== sent) hist.push(sent);
+    while (hist.length > MAX_LOCAL_HISTORY) hist.shift();
+    commandHistories.set(sessionId, hist);
+  }
+  commandSentListeners.get(sessionId)?.();
+}
+
+async function submitBufferedCommand(sessionId: string, command: string): Promise<void> {
+  if (command.trim().length === 0) {
+    commandBuffers.set(sessionId, '');
+    cache.get(sessionId)?.term.write('\r\n');
+    historyIndex.delete(sessionId);
+    historyDraft.delete(sessionId);
+    return;
+  }
+  const result = await window.lucidSSH.submitCommand(sessionId, command);
+  if (result.status === 'blocked') {
+    // Буфер и его эхо в терминале остаются как есть — DangerGuardModal
+    // показывается поверх, пользователь может стереть/поправить сам (§ плана).
+    dangerListeners.get(sessionId)?.(result.prompt);
+  } else {
+    finalizeLine(sessionId);
+  }
+}
+
+/** Обрабатывает один чанк ввода, пока сессия на промпте (см. коммент выше). */
+function handleCommandChar(sessionId: string, data: string): void {
+  // Стрелки вверх/вниз — локальная история (см. commandHistories выше).
+  if (data === '\x1b[A') {
+    historyUp(sessionId);
+    return;
+  }
+  if (data === '\x1b[B') {
+    historyDown(sessionId);
+    return;
+  }
+  // Прочие ESC-последовательности (Home/End и т.п.) буфер не поддерживает —
+  // нет ни автодополнения, ни reverse-search. Целиком игнорируем.
+  if (data.charCodeAt(0) === 0x1b) return;
+  const term = cache.get(sessionId)?.term;
+  for (const ch of data) {
+    const code = ch.charCodeAt(0);
+    if (ch === '\r' || ch === '\n') {
+      const command = commandBuffers.get(sessionId) ?? '';
+      void submitBufferedCommand(sessionId, command);
+      return; // Enter завершает обработку чанка, остаток (если есть) отбрасываем
+    }
+    if (code === 0x03) {
+      // Ctrl+C — на промпте прерывать нечего, но сбрасываем набранную строку
+      // и шлём сигнал на сервер, как ожидает пользователь по привычке.
+      commandBuffers.set(sessionId, '');
+      term?.write('^C\r\n');
+      window.lucidSSH.sendTerminalInput(sessionId, ch);
+      continue;
+    }
+    if (code === 0x7f || code === 0x08) {
+      const buf = commandBuffers.get(sessionId) ?? '';
+      if (buf.length > 0) {
+        commandBuffers.set(sessionId, buf.slice(0, -1));
+        term?.write('\b \b');
+      }
+      continue;
+    }
+    if (code >= 0x20 || ch === '\t') {
+      commandBuffers.set(sessionId, (commandBuffers.get(sessionId) ?? '') + ch);
+      term?.write(ch);
+    }
+    // Прочие управляющие символы игнорируются.
+  }
+}
+
 export function destroyTerminal(sessionId: string): void {
   const c = cache.get(sessionId);
   if (c) {
     dropTerminalBuffer(sessionId);
     authInterceptors.delete(sessionId);
+    clearSessionInputState(sessionId);
     c.term.dispose();
     c.container.remove();
     cache.delete(sessionId);
@@ -108,12 +342,45 @@ export function copySelection(sessionId: string): void {
   if (sel) window.lucidSSH.clipboardWrite(sel);
 }
 
-/** Отправка текста в сессию (одиночная строка вставки; Страж перехватит на Этапе 4). */
+/** Сырая отправка текста в сессию, без буфера/Стража — только когда сессия
+ *  НЕ на промпте (внутри интерактивной программы), см. insertText ниже. */
 export function pasteText(sessionId: string, text: string): void {
   window.lucidSSH.sendTerminalInput(sessionId, text);
 }
 
+/**
+ * Вставка текста из каталога/истории/сниппетов/breadcrumb-«cd» (GUARD-04) и
+ * одиночной строки правым кликом. На промпте — дописывает в буфер строки с
+ * локальным эхо (пройдёт Стража на следующем Enter, как обычный набор с
+ * клавиатуры); вне промпта (внутри vim/htop) — идёт сырым текстом, как раньше.
+ */
+export function insertText(sessionId: string, text: string): void {
+  if (isAtPrompt(sessionId)) {
+    commandBuffers.set(sessionId, (commandBuffers.get(sessionId) ?? '') + text);
+    cache.get(sessionId)?.term.write(text);
+  } else {
+    pasteText(sessionId, text);
+  }
+  // Возвращаем фокус в терминал — иначе он остаётся на кликнутой кнопке
+  // (каталог/история/сниппет), и следующий Enter активирует ЕЁ (нативное
+  // поведение <button>), а не уходит в терминал: команда вставляется повторно.
+  cache.get(sessionId)?.term.focus();
+}
+
+/** Текущий незавершённый ввод на промпте (для «Сохранить как сниппет»). */
+export function getPendingLine(sessionId: string): string {
+  return commandBuffers.get(sessionId) ?? '';
+}
+
+/** Опасная команда подтверждена (DangerGuardModal) — сервер уже её выполняет
+ *  (confirmDangerousCommand сам шлёт), тут только приводим локальное состояние
+ *  терминала в порядок: чистим буфер, печатаем перевод строки. */
+export function confirmPendingLine(sessionId: string): void {
+  finalizeLine(sessionId);
+}
+
 function createTerminal(sessionId: string): Cached {
+  ensureBreadcrumbSubscription();
   const cfg = getCurrentConfig();
   const term = new Terminal({
     fontFamily: `'${cfg?.terminal.font ?? 'JetBrains Mono'}', 'Cascadia Mono', Consolas, monospace`,
@@ -157,7 +424,13 @@ function createTerminal(sessionId: string): Cached {
       intercept(data);
       return;
     }
-    window.lucidSSH.sendTerminalInput(sessionId, data);
+    if (!isAtPrompt(sessionId)) {
+      // Внутри интерактивной программы (vim/htop) — сырой посимвольный поток,
+      // Enter там значит не «выполнить команду».
+      window.lucidSSH.sendTerminalInput(sessionId, data);
+      return;
+    }
+    handleCommandChar(sessionId, data);
   });
 
   // TERM-04 bell: звуковой сигнал при \a, если включён в настройках
@@ -191,7 +464,10 @@ export function XtermView({
   onContextMenu,
   onMultilinePaste,
   authPrompt,
-  onAuthAnswer
+  onAuthAnswer,
+  onDanger,
+  onCommandSent,
+  onShellStateChange
 }: {
   sessionId: string;
   onContextMenu: (x: number, y: number) => void;
@@ -199,6 +475,12 @@ export function XtermView({
   /** Активный промпт пароля/passphrase (SSH-06) — ввод в терминале, как в ssh. */
   authPrompt?: AuthPromptRequest;
   onAuthAnswer?: (answers: string[]) => void;
+  /** Опасная команда, набранная прямо в терминале (GUARD-02) — открыть DangerGuardModal. */
+  onDanger?: (prompt: DangerousCommandPrompt) => void;
+  /** Команда отправлена на сервер (для SNIP-08). */
+  onCommandSent?: () => void;
+  /** Не удалось определить, на промпте ли сессия (busybox без shell-интеграции и т.п.). */
+  onShellStateChange?: (unknown: boolean) => void;
 }): JSX.Element {
   const { t } = useTranslation();
   const hostRef = useRef<HTMLDivElement>(null);
@@ -210,10 +492,16 @@ export function XtermView({
 
   useEffect(() => {
     copyListeners.set(sessionId, () => setShowCopied(true));
+    if (onDanger) dangerListeners.set(sessionId, onDanger);
+    if (onCommandSent) commandSentListeners.set(sessionId, onCommandSent);
+    if (onShellStateChange) shellStateListeners.set(sessionId, onShellStateChange);
     return () => {
       copyListeners.delete(sessionId);
+      dangerListeners.delete(sessionId);
+      commandSentListeners.delete(sessionId);
+      shellStateListeners.delete(sessionId);
     };
-  }, [sessionId]);
+  }, [sessionId, onDanger, onCommandSent, onShellStateChange]);
 
   useEffect(() => {
     if (!showCopied) return;
@@ -272,7 +560,7 @@ export function XtermView({
         void window.lucidSSH.clipboardRead().then((text) => {
           if (!text) return;
           if (text.includes('\n') || text.includes('\r')) cbRef.current.onMultilinePaste(text);
-          else window.lucidSSH.sendTerminalInput(sessionId, text);
+          else insertText(sessionId, text);
         });
         return;
       }

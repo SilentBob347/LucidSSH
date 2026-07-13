@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../ssh/sessionManager', () => ({
   getSession: vi.fn(),
   recordBlockedCommand: vi.fn(),
-  sendInput: vi.fn(),
+  sendCommandLine: vi.fn(),
   setLastCommand: vi.fn()
 }));
 vi.mock('../hosts/repository', () => ({ getHost: vi.fn() }));
@@ -11,7 +11,12 @@ vi.mock('../config/store', () => ({ loadConfig: vi.fn() }));
 vi.mock('./patterns', () => ({ analyzeCommand: vi.fn() }));
 vi.mock('../i18n', () => ({ t: vi.fn((key: string) => key) }));
 
-import { getSession, recordBlockedCommand, sendInput, setLastCommand } from '../ssh/sessionManager';
+import {
+  getSession,
+  recordBlockedCommand,
+  sendCommandLine,
+  setLastCommand
+} from '../ssh/sessionManager';
 import { getHost } from '../hosts/repository';
 import { loadConfig } from '../config/store';
 import { analyzeCommand } from './patterns';
@@ -20,7 +25,7 @@ import { submitCommand, confirmDangerousCommand, cancelDangerousCommand } from '
 
 const mockGetSession = vi.mocked(getSession);
 const mockRecordBlockedCommand = vi.mocked(recordBlockedCommand);
-const mockSendInput = vi.mocked(sendInput);
+const mockSendCommandLine = vi.mocked(sendCommandLine);
 const mockSetLastCommand = vi.mocked(setLastCommand);
 const mockGetHost = vi.mocked(getHost);
 const mockLoadConfig = vi.mocked(loadConfig);
@@ -55,7 +60,7 @@ describe('submitCommand', () => {
     mockGetSession.mockReturnValue(undefined);
     const res = submitCommand('s1', 'ls');
     expect(res).toEqual({ status: 'sent' });
-    expect(mockSendInput).not.toHaveBeenCalled();
+    expect(mockSendCommandLine).not.toHaveBeenCalled();
     expect(mockSetLastCommand).not.toHaveBeenCalled();
   });
 
@@ -63,7 +68,7 @@ describe('submitCommand', () => {
     const res = submitCommand('s1', 'ls -la');
     expect(res).toEqual({ status: 'sent' });
     expect(mockSetLastCommand).toHaveBeenCalledWith('s1', 'ls -la');
-    expect(mockSendInput).toHaveBeenCalledWith('s1', 'ls -la\n');
+    expect(mockSendCommandLine).toHaveBeenCalledWith('s1', 'ls -la');
   });
 
   it('Страж выключен глобально — опасная команда всё равно уходит', () => {
@@ -77,7 +82,7 @@ describe('submitCommand', () => {
     });
     const res = submitCommand('s1', 'rm -rf /var/www');
     expect(res).toEqual({ status: 'sent' });
-    expect(mockSendInput).toHaveBeenCalled();
+    expect(mockSendCommandLine).toHaveBeenCalled();
   });
 
   it('Страж выключен для конкретного хоста — команда уходит', () => {
@@ -120,7 +125,7 @@ describe('submitCommand', () => {
       status: 'blocked',
       prompt: { confirmationKind: 'target', confirmationText: 'www', target: '/var/www' }
     });
-    expect(mockSendInput).not.toHaveBeenCalled();
+    expect(mockSendCommandLine).not.toHaveBeenCalled();
     expect(mockT).not.toHaveBeenCalled();
   });
 
@@ -165,14 +170,14 @@ describe('confirmDangerousCommand', () => {
     const ok = confirmDangerousCommand(id, 'www');
     expect(ok).toBe(true);
     expect(mockSetLastCommand).toHaveBeenLastCalledWith('s1', 'rm -rf /var/www', 'confirmed');
-    expect(mockSendInput).toHaveBeenLastCalledWith('s1', 'rm -rf /var/www\n');
+    expect(mockSendCommandLine).toHaveBeenLastCalledWith('s1', 'rm -rf /var/www');
   });
 
   it('неверный текст — не отправляет и возвращает false', () => {
     const id = block();
     const ok = confirmDangerousCommand(id, 'wrong');
     expect(ok).toBe(false);
-    expect(mockSendInput).not.toHaveBeenCalled();
+    expect(mockSendCommandLine).not.toHaveBeenCalled();
   });
 
   it('повторный вызов с тем же requestId — уже удалён из pending, всегда false', () => {
@@ -185,7 +190,7 @@ describe('confirmDangerousCommand', () => {
   it('неизвестный requestId — false, без побочных эффектов', () => {
     const ok = confirmDangerousCommand('unknown-id', 'www');
     expect(ok).toBe(false);
-    expect(mockSendInput).not.toHaveBeenCalled();
+    expect(mockSendCommandLine).not.toHaveBeenCalled();
   });
 });
 

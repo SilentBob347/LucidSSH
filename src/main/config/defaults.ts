@@ -37,8 +37,7 @@ export function createDefaultConfig(appVersion: string): AppConfig {
       bell: 'off',
       brightBold: true,
       selectToCopy: false,
-      rightClickPaste: false,
-      inlineInput: false
+      rightClickPaste: false
     },
     connection: {
       autoreconnect: true,

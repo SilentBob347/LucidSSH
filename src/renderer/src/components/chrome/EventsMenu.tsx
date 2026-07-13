@@ -34,7 +34,7 @@ export function EventsMenu(): JSX.Element {
         title={t('events.title')}
         aria-label={t('events.title')}
         onClick={() => setOpen((v) => !v)}
-        className="ml-1 flex size-[22px] items-center justify-center rounded-full text-text-muted hover:bg-bg-elevated hover:text-lavender-light"
+        className="flex size-[22px] items-center justify-center rounded-full text-text-muted hover:bg-bg-elevated hover:text-lavender-light"
       >
         <Icon name="bell" size={16} />
         {count > 0 && (
@@ -79,19 +79,27 @@ export function EventsMenu(): JSX.Element {
                 >
                   <span
                     className={`mt-[4px] size-[8px] shrink-0 rounded-full ${
-                      e.type === 'fingerprint' ? 'bg-danger' : 'bg-accent'
+                      e.type === 'fingerprint'
+                        ? 'bg-danger'
+                        : e.type === 'guardUncertain'
+                          ? 'bg-warning'
+                          : 'bg-accent'
                     }`}
                   />
                   <div className="min-w-0">
                     <div className="text-[12.5px] font-medium text-text-strong">
                       {e.type === 'fingerprint'
                         ? t('events.fingerprintTitle')
-                        : t('events.updateTitle')}
+                        : e.type === 'guardUncertain'
+                          ? t('events.guardUncertainTitle')
+                          : t('events.updateTitle')}
                     </div>
                     <div className="text-[11.5px] text-text-dim">
                       {e.type === 'fingerprint'
                         ? t('events.fingerprintBody', { host: e.hostName ?? '' })
-                        : t('events.updateBody', { version: e.version ?? '' })}
+                        : e.type === 'guardUncertain'
+                          ? t('events.guardUncertainBody', { host: e.hostName ?? '' })
+                          : t('events.updateBody', { version: e.version ?? '' })}
                     </div>
                   </div>
                 </div>

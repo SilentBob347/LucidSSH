@@ -5,7 +5,7 @@ import { loadConfig } from '../config/store';
 import {
   getSession,
   recordBlockedCommand,
-  sendInput,
+  sendCommandLine,
   setLastCommand
 } from '../ssh/sessionManager';
 import { analyzeCommand } from './patterns';
@@ -72,7 +72,7 @@ export function submitCommand(sessionId: string, command: string): SubmitResult 
   }
 
   setLastCommand(sessionId, command); // для {original} в детекторе ошибок
-  sendInput(sessionId, command + '\n');
+  sendCommandLine(sessionId, command);
   return { status: 'sent' };
 }
 
@@ -88,7 +88,7 @@ export function confirmDangerousCommand(requestId: string, confirmationText: str
   if (confirmationText !== p.confirmationText) return false;
   // Подтверждённая опасная команда попадёт в историю со статусом confirmed (HIST-05)
   setLastCommand(p.sessionId, p.command, 'confirmed');
-  sendInput(p.sessionId, p.command + '\n');
+  sendCommandLine(p.sessionId, p.command);
   return true;
 }
 

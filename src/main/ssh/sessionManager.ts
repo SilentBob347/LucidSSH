@@ -77,6 +77,10 @@ interface ManagedSession {
   /** Имя пользователя для Quick Connect (HM-11, hostId=0 — нет строки в hosts,
    *  getHost(0) всегда null) — фоллбэк для recordCommand, где обычно берётся из host. */
   quickConnectUsername?: string;
+  /** Ожидаемое эхо только что отправленной через sendCommandLine команды —
+   *  вырезается из вывода сервера, т.к. терминал уже показал её локально
+   *  во время набора (буфер строки на промпте, см. XtermView). */
+  pendingEcho?: { text: string; armedAt: number };
 }
 
 interface PendingHostKey {
@@ -593,7 +597,8 @@ function openShell(session: ManagedSession, client: Client): void {
       // отслеживается exit code для детектора ошибок (ERR-01). EchoGate
       // дополнительно прячет эхо setup-команды (MOTD остаётся видимым).
       stream.on('data', (data: Buffer) => {
-        const { pieces, marks } = session.breadcrumbParser.push(data.toString('utf8'));
+        const raw = stripPendingEcho(session, data.toString('utf8'));
+        const { pieces, marks } = session.breadcrumbParser.push(raw);
         if (!session.setupSent) {
           // MOTD ещё идёт — настройка уходит после паузы в выводе
           clearTimeout(session.setupSilenceTimer);
@@ -799,7 +804,9 @@ function sendShellSetup(session: ManagedSession): void {
   }, ECHO_FLUSH_TIMEOUT_MS);
 }
 
-/** Отправка ввода пользователя в сессию (SEC: проверка через Стража — Этап 4). */
+/** Отправка ввода пользователя в сессию — сырая, без Стража; вызывающая
+ *  сторона (guard/manager.ts или XtermView при «не на промпте») сама решает,
+ *  когда это уместно (см. GUARD-02/04). */
 export function sendInput(sessionId: string, data: string): void {
   const session = sessions.get(sessionId);
   if (!session?.shell) return;
@@ -811,6 +818,50 @@ export function sendInput(sessionId: string, data: string): void {
   // и так съедается firstMarkSeen, кредит ей не нужен.
   session.commandGate.noteInput(data);
   session.shell.write(data);
+}
+
+/** Сколько ждём ожидаемое эхо, прежде чем сдаться и не резать дальнейший
+ *  вывод (сервер без echo, экзотический stty и т.п. — редкость, но лучше
+ *  показать дубль строки, чем потерять реальный вывод навсегда). */
+const PENDING_ECHO_TIMEOUT_MS = 1500;
+
+/**
+ * Отправка ОДОБРЕННОЙ стражем команды (submitCommand/confirmDangerousCommand,
+ * GUARD-02). В отличие от sendInput, дополнительно вырезает из вывода сервера
+ * эхо именно этой команды — терминал уже показал её локально во время набора
+ * (буфер строки на промпте в XtermView), без подавления команда дублировалась
+ * бы на экране (набор + отдельное эхо от pty).
+ */
+export function sendCommandLine(sessionId: string, command: string): void {
+  const session = sessions.get(sessionId);
+  if (!session) return;
+  session.pendingEcho = { text: `${command}\r\n`, armedAt: Date.now() };
+  sendInput(sessionId, `${command}\n`);
+}
+
+/** Вырезает из чанка вывода ожидаемое эхо только что отправленной команды
+ *  (см. sendCommandLine). Хвост, разрезанный между чанками, докапливается
+ *  через укороченный pendingEcho.text, как в BreadcrumbParser.pending. */
+function stripPendingEcho(session: ManagedSession, raw: string): string {
+  const pending = session.pendingEcho;
+  if (!pending) return raw;
+  if (Date.now() - pending.armedAt > PENDING_ECHO_TIMEOUT_MS) {
+    session.pendingEcho = undefined;
+    return raw;
+  }
+  if (raw.length === 0) return raw;
+  if (raw.startsWith(pending.text)) {
+    session.pendingEcho = undefined;
+    return raw.slice(pending.text.length);
+  }
+  if (pending.text.startsWith(raw)) {
+    session.pendingEcho = { text: pending.text.slice(raw.length), armedAt: pending.armedAt };
+    return '';
+  }
+  // Не совпало (сервер прислал что-то раньше эха, echo выключен и т.п.) —
+  // сдаёмся, реальный вывод важнее.
+  session.pendingEcho = undefined;
+  return raw;
 }
 
 /** Изменение размера pty под размер xterm. */

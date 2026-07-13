@@ -11,6 +11,7 @@
   },
   "titleBar": {
     "help": "Help",
+    "history": "History",
     "settings": "Settings (Ctrl+,)",
     "minimize": "Minimize",
     "maximize": "Maximize",
@@ -111,6 +112,8 @@
     "passphraseHelper": "The passphrase you set when creating the key. Not the server password",
     "group": "Group",
     "groupNone": "No group",
+    "guardEnabled": "Dangerous command Guard",
+    "guardEnabledDesc": "Check commands on this host before sending them to the server. Only disable if you understand the risk.",
     "saveError": "Could not save the connection. Check the fields and try again.",
     "test": "Test connection",
     "testing": "Testing…",
@@ -183,7 +186,11 @@
   "breadcrumb": {
     "sudoBadge": "sudo",
     "rootBadge": "root",
-    "insertCd": "Insert cd into the input"
+    "insertCd": "Insert cd into the input",
+    "guardOn": "Guard is on for this host. Click for Guard settings.",
+    "guardOff": "Guard is off for this host — commands aren't checked. Click for Guard settings.",
+    "guardOffGlobal": "Guard is off globally (for all hosts) in settings. Click to open Settings → Security.",
+    "shellStateUnknown": "Guard isn't sure about this session — details in notifications 🔔."
   },
   "dashboard": {
     "cpu": "CPU",
@@ -334,7 +341,6 @@
     "dragScroll": "Click and drag to scroll"
   },
   "input": {
-    "placeholder": "Type a command…",
     "history": "History",
     "toggleCatalog": "Command catalog"
   },
@@ -473,9 +479,6 @@
       "selectCopyDesc": "Selected text goes straight to the clipboard.",
       "rightPaste": "Right click = paste",
       "rightPasteDesc": "Paste from the clipboard on right click.",
-      "inlineInput": "Hide the composer input line",
-      "inlineInputDesc": "Hides the separate input line at the bottom - type commands straight into the terminal output. Note: typing directly in the terminal is always possible, even with this off - it only hides the composer.",
-      "inlineInputGuardWarn": "In this mode the Guard does not check commands typed directly in the console. Dangerous-command protection only applies to the bottom input line.",
       "emulationType": "Emulation type",
       "emulationDesc": "Only xterm-256color is available in 1.0."
     },
@@ -593,6 +596,8 @@
     "empty": "No events yet",
     "fingerprintTitle": "Server fingerprint changed",
     "fingerprintBody": "“{{host}}” needs verification before connecting.",
+    "guardUncertainTitle": "Guard isn't sure about this session",
+    "guardUncertainBody": "“{{host}}” — couldn't determine the shell's state, checking blind.",
     "updateTitle": "Update available",
     "updateBody": "Version {{version}} is ready to install.",
     "clear": "Clear"
@@ -624,8 +629,7 @@
   },
   "hint": {
     "snippet": "Use this command often? Save it — a button in history or right-click in the terminal.",
-    "snippetPasteMode": "Use this command often? Save it using the button next to it in history.",
-    "ctrlc": "Keyboard shortcuts (Ctrl+C and others) work when the terminal output is focused, not this field — click the output to switch."
+    "snippetPasteMode": "Use this command often? Save it using the button next to it in history."
   },
   "tips": {
     "tip1": "Click a path segment in the breadcrumb above — it inserts “cd …” into the input.",
@@ -649,7 +653,7 @@
       "body": "LucidSSH is a safe SSH client for everyday server work. Manage connections, keep commands at hand, and don't fear dangerous operations — the Guard warns in advance and the error detector tells you what to check.",
       "item1": "Add a server: click + in the Servers panel and enter address, port and credentials.",
       "item2": "Connect: double-click a server or drag it onto the tabs.",
-      "item3": "Work: type commands in the bottom input; the path above is clickable.",
+      "item3": "Work: type commands right in the terminal; the path above is clickable.",
       "fingerprintTitle": "How to verify a server's fingerprint",
       "fingerprintIntro": "A fingerprint is a short digest of the server's key that confirms you're connecting to your own server, not an impostor.",
       "fingerprintWhereLabel": "Where to look",

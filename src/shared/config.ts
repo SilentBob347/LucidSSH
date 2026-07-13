@@ -45,12 +45,6 @@ export interface AppConfig {
     brightBold: boolean;
     selectToCopy: boolean;
     rightClickPaste: boolean;
-    /**
-     * Ввод команды прямо в консоль (как в обычном терминале). При включении нижнее
-     * поле-композер скрывается. ВНИМАНИЕ: прямой ввод идёт в pty посимвольно и НЕ
-     * проходит через Стража (§4–5) — предупреждение показывается в настройках.
-     */
-    inlineInput: boolean;
   };
   connection: {
     autoreconnect: boolean; // SSH-06, SET-03

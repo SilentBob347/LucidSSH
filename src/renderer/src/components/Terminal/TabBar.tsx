@@ -24,7 +24,15 @@ function StatusDot({ status }: { status: SessionInfo['status'] }): JSX.Element {
   return <span className="size-[7px] shrink-0 rounded-full bg-text-dim" />;
 }
 
-export function TabBar({ onToggleDetails }: { onToggleDetails: () => void }): JSX.Element {
+export function TabBar({
+  onToggleDetails,
+  onToggleCatalog,
+  catalogOpen
+}: {
+  onToggleDetails: () => void;
+  onToggleCatalog: () => void;
+  catalogOpen: boolean;
+}): JSX.Element {
   const { t } = useTranslation();
   const { sessions, activeSessionId, select, closeTab, connect, renameTab, reorderTab } =
     useSessions();
@@ -167,6 +175,19 @@ export function TabBar({ onToggleDetails }: { onToggleDetails: () => void }): JS
             </div>
           );
         })}
+      </div>
+      <div className="flex shrink-0 items-center pr-2 pb-[6px]">
+        <button
+          type="button"
+          title={t('input.toggleCatalog')}
+          aria-label={t('input.toggleCatalog')}
+          onClick={onToggleCatalog}
+          className={`flex size-[26px] items-center justify-center rounded-[4px] hover:bg-bg-elevated ${
+            catalogOpen ? 'bg-accent/15 text-lavender' : 'text-text-muted hover:text-text-strong'
+          }`}
+        >
+          <Icon name="catalog" size={15} />
+        </button>
       </div>
       {menu && (
         <div

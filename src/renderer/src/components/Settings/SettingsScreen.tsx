@@ -11,7 +11,7 @@ import { usePanels } from '@/stores/panels';
 import { useUpdates } from '@/stores/updates';
 import { useSessions } from '@/stores/sessions';
 import { applyTerminalConfig } from '@/components/Terminal/XtermView';
-import { Card, Segment, SectionTitle, Toggle, ToggleRow } from './controls';
+import { Card, Segment, SectionTitle, ToggleRow } from './controls';
 import { Icon } from '@/components/common/Icon';
 import { LogoMark } from '@/components/common/LogoMark';
 
@@ -23,6 +23,15 @@ import { LogoMark } from '@/components/common/LogoMark';
  */
 
 type Section = 'terminal' | 'connection' | 'security' | 'interface' | 'import' | 'hotkeys' | 'about';
+const sectionKeys: Section[] = [
+  'terminal',
+  'connection',
+  'security',
+  'interface',
+  'import',
+  'hotkeys',
+  'about'
+];
 
 const FONTS = ['JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code'];
 const SIZE_MAP: Record<'small' | 'medium' | 'large', number> = { small: 12, medium: 14, large: 16 };
@@ -35,8 +44,12 @@ function sizeKey(px: number): 'small' | 'medium' | 'large' {
 export function SettingsScreen({ onOpenGuide }: { onOpenGuide: () => void }): JSX.Element {
   const { t } = useTranslation();
   const { config, update } = useConfig();
-  const { closeSettings } = usePanels();
-  const [section, setSection] = useState<Section>('interface');
+  const { closeSettings, settingsSection } = usePanels();
+  const isSection = (v: string | null): v is Section =>
+    v !== null && sectionKeys.includes(v as Section);
+  const [section, setSection] = useState<Section>(
+    isSection(settingsSection) ? settingsSection : 'interface'
+  );
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   useEffect(() => {
@@ -198,7 +211,6 @@ function TerminalSection({
   updateTerminal: UpdateFn;
 }): JSX.Element {
   const { t } = useTranslation();
-  const guardOn = config.guard.globalEnabled;
   return (
     <>
       <SectionTitle>{t('settings.sections.terminal')}</SectionTitle>
@@ -257,31 +269,6 @@ function TerminalSection({
         on={config.terminal.rightClickPaste}
         onChange={(v) => void update('terminal.rightClickPaste', v)}
       />
-
-      {/* Ввод прямо в консоли — с предупреждением о Страже (§4–5) */}
-      <div className="rounded-[8px] border border-border-default bg-bg-panel px-[17px] py-[14px]">
-        <div className="flex items-start justify-between gap-[14px]">
-          <div className="min-w-0">
-            <div className="text-[13.5px] font-semibold text-text-strong">
-              {t('settings.terminal.inlineInput')}
-            </div>
-            <div className="mt-[3px] text-[12px] leading-[1.5] text-text-muted">
-              {t('settings.terminal.inlineInputDesc')}
-            </div>
-          </div>
-          <Toggle
-            on={config.terminal.inlineInput}
-            onChange={(v) => void update('terminal.inlineInput', v)}
-            label={t('settings.terminal.inlineInput')}
-          />
-        </div>
-        {config.terminal.inlineInput && guardOn && (
-          <div className="mt-3 flex items-start gap-2 rounded-[6px] border border-warning/25 bg-warning/10 px-3 py-2 text-[11.5px] text-warning-text">
-            <Icon name="alert" size={14} className="mt-[1px] shrink-0" />
-            <span>{t('settings.terminal.inlineInputGuardWarn')}</span>
-          </div>
-        )}
-      </div>
 
       {/* Тип эмуляции — зафиксирован в 1.0, выбор заблокирован (SET-02) */}
       <div className="flex items-center justify-between gap-[14px] rounded-[8px] border border-border-default bg-bg-panel px-[17px] py-[14px] opacity-60">

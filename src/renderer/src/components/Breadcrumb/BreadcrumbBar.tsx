@@ -5,6 +5,7 @@ import type { Breadcrumb } from '@shared/breadcrumb';
 import type { DashboardMetrics } from '@shared/dashboard';
 import { insertIntoComposer } from '@/stores/composerBus';
 import { useConfig } from '@/stores/config';
+import { Icon } from '@/components/common/Icon';
 
 /**
  * Ряд breadcrumb + мини-дашборд, 48px (Design_Brief §2.1, §3.3).
@@ -56,11 +57,25 @@ function Metric({
 export function BreadcrumbBar({
   crumb,
   metrics,
-  onOpenDashboard
+  onOpenDashboard,
+  guardEnabled,
+  guardOffReason,
+  shellStateUnknown,
+  onOpenGuardSettings
 }: {
   crumb: Breadcrumb | undefined;
   metrics: DashboardMetrics | undefined;
   onOpenDashboard: () => void;
+  /** Эффективное состояние Стража для активной сессии (глобально И по хосту). */
+  guardEnabled?: boolean;
+  /** Почему выключен, если выключен — влияет на текст тултипа и на то, куда
+   *  ведёт клик (настройки → Безопасность vs форма конкретного хоста). */
+  guardOffReason?: 'global' | 'host';
+  /** Не удалось определить «на промпте ли» сессия — стража, возможно, не
+   *  проверяет часть ввода на этом хосте (fail-safe продолжает проверять
+   *  вслепую, см. XtermView). Перекрывает цвет индикатора на «внимание». */
+  shellStateUnknown?: boolean;
+  onOpenGuardSettings?: () => void;
 }): JSX.Element {
   const { t } = useTranslation();
   const { config } = useConfig();
@@ -155,6 +170,39 @@ export function BreadcrumbBar({
           <span className="text-text-faint">—</span>
         )}
       </div>
+
+      {/* Индикатор Стража для активной сессии: зелёный — включён, красный —
+          выключен (глобально или для этого хоста), оранжевый — не удалось
+          определить состояние шелла (fail-safe продолжает проверять вслепую,
+          см. XtermView). Клик открывает настройки Стража — кроме оранжевого
+          состояния, там открывать нечего (проблема не в настройке хоста), см.
+          подробности в уведомлениях. */}
+      {guardEnabled !== undefined &&
+        (shellStateUnknown ? (
+          <span
+            title={t('breadcrumb.shellStateUnknown')}
+            className="flex shrink-0 items-center rounded-full p-1 text-warning"
+          >
+            <Icon name="shield-alert" size={18} />
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpenGuardSettings}
+            title={
+              guardEnabled
+                ? t('breadcrumb.guardOn')
+                : guardOffReason === 'global'
+                  ? t('breadcrumb.guardOffGlobal')
+                  : t('breadcrumb.guardOff')
+            }
+            className={`flex shrink-0 items-center rounded-full p-1 hover:bg-bg-elevated ${
+              guardEnabled ? 'text-success-bright' : 'text-danger'
+            }`}
+          >
+            <Icon name={guardEnabled ? 'shield-check' : 'shield-x'} size={18} />
+          </button>
+        ))}
 
       {/* Мини-дашборд — клик открывает полную модалку «Дашборд сервера» */}
       {dashVisible && (

@@ -24,7 +24,10 @@ interface PanelsStore {
   openHistory: () => void;
   closeHistory: () => void;
   settingsOpen: boolean;
-  openSettings: () => void;
+  /** Раздел, на который открыть настройки (напр. «security» с иконки Стража
+   *  у breadcrumb) — опционален, по умолчанию открывается последний раздел. */
+  settingsSection: string | null;
+  openSettings: (section?: string) => void;
   closeSettings: () => void;
   guideOpen: boolean;
   openGuide: () => void;
@@ -53,6 +56,7 @@ const Ctx = createContext<PanelsStore | null>(null);
 export function PanelsProvider({ children }: { children: ReactNode }): JSX.Element {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [quickConnectOpen, setQuickConnectOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -71,7 +75,11 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
       openHistory: () => setHistoryOpen(true),
       closeHistory: () => setHistoryOpen(false),
       settingsOpen,
-      openSettings: () => setSettingsOpen(true),
+      settingsSection,
+      openSettings: (section) => {
+        setSettingsSection(section ?? null);
+        setSettingsOpen(true);
+      },
       closeSettings: () => setSettingsOpen(false),
       guideOpen,
       openGuide: () => setGuideOpen(true),
@@ -96,6 +104,7 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
     [
       historyOpen,
       settingsOpen,
+      settingsSection,
       guideOpen,
       quickConnectOpen,
       helpOpen,
