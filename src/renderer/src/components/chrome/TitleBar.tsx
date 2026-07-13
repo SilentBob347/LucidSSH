@@ -32,6 +32,9 @@ export function TitleBar(): JSX.Element {
         >
           <Icon name="help" size={16} />
         </button>
+      </div>
+      <div className="flex-1" />
+      <div className="app-no-drag flex items-center gap-[11px] pr-[11px]">
         <EventsMenu />
         <button
           type="button"
@@ -43,7 +46,6 @@ export function TitleBar(): JSX.Element {
           <Icon name="settings" size={16} />
         </button>
       </div>
-      <div className="flex-1" />
       <div className="app-no-drag flex h-full">
         <button
           type="button"

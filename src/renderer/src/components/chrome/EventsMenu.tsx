@@ -49,7 +49,7 @@ export function EventsMenu(): JSX.Element {
       </button>
 
       {open && (
-        <div className="animate-[esh-pop_.14s_ease] absolute top-[26px] left-0 z-[70] w-[280px] rounded-[8px] border border-border-strong bg-bg-elevated shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
+        <div className="animate-[esh-pop_.14s_ease] absolute top-[26px] right-0 z-[70] w-[280px] rounded-[8px] border border-border-strong bg-bg-elevated shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
           <div className="flex items-center justify-between border-b border-border-hairline px-3 py-2">
             <span className="text-[12.5px] font-semibold text-text-strong">{t('events.title')}</span>
             {count > 0 && (
