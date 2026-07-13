@@ -467,7 +467,7 @@ function ImportSection(): JSX.Element {
         <button
           type="button"
           onClick={() => setExtImportOpen(true)}
-          className="flex h-[32px] items-center gap-2 rounded-[6px] border border-border-strong bg-bg-base px-3 text-[12.5px] text-text-body hover:text-text-strong"
+          className="flex h-[32px] items-center gap-2 rounded-[6px] border border-[rgba(255,255,255,0.12)] bg-bg-elevated-2 px-3 text-[12.5px] font-medium text-text-strong hover:border-accent"
         >
           <Icon name="download" size={14} /> {t('settings.import.externalBtn')}
         </button>
@@ -479,14 +479,14 @@ function ImportSection(): JSX.Element {
           <button
             type="button"
             onClick={() => void window.lucidSSH.exportHosts()}
-            className="flex h-[32px] items-center gap-2 rounded-[6px] border border-border-strong bg-bg-base px-3 text-[12.5px] text-text-body hover:text-text-strong"
+            className="flex h-[32px] items-center gap-2 rounded-[6px] border border-[rgba(255,255,255,0.12)] bg-bg-elevated-2 px-3 text-[12.5px] font-medium text-text-strong hover:border-accent"
           >
             <Icon name="upload" size={14} /> {t('settings.security.exportHosts')}
           </button>
           <button
             type="button"
             onClick={() => void pickImport()}
-            className="flex h-[32px] items-center gap-2 rounded-[6px] border border-border-strong bg-bg-base px-3 text-[12.5px] text-text-body hover:text-text-strong"
+            className="flex h-[32px] items-center gap-2 rounded-[6px] border border-[rgba(255,255,255,0.12)] bg-bg-elevated-2 px-3 text-[12.5px] font-medium text-text-strong hover:border-accent"
           >
             <Icon name="download" size={14} /> {t('settings.security.importHosts')}
           </button>
