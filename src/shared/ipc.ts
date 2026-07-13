@@ -47,9 +47,11 @@ export const IPC = {
   hostsImportPick: 'hosts:import-pick',
   hostsImportApply: 'hosts:import-apply',
 
-  // --- Импорт из внешних источников (HM-03 PuTTY, HM-04 ssh_config) ---
+  // --- Импорт из внешних источников (HM-03 PuTTY, HM-04 ssh_config, HM-10 WinSCP) ---
   importPuttyPreview: 'import:putty-preview',
   importSshConfigPreview: 'import:ssh-config-preview',
+  importWinScpPreview: 'import:winscp-preview',
+  importWinScpIniPreview: 'import:winscp-ini-preview',
   importExternalApply: 'import:external-apply',
 
   // --- SSH-сессии (SSH-01…07, CLOG) ---

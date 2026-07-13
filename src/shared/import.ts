@@ -1,11 +1,11 @@
 /**
- * Типы импорта хостов из внешних источников (HM-03 PuTTY, HM-04 ssh_config).
- * Импортируемые данные недоверенные (§12 гайда): исполняемые директивы
- * (ProxyCommand, LocalCommand, Match exec, KnownHostsCommand) НЕ выполняются,
- * а показываются как неподдерживаемые.
+ * Типы импорта хостов из внешних источников (HM-03 PuTTY, HM-04 ssh_config,
+ * HM-10 WinSCP). Импортируемые данные недоверенные (§12 гайда): исполняемые
+ * директивы (ProxyCommand, LocalCommand, Match exec, KnownHostsCommand) НЕ
+ * выполняются, а показываются как неподдерживаемые.
  */
 
-export type ImportSource = 'putty' | 'ssh-config';
+export type ImportSource = 'putty' | 'ssh-config' | 'winscp';
 
 /** Хост, разобранный из внешнего источника (ещё не сохранён). */
 export interface ImportedHost {

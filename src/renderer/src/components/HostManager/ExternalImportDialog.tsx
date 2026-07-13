@@ -49,10 +49,38 @@ export function ExternalImportDialog({ onClose }: { onClose: () => void }): JSX.
     }
   }, []);
 
+  const loadWinScp = useCallback(async () => {
+    setLoading(true);
+    setResult(null);
+    setApplied(null);
+    try {
+      const res = await window.lucidSSH.importWinScpPreview();
+      setResult(res);
+      setSelected(new Set(res.hosts.map((_, i) => i)));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadWinScpIni = useCallback(async () => {
+    setLoading(true);
+    setApplied(null);
+    try {
+      const res = await window.lucidSSH.importWinScpIniPreview();
+      if (res) {
+        setResult(res);
+        setSelected(new Set(res.hosts.map((_, i) => i)));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (source === 'putty') void loadPutty();
+    else if (source === 'winscp') void loadWinScp();
     else setResult(null); // ssh-config ждёт выбора файла
-  }, [source, loadPutty]);
+  }, [source, loadPutty, loadWinScp]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -126,6 +154,7 @@ export function ExternalImportDialog({ onClose }: { onClose: () => void }): JSX.
         <div className="mt-2 flex gap-1 border-b border-border-hairline px-5">
           {tab('putty', t('import.tabPutty'))}
           {tab('ssh-config', t('import.tabSshConfig'))}
+          {tab('winscp', t('import.tabWinScp'))}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
@@ -147,8 +176,23 @@ export function ExternalImportDialog({ onClose }: { onClose: () => void }): JSX.
               </button>
             </div>
           ) : result && !result.available ? (
-            <div className="py-8 text-center text-[12.5px] text-text-dim">
-              {source === 'putty' ? t('import.putty.none') : t('import.ssh.none')}
+            <div className="flex flex-col items-center gap-3 py-6">
+              <div className="text-center text-[12.5px] text-text-dim">
+                {source === 'putty'
+                  ? t('import.putty.none')
+                  : source === 'winscp'
+                    ? t('import.winscp.none')
+                    : t('import.ssh.none')}
+              </div>
+              {source === 'winscp' && (
+                <button
+                  type="button"
+                  onClick={() => void loadWinScpIni()}
+                  className="h-[34px] rounded-[6px] bg-accent px-4 text-[12.5px] font-medium text-white hover:bg-accent-hover"
+                >
+                  {t('import.winscp.pickBtn')}
+                </button>
+              )}
             </div>
           ) : result ? (
             <>

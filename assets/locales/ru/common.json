@@ -507,7 +507,7 @@
     },
     "import": {
       "external": "Импорт из внешних источников",
-      "externalDesc": "PuTTY, ~/.ssh/config. Список источников расширяется по мере поддержки новых программ.",
+      "externalDesc": "PuTTY, ~/.ssh/config, WinSCP. Список источников расширяется по мере поддержки новых программ.",
       "externalBtn": "Открыть импорт"
     },
     "interface": {
@@ -606,6 +606,7 @@
     "title": "Импорт хостов",
     "tabPutty": "PuTTY",
     "tabSshConfig": "SSH config",
+    "tabWinScp": "WinSCP",
     "loading": "Чтение…",
     "empty": "Записей для импорта не найдено",
     "authKey": "ключ",
@@ -625,6 +626,11 @@
       "pickBtn": "Выбрать файл конфигурации…",
       "pickTitle": "Выберите файл ssh config",
       "none": "Файл не выбран или пуст"
+    },
+    "winscp": {
+      "none": "Сессии WinSCP в реестре не найдены",
+      "pickBtn": "Выбрать файл WinSCP.ini…",
+      "pickTitle": "Выберите файл WinSCP.ini"
     }
   },
   "hint": {

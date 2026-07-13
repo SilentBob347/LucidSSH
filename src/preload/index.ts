@@ -84,6 +84,10 @@ const api = {
     ipcRenderer.invoke(IPC.importPuttyPreview),
   importSshConfigPreview: (): Promise<ExternalImportResult | null> =>
     ipcRenderer.invoke(IPC.importSshConfigPreview),
+  importWinScpPreview: (): Promise<ExternalImportResult> =>
+    ipcRenderer.invoke(IPC.importWinScpPreview),
+  importWinScpIniPreview: (): Promise<ExternalImportResult | null> =>
+    ipcRenderer.invoke(IPC.importWinScpIniPreview),
   applyExternalImport: (
     hosts: ImportedHost[],
     strategy: 'skip' | 'rename'

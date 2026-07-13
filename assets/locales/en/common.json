@@ -507,7 +507,7 @@
     },
     "import": {
       "external": "Import from external sources",
-      "externalDesc": "PuTTY, ~/.ssh/config. The list of sources grows as more programs are supported.",
+      "externalDesc": "PuTTY, ~/.ssh/config, WinSCP. The list of sources grows as more programs are supported.",
       "externalBtn": "Open import"
     },
     "interface": {
@@ -606,6 +606,7 @@
     "title": "Import hosts",
     "tabPutty": "PuTTY",
     "tabSshConfig": "SSH config",
+    "tabWinScp": "WinSCP",
     "loading": "Reading…",
     "empty": "No entries to import",
     "authKey": "key",
@@ -625,6 +626,11 @@
       "pickBtn": "Choose config file…",
       "pickTitle": "Choose ssh config file",
       "none": "No file selected or it is empty"
+    },
+    "winscp": {
+      "none": "No WinSCP sessions found in the registry",
+      "pickBtn": "Choose WinSCP.ini file…",
+      "pickTitle": "Choose WinSCP.ini file"
     }
   },
   "hint": {

@@ -19,6 +19,7 @@ import {
 import { countPuttySessions } from '../hosts/puttyDetect';
 import { importPuttyPreview } from '../hosts/puttyImport';
 import { importSshConfigPreview } from '../hosts/sshConfigImport';
+import { importWinScpRegistryPreview, importWinScpIniPreview } from '../hosts/winscpImport';
 import { applyExternalImport } from '../hosts/externalImport';
 import type { ExternalImportResult, ImportedHost } from '@shared/import';
 import { homedir } from 'node:os';
@@ -220,7 +221,7 @@ export function registerHostIpcHandlers(): void {
     }
   );
 
-  // --- Импорт из внешних источников (HM-03 PuTTY, HM-04 ssh_config) ---
+  // --- Импорт из внешних источников (HM-03 PuTTY, HM-04 ssh_config, HM-10 WinSCP) ---
   ipcMain.handle(IPC.importPuttyPreview, (event): Promise<ExternalImportResult> => {
     assertSenderIsMainWindow(event);
     return importPuttyPreview();
@@ -242,6 +243,29 @@ export function registerHostIpcHandlers(): void {
       if (res.canceled || !file) return null;
       // Файл — недоверенные данные: только читается и разбирается (§12 гайда)
       return importSshConfigPreview(file);
+    }
+  );
+
+  ipcMain.handle(IPC.importWinScpPreview, (event): Promise<ExternalImportResult> => {
+    assertSenderIsMainWindow(event);
+    return importWinScpRegistryPreview();
+  });
+
+  ipcMain.handle(
+    IPC.importWinScpIniPreview,
+    async (event): Promise<ExternalImportResult | null> => {
+      assertSenderIsMainWindow(event);
+      const win = getMainWindow();
+      if (!win) return null;
+      const res = await dialog.showOpenDialog(win, {
+        title: t('import.winscp.pickTitle'),
+        filters: [{ name: 'INI', extensions: ['ini'] }],
+        properties: ['openFile']
+      });
+      const file = res.filePaths[0];
+      if (res.canceled || !file) return null;
+      // Файл — недоверенные данные: только читается и разбирается (§12 гайда)
+      return importWinScpIniPreview(file);
     }
   );
 
