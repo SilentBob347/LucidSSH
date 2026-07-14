@@ -232,6 +232,14 @@ const api = {
     ipcRenderer.invoke(IPC.snippetResolveHost, hostId, action),
   hostHasSnippets: (hostId: number): Promise<boolean> =>
     ipcRenderer.invoke(IPC.snippetHostHas, hostId),
+  reorderSnippets: (orderedIds: number[]): Promise<void> =>
+    ipcRenderer.invoke(IPC.snippetsReorder, orderedIds),
+  findDuplicateSnippet: (
+    command: string,
+    hostId?: number,
+    excludeId?: number
+  ): Promise<Snippet | null> =>
+    ipcRenderer.invoke(IPC.snippetFindDuplicate, command, hostId, excludeId),
 
   // --- Onboarding (OB-01…03) ---
   puttySessionsCount: (): Promise<number> => ipcRenderer.invoke(IPC.puttySessionsCount),

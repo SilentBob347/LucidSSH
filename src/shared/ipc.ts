@@ -95,6 +95,8 @@ export const IPC = {
   snippetDelete: 'snippets:delete',
   snippetResolveHost: 'snippets:resolve-host',
   snippetHostHas: 'snippets:host-has',
+  snippetsReorder: 'snippets:reorder',
+  snippetFindDuplicate: 'snippets:find-duplicate',
 
   // --- Onboarding (OB-01…03) ---
   puttySessionsCount: 'onboarding:putty-count',

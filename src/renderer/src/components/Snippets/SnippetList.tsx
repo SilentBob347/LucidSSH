@@ -4,11 +4,27 @@ import { useTranslation } from 'react-i18next';
 import type { Snippet } from '@shared/history';
 import { insertIntoComposer } from '@/stores/composerBus';
 import { Icon } from '@/components/common/Icon';
+import { Segment } from '@/components/Settings/controls';
+
+type SortMode = 'manual' | 'alpha' | 'date';
+
+/** Порядок отображения (SNIP-10): ручной (как пришло от listSnippets — sort_order,
+ * name), по алфавиту или по дате добавления (новые сначала). Пресет — только
+ * состояние компонента, сбрасывается на «Ручной» при каждом открытии панели. */
+function applySortMode(list: Snippet[], mode: SortMode): Snippet[] {
+  if (mode === 'alpha') return [...list].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  if (mode === 'date') {
+    return [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  return list;
+}
 
 /**
  * Список сниппетов (SnippetRow, Design_Brief §3.4). Разбит на группы «Обычные» и
  * «Опасные». Клик по телу вставляет команду в композер (через Стража, SNIP-04);
- * иконки play/pencil/trash. Поиск по имени и описанию (SNIP-03).
+ * иконки play/pencil/trash. Поиск по имени и описанию (SNIP-03). Ручная
+ * drag-and-drop сортировка + пресеты «по алфавиту»/«по дате» (SNIP-10) —
+ * только в режиме «Ручной» и вне активного поиска.
  */
 export function SnippetList({
   snippets,
@@ -22,6 +38,9 @@ export function SnippetList({
 }): JSX.Element {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
+  const [sortMode, setSortMode] = useState<SortMode>('manual');
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [overRow, setOverRow] = useState<{ id: number; position: 'before' | 'after' } | null>(null);
 
   const q = query.trim().toLowerCase();
   const filtered = useMemo(
@@ -35,8 +54,30 @@ export function SnippetList({
       ),
     [snippets, q]
   );
-  const normal = filtered.filter((s) => !s.danger);
-  const danger = filtered.filter((s) => s.danger);
+  const normal = applySortMode(
+    filtered.filter((s) => !s.danger),
+    sortMode
+  );
+  const danger = applySortMode(
+    filtered.filter((s) => s.danger),
+    sortMode
+  );
+  const dragEnabled = sortMode === 'manual' && q === '';
+
+  const dropOnRow = async (groupList: Snippet[], targetId: number): Promise<void> => {
+    if (!dragId || !overRow || overRow.id !== targetId || dragId === targetId) return;
+    const ids = groupList.map((s) => s.id);
+    const from = ids.indexOf(dragId);
+    if (from === -1) return;
+    ids.splice(from, 1);
+    let to = ids.indexOf(targetId);
+    if (overRow.position === 'after') to += 1;
+    ids.splice(to, 0, dragId);
+    setDragId(null);
+    setOverRow(null);
+    await window.lucidSSH.reorderSnippets(ids);
+    onChanged();
+  };
 
   if (snippets.length === 0) {
     return (
@@ -56,18 +97,59 @@ export function SnippetList({
           className="h-8 w-full rounded-[6px] border border-border-strong bg-bg-base px-3 text-[12.5px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent"
         />
       </div>
+      <div className="shrink-0 px-5 pb-2">
+        <Segment
+          value={sortMode}
+          onChange={setSortMode}
+          options={[
+            { key: 'manual', label: t('snippet.sort.manual') },
+            { key: 'alpha', label: t('snippet.sort.alpha') },
+            { key: 'date', label: t('snippet.sort.date') }
+          ]}
+        />
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         {normal.length > 0 && (
           <Group label={t('snippet.groupNormal')}>
             {normal.map((s) => (
-              <SnippetRow key={s.id} snippet={s} onChanged={onChanged} onEdit={onEdit} />
+              <SnippetRow
+                key={s.id}
+                snippet={s}
+                onChanged={onChanged}
+                onEdit={onEdit}
+                draggable={dragEnabled}
+                isDragging={dragId === s.id}
+                dropIndicator={overRow?.id === s.id ? overRow.position : null}
+                onDragStartReorder={() => setDragId(s.id)}
+                onDragOverReorder={(position) => setOverRow({ id: s.id, position })}
+                onDropReorder={() => void dropOnRow(normal, s.id)}
+                onDragEndReorder={() => {
+                  setDragId(null);
+                  setOverRow(null);
+                }}
+              />
             ))}
           </Group>
         )}
         {danger.length > 0 && (
           <Group label={t('snippet.groupDanger')} danger>
             {danger.map((s) => (
-              <SnippetRow key={s.id} snippet={s} onChanged={onChanged} onEdit={onEdit} />
+              <SnippetRow
+                key={s.id}
+                snippet={s}
+                onChanged={onChanged}
+                onEdit={onEdit}
+                draggable={dragEnabled}
+                isDragging={dragId === s.id}
+                dropIndicator={overRow?.id === s.id ? overRow.position : null}
+                onDragStartReorder={() => setDragId(s.id)}
+                onDragOverReorder={(position) => setOverRow({ id: s.id, position })}
+                onDropReorder={() => void dropOnRow(danger, s.id)}
+                onDragEndReorder={() => {
+                  setDragId(null);
+                  setOverRow(null);
+                }}
+              />
             ))}
           </Group>
         )}
@@ -101,16 +183,64 @@ function Group({
 function SnippetRow({
   snippet,
   onChanged,
-  onEdit
+  onEdit,
+  draggable,
+  isDragging,
+  dropIndicator,
+  onDragStartReorder,
+  onDragOverReorder,
+  onDropReorder,
+  onDragEndReorder
 }: {
   snippet: Snippet;
   onChanged: () => void;
   onEdit: (s: Snippet) => void;
+  draggable: boolean;
+  isDragging: boolean;
+  dropIndicator: 'before' | 'after' | null;
+  onDragStartReorder: () => void;
+  onDragOverReorder: (position: 'before' | 'after') => void;
+  onDropReorder: () => void;
+  onDragEndReorder: () => void;
 }): JSX.Element {
   const { t } = useTranslation();
+  // Индикатор вставки — тонкая полоса сверху/снизу строки (как в HostPanel.tsx)
+  const indicatorClass =
+    dropIndicator === 'before'
+      ? 'after:absolute after:inset-x-2 after:top-0 after:h-[2px] after:rounded-full after:bg-accent after:content-[""]'
+      : dropIndicator === 'after'
+        ? 'after:absolute after:inset-x-2 after:bottom-0 after:h-[2px] after:rounded-full after:bg-accent after:content-[""]'
+        : '';
   return (
     <div
-      className="group flex items-center gap-2 rounded-[5px] border-b border-border-hairline px-2 py-[8px] hover:bg-bg-elevated"
+      draggable={draggable}
+      onDragStart={(e) => {
+        if (!draggable) return;
+        e.dataTransfer.setData('application/x-lucidssh-snippet-reorder', String(snippet.id));
+        e.dataTransfer.effectAllowed = 'move';
+        onDragStartReorder();
+      }}
+      onDragOver={(e) => {
+        if (!draggable || !e.dataTransfer.types.includes('application/x-lucidssh-snippet-reorder')) {
+          return;
+        }
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        const position = e.clientY - rect.top < rect.height / 2 ? 'before' : 'after';
+        onDragOverReorder(position);
+      }}
+      onDrop={(e) => {
+        if (!draggable || !e.dataTransfer.types.includes('application/x-lucidssh-snippet-reorder')) {
+          return;
+        }
+        e.preventDefault();
+        onDropReorder();
+      }}
+      onDragEnd={onDragEndReorder}
+      className={
+        `group relative flex items-center gap-2 rounded-[5px] border-b border-border-hairline px-2 py-[8px] hover:bg-bg-elevated${isDragging ? ' opacity-40' : ''}` +
+        (indicatorClass ? ` ${indicatorClass}` : '')
+      }
       onClick={() => insertIntoComposer(snippet.command)}
       role="button"
       tabIndex={0}

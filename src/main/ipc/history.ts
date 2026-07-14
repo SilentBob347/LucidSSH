@@ -11,8 +11,11 @@ import {
 import {
   createSnippet,
   deleteSnippet,
+  findDuplicateSnippet,
+  getSnippet,
   hostHasSnippets,
   listSnippets,
+  reorderSnippets,
   resolveHostSnippets,
   updateSnippet
 } from '../history/snippets';
@@ -118,6 +121,35 @@ export function registerHistoryIpcHandlers(): void {
       resolveHostSnippets(hostId, rawAction);
     }
   );
+
+  ipcMain.handle(
+    IPC.snippetFindDuplicate,
+    (event, rawCommand: unknown, rawHostId: unknown, rawExcludeId: unknown): Snippet | null => {
+      assertSenderIsMainWindow(event);
+      const command = str(rawCommand, 'command', 10000)!;
+      const hostId =
+        rawHostId === undefined || rawHostId === null ? undefined : validateId(rawHostId, 'hostId');
+      const excludeId =
+        rawExcludeId === undefined || rawExcludeId === null
+          ? undefined
+          : validateId(rawExcludeId, 'excludeId');
+      return findDuplicateSnippet(command, hostId, excludeId);
+    }
+  );
+
+  // --- SNIP-10: ручная сортировка (один скоуп за раз — все id одного hostId) ---
+  ipcMain.handle(IPC.snippetsReorder, (event, rawIds: unknown): void => {
+    assertSenderIsMainWindow(event);
+    if (!Array.isArray(rawIds) || rawIds.length === 0 || rawIds.length > 1000) {
+      throw new IpcValidationError('orderedIds: non-empty array expected');
+    }
+    const ids = rawIds.map((id) => validateId(id, 'orderedIds[]'));
+    const found = ids.map((id) => getSnippet(id));
+    if (found.some((s) => s === null)) throw new IpcValidationError('orderedIds: snippet not found');
+    const hostIds = new Set(found.map((s) => s!.hostId ?? null));
+    if (hostIds.size > 1) throw new IpcValidationError('orderedIds: snippets span multiple scopes');
+    reorderSnippets(ids);
+  });
 }
 
 function validateSnippetInput(raw: unknown): {

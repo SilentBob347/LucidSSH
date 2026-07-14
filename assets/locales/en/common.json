@@ -424,6 +424,7 @@
     "saveTitle": "Save as snippet",
     "editTitle": "Edit snippet",
     "dangerWarn": "Dangerous command — it will go to the “Dangerous” section and require confirmation to run",
+    "duplicateWarn": "This command is already saved as “{{name}}” in this scope — save it again?",
     "scopeLabel": "Where to save",
     "scopeServer": "For this server",
     "scopeGlobal": "Global",
@@ -446,7 +447,12 @@
       "descriptionPasteMode": "Save a command from history — using the button next to it"
     },
     "chipServer": "server",
-    "chipGlobal": "global"
+    "chipGlobal": "global",
+    "sort": {
+      "manual": "Manual",
+      "alpha": "Alphabetical",
+      "date": "By date"
+    }
   },
   "hostSnippets": {
     "title": "This server has saved commands",

@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Snippet } from '@shared/history';
 import { Icon } from '@/components/common/Icon';
@@ -52,11 +52,25 @@ export function SnippetSaveDialog({
   // иначе снипет «приклеится» ко всем последующим Quick Connect сессиям (общий сентинел).
   const canPickServer = (hostId != null && hostId !== 0) || editSnippet?.hostId != null;
   const serverHostId = hostId ?? editSnippet?.hostId;
+  const targetHostId = scope === 'server' ? serverHostId : undefined;
+
+  // Предупреждение о дубликате команды в том же скоупе (не блокирует сохранение).
+  const [duplicate, setDuplicate] = useState<Snippet | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void window.lucidSSH
+      .findDuplicateSnippet(cmd, targetHostId, editSnippet?.id)
+      .then((d) => {
+        if (!cancelled) setDuplicate(d);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cmd, targetHostId, editSnippet?.id]);
 
   const save = async (): Promise<void> => {
     if (!canSave) return;
     setBusy(true);
-    const targetHostId = scope === 'server' ? serverHostId : undefined;
     try {
       if (editSnippet) {
         await window.lucidSSH.updateSnippet(editSnippet.id, {
@@ -111,6 +125,13 @@ export function SnippetSaveDialog({
           {danger && (
             <div className="flex items-center gap-2 rounded-[6px] border border-warning/25 bg-warning/10 px-3 py-2 text-[11.5px] text-warning-text">
               <Icon name="alert" size={14} className="shrink-0" /> {t('snippet.dangerWarn')}
+            </div>
+          )}
+
+          {duplicate && (
+            <div className="flex items-center gap-2 rounded-[6px] border border-warning/25 bg-warning/10 px-3 py-2 text-[11.5px] text-warning-text">
+              <Icon name="alert" size={14} className="shrink-0" />
+              {t('snippet.duplicateWarn', { name: duplicate.name })}
             </div>
           )}
 

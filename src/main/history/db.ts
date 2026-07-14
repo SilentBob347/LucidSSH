@@ -50,6 +50,10 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE history ADD COLUMN output TEXT;
   ALTER TABLE history ADD COLUMN output_truncated INTEGER NOT NULL DEFAULT 0;
+  `,
+  // v3 — ручной порядок сниппетов (SNIP-10), раздельно для серверных/глобальных
+  `
+  ALTER TABLE snippets ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
   `
 ];
 

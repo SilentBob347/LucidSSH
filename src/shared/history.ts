@@ -37,6 +37,7 @@ export interface Snippet {
   description?: string;
   hostId?: number; // undefined/null = глобальный; число = серверный (SNIP-05)
   danger: boolean; // true если команда матчит паттерн опасных команд
+  sortOrder: number; // ручной порядок (SNIP-10), раздельно для scope hostId
   createdAt: string;
   updatedAt: string;
 }

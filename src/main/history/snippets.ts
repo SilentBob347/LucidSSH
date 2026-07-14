@@ -16,6 +16,7 @@ interface SnippetRow {
   description: string | null;
   host_id: number | null;
   danger: number;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +29,7 @@ function rowToSnippet(r: SnippetRow): Snippet {
     description: r.description ?? undefined,
     hostId: r.host_id ?? undefined,
     danger: r.danger === 1,
+    sortOrder: r.sort_order,
     createdAt: r.created_at,
     updatedAt: r.updated_at
   };
@@ -92,22 +94,65 @@ export function updateSnippet(
 
 /**
  * Список сниппетов (SNIP-06): без hostId — только глобальные; с hostId —
- * серверные этого хоста + глобальные (серверные первыми).
+ * серверные этого хоста + глобальные (серверные первыми). Внутри каждой
+ * группы — по ручному порядку sort_order (SNIP-10), затем по имени.
  */
 export function listSnippets(hostId?: number): Snippet[] {
   const db = openHistoryDb();
   const rows =
     hostId === undefined
       ? (db
-          .prepare('SELECT * FROM snippets WHERE host_id IS NULL ORDER BY name COLLATE NOCASE')
+          .prepare(
+            'SELECT * FROM snippets WHERE host_id IS NULL ORDER BY sort_order, name COLLATE NOCASE'
+          )
           .all() as SnippetRow[])
       : (db
           .prepare(
             `SELECT * FROM snippets WHERE host_id = @hostId OR host_id IS NULL
-             ORDER BY (host_id IS NULL), name COLLATE NOCASE`
+             ORDER BY (host_id IS NULL), sort_order, name COLLATE NOCASE`
           )
           .all({ hostId }) as SnippetRow[]);
   return rows.map(rowToSnippet);
+}
+
+/**
+ * Дубликат по совпадению команды в том же скоупе (undefined/null hostId —
+ * глобальные, число — конкретный хост; глобальные и серверные не смешиваются).
+ * Сравнение — по замаскированной команде (как она реально хранится),
+ * excludeId исключает сам редактируемый сниппет из проверки.
+ */
+export function findDuplicateSnippet(
+  command: string,
+  hostId?: number,
+  excludeId?: number
+): Snippet | null {
+  const { masked } = maskSecrets(command);
+  const db = openHistoryDb();
+  const row = (
+    hostId === undefined
+      ? db.prepare('SELECT * FROM snippets WHERE host_id IS NULL AND command = @command AND id != @excludeId')
+      : db.prepare(
+          'SELECT * FROM snippets WHERE host_id = @hostId AND command = @command AND id != @excludeId'
+        )
+  ).get({ hostId, command: masked, excludeId: excludeId ?? -1 }) as SnippetRow | undefined;
+  return row ? rowToSnippet(row) : null;
+}
+
+export function getSnippet(id: number): Snippet | null {
+  const row = openHistoryDb().prepare('SELECT * FROM snippets WHERE id = ?').get(id) as
+    | SnippetRow
+    | undefined;
+  return row ? rowToSnippet(row) : null;
+}
+
+/** Ручной порядок сниппетов внутри одного скоупа (SNIP-10, drag-and-drop). */
+export function reorderSnippets(orderedIds: number[]): void {
+  const db = openHistoryDb();
+  const update = db.prepare('UPDATE snippets SET sort_order = ? WHERE id = ?');
+  const run = db.transaction((ids: number[]) => {
+    ids.forEach((id, index) => update.run(index, id));
+  });
+  run(orderedIds);
 }
 
 export function deleteSnippet(id: number): void {
