@@ -162,7 +162,7 @@
         "items": [
           "On errors, a panel slides up with an explanation and “what to check” steps",
           "History keeps commands with filters and notes; passwords and tokens are masked",
-          "The button to the right of the input opens the command catalog by category"
+          "A button in the session tab strip (or Ctrl+L) opens the command catalog by category"
         ]
       },
       "terminal": {
