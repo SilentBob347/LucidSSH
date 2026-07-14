@@ -6,7 +6,9 @@
 export const IPC = {
   // --- Приложение ---
   appGetInfo: 'app:get-info',
-  appOpenReleasesPage: 'app:open-releases-page', // §9.1 Release_and_Update_Strategy.md — ссылка на SHA-256 в About
+  appOpenReleasesPage: 'app:open-releases-page', // §9.1 Release_and_Update_Strategy.md — ссылка на SHA-256 в About; переиспользуется и для «Список изменений» (SET-09) — тот же GitHub Releases
+  appOpenBugReport: 'app:open-bug-report', // SET-09
+  appOpenFeatureRequest: 'app:open-feature-request', // SET-09
 
   // --- Буфер обмена (через main, renderer без clipboard-permission) ---
   clipboardRead: 'clipboard:read',

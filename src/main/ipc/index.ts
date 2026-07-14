@@ -26,11 +26,25 @@ export function registerIpcHandlers(): void {
     return { version: app.getVersion(), language: loadConfig().language };
   });
 
-  // Захардкоженный URL, не принимает аргументов от renderer (§22 гайда —
+  // Захардкоженные URL, не принимают аргументов от renderer (§22 гайда —
   // внешние ссылки только на заранее определённые доверенные адреса).
   ipcMain.on(IPC.appOpenReleasesPage, (event) => {
     assertSenderIsMainWindow(event);
     void shell.openExternal('https://github.com/Xykyma/LucidSSH/releases');
+  });
+
+  // SET-09: «Сообщить об ошибке» / «Предложить функцию» — GitHub Issues с шаблоном.
+  ipcMain.on(IPC.appOpenBugReport, (event) => {
+    assertSenderIsMainWindow(event);
+    void shell.openExternal(
+      'https://github.com/Xykyma/LucidSSH/issues/new?template=bug_report.yml'
+    );
+  });
+  ipcMain.on(IPC.appOpenFeatureRequest, (event) => {
+    assertSenderIsMainWindow(event);
+    void shell.openExternal(
+      'https://github.com/Xykyma/LucidSSH/issues/new?template=feature_request.yml'
+    );
   });
 
   // --- i18n ---

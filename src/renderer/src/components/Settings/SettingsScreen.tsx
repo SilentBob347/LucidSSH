@@ -805,6 +805,33 @@ function AboutSection({ onOpenGuide }: { onOpenGuide: () => void }): JSX.Element
         )}
       </div>
 
+      {/* SET-09: ссылки на GitHub — все открываются в системном браузере (SEC-08) */}
+      <div className="flex items-center gap-[14px] px-[2px] text-[12px]">
+        <button
+          type="button"
+          onClick={() => window.lucidSSH.openBugReport()}
+          className="text-lavender hover:underline"
+        >
+          {t('settings.about.reportBug')}
+        </button>
+        <span className="text-text-dim">·</span>
+        <button
+          type="button"
+          onClick={() => window.lucidSSH.openFeatureRequest()}
+          className="text-lavender hover:underline"
+        >
+          {t('settings.about.requestFeature')}
+        </button>
+        <span className="text-text-dim">·</span>
+        <button
+          type="button"
+          onClick={() => window.lucidSSH.openReleasesPage()}
+          className="text-lavender hover:underline"
+        >
+          {t('settings.about.changelog')}
+        </button>
+      </div>
+
       {/* §9.1 Release_and_Update_Strategy.md: спокойное объяснение отсутствия
           подписи вместо предупреждения в окне первого запуска (BLK-01 закрыт
           решением от 08.07.2026 — сертификат недоступен разработчикам из РФ). */}

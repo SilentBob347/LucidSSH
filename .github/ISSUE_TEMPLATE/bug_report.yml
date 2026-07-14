@@ -1,0 +1,51 @@
+name: Сообщить об ошибке
+description: Что-то работает не так, как ожидалось
+title: "[Баг]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Что произошло
+      description: Опишите проблему как можно подробнее
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как воспроизвести
+      description: Шаги, которые приводят к проблеме
+      placeholder: |
+        1. Открыть...
+        2. Нажать...
+        3. Увидеть ошибку
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Что ожидалось вместо этого
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Версия LucidSSH
+      description: Настройки → О программе
+      placeholder: например, 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Версия Windows
+      placeholder: например, Windows 11 23H2
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Дополнительно
+      description: Логи, скриншоты — не прикладывайте пароли, ключи или содержимое приватных серверов
+    validations:
+      required: false

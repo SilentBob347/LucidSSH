@@ -28,6 +28,8 @@ const api = {
   // --- Приложение ---
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke(IPC.appGetInfo),
   openReleasesPage: (): void => ipcRenderer.send(IPC.appOpenReleasesPage),
+  openBugReport: (): void => ipcRenderer.send(IPC.appOpenBugReport),
+  openFeatureRequest: (): void => ipcRenderer.send(IPC.appOpenFeatureRequest),
 
   // --- Буфер обмена ---
   clipboardRead: (): Promise<string> => ipcRenderer.invoke(IPC.clipboardRead),
