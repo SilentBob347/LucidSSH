@@ -169,7 +169,7 @@
         "title": "Terminal",
         "items": [
           "A root session is highlighted in red in the path bar",
-          "Settings → Terminal lets you type commands directly in the output area",
+          "Ctrl+Space next to the cursor — quick search and insert a saved command right into the terminal",
           "Right-click a session tab → “Connection details”: connection log, ciphers and error causes"
         ]
       }
@@ -452,6 +452,10 @@
       "manual": "Manual",
       "alpha": "Alphabetical",
       "date": "By date"
+    },
+    "palette": {
+      "placeholder": "Search snippets…",
+      "empty": "No saved commands"
     }
   },
   "hostSnippets": {
@@ -522,6 +526,7 @@
       "expertDesc": "Turns off all learning hints at once. Bring them back individually with the toggles below.",
       "expertEnable": "Enable",
       "expertOn": "On",
+      "expertOff": "Off",
       "hintCatalog": "Command catalog hints",
       "hintCatalogDesc": "Shows the flag's description right in the chip next to it. Off - the chip shows just the flag, with the description on hover.",
       "hintTooltips": "Command output tooltips",
@@ -547,6 +552,7 @@
       "openSettings": "Open settings",
       "openHistory": "Open command history",
       "openCatalog": "Open command catalog",
+      "snippetPalette": "Quick-insert snippet",
       "search": "Search terminal buffer",
       "closeTab": "Close tab",
       "copy": "Copy selection",
@@ -641,7 +647,8 @@
   },
   "hint": {
     "snippet": "Use this command often? Save it — a button in history or right-click in the terminal.",
-    "snippetPasteMode": "Use this command often? Save it using the button next to it in history."
+    "snippetPasteMode": "Use this command often? Save it using the button next to it in history.",
+    "snippetPalette": "Saved! Next time, press Ctrl+Space next to the cursor to quickly find and insert saved commands."
   },
   "tips": {
     "tip1": "Click a path segment in the breadcrumb above — it inserts “cd …” into the input.",
@@ -688,7 +695,8 @@
       "body": "Frequently used commands can be saved as snippets and run in one click.",
       "item1": "Save: 🔖 in history or right-click in the terminal → Save as snippet.",
       "item2": "Scope: server snippets show only on that connection, global ones everywhere.",
-      "item3": "Run: from the catalog [host]/Global tabs or Favorites (Ctrl+H)."
+      "item3": "Run: from the catalog [host]/Global tabs (Ctrl+L) — drag to reorder there too.",
+      "item4": "Quick-insert: Ctrl+Space next to the cursor opens a floating snippet search right in the terminal."
     },
     "guard": {
       "title": "Dangerous command guard",

@@ -17,6 +17,7 @@ const HOTKEYS: { keys: string; key: string }[] = [
   { keys: 'Ctrl + ,', key: 'openSettings' },
   { keys: 'Ctrl + H', key: 'openHistory' },
   { keys: 'Ctrl + L', key: 'openCatalog' },
+  { keys: 'Ctrl + Space', key: 'snippetPalette' },
   { keys: 'Ctrl + F', key: 'search' },
   { keys: 'Ctrl + W', key: 'closeTab' },
   { keys: 'F1', key: 'guide' }
@@ -119,7 +120,7 @@ export function HelpScreen(): JSX.Element {
                 {t(`help.${tab}.body`)}
               </p>
               <ul className="mt-[14px] flex flex-col gap-[14px]">
-                {[1, 2, 3].map((n) => {
+                {[1, 2, 3, 4].map((n) => {
                   const item = t(`help.${tab}.item${n}`, { defaultValue: '' });
                   return item ? (
                     <li key={n} className="flex items-start gap-[13px]">

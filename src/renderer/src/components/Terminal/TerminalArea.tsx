@@ -17,6 +17,7 @@ import {
 } from './XtermView';
 import { PastePreviewDialog } from './PastePreviewDialog';
 import { TerminalContextMenu } from './TerminalContextMenu';
+import { SnippetPalette } from './SnippetPalette';
 import { TerminalSearchBar } from './TerminalSearchBar';
 import { HintBar } from './HintBar';
 import { OnboardingHints } from './OnboardingHints';
@@ -50,7 +51,7 @@ export function TerminalArea(): JSX.Element {
     answerAuthPrompt
   } = useSessions();
   const { config, update, markHint } = useConfig();
-  const { openSnippetDialog, openQuickConnect, openSettings } = usePanels();
+  const { openSnippetDialog, openQuickConnect, openSettings, snippetsRevision } = usePanels();
   const { hosts, openDrawer } = useHosts();
   const { addGuardUncertainEvent, removeGuardUncertainEvent } = useEvents();
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -58,10 +59,15 @@ export function TerminalArea(): JSX.Element {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(
     null
   );
+  // SNIP-09: позиция курсора в области терминала (не всей страницы) для
+  // открытия палитры сниппетов рядом с курсором по Ctrl+Space.
+  const mousePosRef = useRef({ x: 0, y: 0 });
+  const [palettePos, setPalettePos] = useState<{ x: number; y: number } | null>(null);
   const [pastePreview, setPastePreview] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [dangerPrompt, setDangerPrompt] = useState<DangerousCommandPrompt | null>(null);
-  const [activeHint, setActiveHint] = useState<'snippet' | null>(null);
+  const [activeHint, setActiveHint] = useState<'snippet' | 'palette' | null>(null);
+  const prevSnippetsRevision = useRef(snippetsRevision);
   const [onboardingDone, setOnboardingDone] = useState(false);
   /** Не удалось определить «на промпте ли» сессия (busybox без shell-интеграции
    *  и т.п.) — индикатор в BreadcrumbBar (§ плана «единый терминал-ввод»). */
@@ -142,14 +148,27 @@ export function TerminalArea(): JSX.Element {
       } else if (e.shiftKey && key === 'v' && showTerminal && active) {
         e.preventDefault();
         handlePaste(active.sessionId);
+      } else if (e.key === ' ' && showTerminal && active) {
+        // SNIP-09: без активной сессии палитра не открывается вовсе (как и
+        // остальные терминал-хоткеи выше, привязанные к showTerminal).
+        // Ctrl+Space исторически маппится терминалами на управляющий символ
+        // NUL (0x00) — xterm.js может перехватить его на textarea раньше,
+        // чем событие всплывёт сюда. stopPropagation, чтобы xterm не отправил
+        // символ в сессию поверх открытия палитры.
+        e.preventDefault();
+        e.stopPropagation();
+        setPalettePos(mousePosRef.current);
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // capture: true — перехватываем раньше, чем xterm.js на своей textarea
+    // успеет обработать Ctrl+Space по-своему (см. комментарий выше).
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   });
 
   useEffect(() => {
     setSearchOpen(false);
+    setPalettePos(null);
   }, [activeSessionId]);
 
   // SNIP-08: после 5-й команды в сессии — одноразовая подсказка о сниппетах.
@@ -166,6 +185,19 @@ export function TerminalArea(): JSX.Element {
     },
     [markHint]
   );
+
+  // SNIP-09: сразу после сохранения любого сниппета — одноразовая подсказка
+  // про Ctrl+Space (пропускает самый первый рендер, срабатывает только на
+  // реальное увеличение snippetsRevision). Тот же лимит показов, что SNIP-08.
+  useEffect(() => {
+    if (snippetsRevision === prevSnippetsRevision.current) return;
+    prevSnippetsRevision.current = snippetsRevision;
+    const cfg = getCurrentConfig();
+    if (showTerminal && cfg && !cfg.ui.expertMode && (cfg.shownCounts['snippetPaletteHint'] ?? 0) < 2) {
+      setActiveHint('palette');
+      void markHint('snippetPaletteHint');
+    }
+  }, [snippetsRevision, showTerminal, markHint]);
 
   const handlePaste = useCallback((sessionId: string) => {
     void window.lucidSSH.clipboardRead().then((text) => {
@@ -224,7 +256,12 @@ export function TerminalArea(): JSX.Element {
         />
       )}
 
-      <div className="relative flex min-h-0 flex-1 flex-col bg-bg-terminal">
+      <div
+        className="relative flex min-h-0 flex-1 flex-col bg-bg-terminal"
+        onMouseMove={(e) => {
+          mousePosRef.current = { x: e.clientX, y: e.clientY };
+        }}
+      >
         {!active ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-1">
             <div className="text-[14px] font-medium text-text-dim">{t('terminal.empty.title')}</div>
@@ -335,9 +372,21 @@ export function TerminalArea(): JSX.Element {
         />
       )}
 
-      {/* Одноразовая подсказка SNIP-08 */}
+      {/* Одноразовая подсказка SNIP-08 / SNIP-09 */}
       {!showOnboarding && activeHint && showTerminal && active && (
-        <HintBar onClose={() => setActiveHint(null)} />
+        <HintBar
+          textKey={activeHint === 'palette' ? 'hint.snippetPalette' : undefined}
+          onClose={() => setActiveHint(null)}
+        />
+      )}
+
+      {palettePos && active && (
+        <SnippetPalette
+          x={palettePos.x}
+          y={palettePos.y}
+          hostId={active.hostId}
+          onClose={() => setPalettePos(null)}
+        />
       )}
 
       {ctxMenu && active && (

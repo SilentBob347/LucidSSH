@@ -541,8 +541,7 @@ function InterfaceSection({ config, update }: { config: AppConfig; update: Updat
   const { t } = useTranslation();
   const { resetHints } = useConfig();
   const h = config.ui.hints;
-  const expertActive =
-    !h.commandCatalog && !h.outputTooltips && !h.errorPanel && !h.connectionDialog;
+  const expertActive = config.ui.expertMode;
 
   const enableExpert = async (): Promise<void> => {
     await update('ui.expertMode', true);
@@ -569,23 +568,20 @@ function InterfaceSection({ config, update }: { config: AppConfig; update: Updat
             {t('settings.interface.expertDesc')}
           </div>
         </div>
-        {expertActive ? (
-          <button
-            type="button"
-            onClick={() => void enableAllUi()}
-            className="h-8 shrink-0 rounded-[6px] border border-[rgba(255,255,255,0.12)] bg-bg-elevated-2 px-[14px] text-[12.5px] font-medium text-text-strong hover:border-accent"
-          >
-            {t('settings.interface.expertReturn')}
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => void enableExpert()}
-            className="h-8 shrink-0 rounded-[6px] bg-accent px-[14px] text-[12.5px] font-medium text-white hover:bg-accent-hover"
-          >
-            {t('settings.interface.expert')}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => void (expertActive ? enableAllUi() : enableExpert())}
+          className="flex h-8 shrink-0 items-center gap-[7px] rounded-[6px] border border-[rgba(255,255,255,0.12)] bg-bg-elevated-2 pr-[14px] pl-[10px] text-[12.5px] font-medium text-text-strong hover:border-accent"
+        >
+          <span
+            className={
+              expertActive
+                ? 'size-[7px] shrink-0 rounded-full bg-lavender-light'
+                : 'size-[7px] shrink-0 rounded-full bg-text-dim'
+            }
+          />
+          {t('settings.interface.expert')} · {expertActive ? t('settings.interface.expertOn') : t('settings.interface.expertOff')}
+        </button>
       </div>
 
       <ToggleRow
@@ -658,6 +654,7 @@ function HotkeysSection(): JSX.Element {
       { keys: 'Ctrl + ,', action: t('settings.hk.openSettings') },
       { keys: 'Ctrl + H', action: t('settings.hk.openHistory') },
       { keys: 'Ctrl + L', action: t('settings.hk.openCatalog') },
+      { keys: 'Ctrl + Space', action: t('settings.hk.snippetPalette') },
       { keys: 'Ctrl + F', action: t('settings.hk.search') },
       { keys: 'Ctrl + W', action: t('settings.hk.closeTab') },
       { keys: 'Ctrl + Shift + C', action: t('settings.hk.copy') },

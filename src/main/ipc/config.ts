@@ -99,4 +99,4 @@ export function registerConfigIpcHandlers(): void {
 }
 
 /** Разрешённые id подсказок (обучающие подсказки с лимитом показов). */
-const KNOWN_HINTS = new Set(['snippetHint', 'onboardingTips', 'ctrlcHint']);
+const KNOWN_HINTS = new Set(['snippetHint', 'onboardingTips', 'ctrlcHint', 'snippetPaletteHint']);
