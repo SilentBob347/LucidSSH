@@ -66,7 +66,9 @@ export function TerminalArea(): JSX.Element {
   const [pastePreview, setPastePreview] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [dangerPrompt, setDangerPrompt] = useState<DangerousCommandPrompt | null>(null);
-  const [activeHint, setActiveHint] = useState<'snippet' | 'palette' | 'root' | null>(null);
+  const [activeHint, setActiveHint] = useState<
+    'snippet' | 'palette' | 'root' | 'password' | null
+  >(null);
   const prevSnippetsRevision = useRef(snippetsRevision);
   // BRD-07: последняя известная привилегия на сессию — нужна, чтобы ловить
   // именно ПЕРЕХОД в root/sudo, а не показывать подсказку на каждый рендер.
@@ -218,6 +220,21 @@ export function TerminalArea(): JSX.Element {
       }
     }
   }, [active, breadcrumbs, showTerminal, markHint]);
+
+  // TERM-09: подсказка «ввод пароля скрыт — это нормально» на явный запрос
+  // пароля (детекция — main, статичный список паттернов, shellIntegration.ts).
+  // Лимит показов — 3, как и у BRD-07 (ТЗ задаёт именно так для обеих).
+  useEffect(() => {
+    const off = window.lucidSSH.onPasswordPrompt((sessionId) => {
+      if (!active || sessionId !== active.sessionId || !showTerminal) return;
+      const cfg = getCurrentConfig();
+      if (cfg && !cfg.ui.expertMode && (cfg.shownCounts['passwordHint'] ?? 0) < 3) {
+        setActiveHint('password');
+        void markHint('passwordHint');
+      }
+    });
+    return off;
+  }, [active, showTerminal, markHint]);
 
   const handlePaste = useCallback((sessionId: string) => {
     void window.lucidSSH.clipboardRead().then((text) => {
@@ -392,7 +409,7 @@ export function TerminalArea(): JSX.Element {
         />
       )}
 
-      {/* Одноразовая подсказка SNIP-08 / SNIP-09 / BRD-07 */}
+      {/* Одноразовая подсказка SNIP-08 / SNIP-09 / BRD-07 / TERM-09 */}
       {!showOnboarding && activeHint && showTerminal && active && (
         <HintBar
           textKey={
@@ -400,7 +417,9 @@ export function TerminalArea(): JSX.Element {
               ? 'hint.snippetPalette'
               : activeHint === 'root'
                 ? 'hint.rootSession'
-                : undefined
+                : activeHint === 'password'
+                  ? 'hint.passwordHidden'
+                  : undefined
           }
           onClose={() => setActiveHint(null)}
         />

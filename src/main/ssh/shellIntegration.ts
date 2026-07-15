@@ -357,3 +357,14 @@ export function endsWithInputPrompt(output: string): boolean {
   if (lastLine.endsWith(':')) return true;
   return PASSWORD_PROMPT_RE.test(lastLine);
 }
+
+/**
+ * TERM-09: подсказка «ввод пароля скрыт» показывается только на известные,
+ * явные приглашения — в отличие от endsWithInputPrompt (реинжект, BRD-03/04)
+ * здесь НЕТ локале-независимой эвристики по «:» (произвольные приглашения
+ * намеренно не распознаются, чтобы не подсказывать невпопад).
+ */
+export function matchesPasswordPromptPattern(output: string): boolean {
+  const lastLine = output.slice(output.lastIndexOf('\n') + 1).replace(/[ \t\r]+$/, '');
+  return PASSWORD_PROMPT_RE.test(lastLine);
+}

@@ -652,7 +652,8 @@
     "snippet": "Use this command often? Save it — a button in history or right-click in the terminal.",
     "snippetPasteMode": "Use this command often? Save it using the button next to it in history.",
     "snippetPalette": "Saved! Next time, press Ctrl+Space next to the cursor to quickly find and insert saved commands.",
-    "rootSession": "You've switched to a root session. Commands now run with full privileges."
+    "rootSession": "You've switched to a root session. Commands now run with full privileges.",
+    "passwordHidden": "Input is hidden — that's normal. Type your password and press Enter."
   },
   "tips": {
     "tip1": "Click a path segment in the breadcrumb above — it inserts “cd …” into the input.",

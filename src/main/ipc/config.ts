@@ -104,5 +104,6 @@ const KNOWN_HINTS = new Set([
   'onboardingTips',
   'ctrlcHint',
   'snippetPaletteHint',
-  'rootHint'
+  'rootHint',
+  'passwordHint'
 ]);

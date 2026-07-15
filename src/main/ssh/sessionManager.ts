@@ -21,7 +21,8 @@ import {
   EchoGate,
   SHELL_INTEGRATION_SETUP,
   endsWithInputPrompt,
-  isShellEscalationCommand
+  isShellEscalationCommand,
+  matchesPasswordPromptPattern
 } from './shellIntegration';
 import { startDashboard, stopDashboard } from './dashboard';
 import { loadErrorPatterns } from '../content/loader';
@@ -96,6 +97,13 @@ interface ManagedSession {
   reinjectTail?: string;
   /** Таймер тишины: инжект уходит после паузы в выводе нового шелла. */
   reinjectTimer?: NodeJS.Timeout;
+  /** Хвост вывода для детекции запроса пароля (TERM-09), независим от
+   *  reinject-гейта — пароль может запрашиваться вне эскалации (git, passwd,
+   *  вложенный ssh и т.п.). */
+  passwordPromptTail?: string;
+  /** true между «увидели запрос пароля» и следующим маркером (не шлём
+   *  событие повторно на каждый чанк, пока промпт пароля один и тот же). */
+  passwordPromptActive?: boolean;
 }
 
 interface PendingHostKey {
@@ -610,6 +618,8 @@ function openShell(session: ManagedSession, client: Client): void {
       session.commandGate.reset();
       clearSetupTimers(session);
       disarmReinject(session); // новый shell — прежняя эскалация не в счёт
+      session.passwordPromptActive = false;
+      session.passwordPromptTail = '';
       setStatus(session, 'connected');
       log(session, 'info', 'clog.shellOpen', undefined, 'session');
 
@@ -648,6 +658,19 @@ function openShell(session: ManagedSession, client: Client): void {
             }
           }
         }
+        // TERM-09: явный запрос пароля (статичный список паттернов) — событие
+        // только на нарастающем фронте (не на каждый чанк одного и того же
+        // промпта); маркер ниже сбрасывает признак — снова на обычном промпте.
+        if (display) {
+          session.passwordPromptTail = ((session.passwordPromptTail ?? '') + display).slice(-256);
+          if (
+            !session.passwordPromptActive &&
+            matchesPasswordPromptPattern(session.passwordPromptTail)
+          ) {
+            session.passwordPromptActive = true;
+            send(IPC.evPasswordPrompt, session.id);
+          }
+        }
         // Приписываем вывод СВОЕМУ маркеру: effective[i] — это то, что пришло
         // между (i-1)-м и i-м маркером в этом чанке. Несколько маркеров могут
         // прийти в одном data-событии (см. баг: два маркера одним пакетом).
@@ -655,6 +678,8 @@ function openShell(session: ManagedSession, client: Client): void {
           appendOutput(session, effective[i] ?? '');
           send(IPC.evBreadcrumb, session.id, marks[i]!.crumb);
           handleCommandFinished(session, marks[i]!.exitCode);
+          session.passwordPromptActive = false;
+          session.passwordPromptTail = '';
         }
         appendOutput(session, effective[effective.length - 1] ?? '');
       });

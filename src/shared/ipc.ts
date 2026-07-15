@@ -123,7 +123,8 @@ export const IPC = {
   evDashboard: 'ev:dashboard',
   evError: 'ev:error',
   evUpdateStatus: 'ev:update-status',
-  evHistoryRecorded: 'ev:history-recorded' // HistoryDrawer перечитывает список, если открыт
+  evHistoryRecorded: 'ev:history-recorded', // HistoryDrawer перечитывает список, если открыт
+  evPasswordPrompt: 'ev:password-prompt' // TERM-09 — подсказка «ввод пароля скрыт»
 } as const;
 
 export interface AppInfo {

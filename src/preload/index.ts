@@ -173,6 +173,11 @@ const api = {
     ipcRenderer.on(IPC.evHistoryRecorded, listener);
     return () => ipcRenderer.removeListener(IPC.evHistoryRecorded, listener);
   },
+  onPasswordPrompt: (cb: (sessionId: string) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, sessionId: string): void => cb(sessionId);
+    ipcRenderer.on(IPC.evPasswordPrompt, listener);
+    return () => ipcRenderer.removeListener(IPC.evPasswordPrompt, listener);
+  },
   onDashboard: (cb: (sessionId: string, metrics: DashboardMetrics) => void): (() => void) => {
     const listener = (
       _e: Electron.IpcRendererEvent,

@@ -6,7 +6,8 @@ import {
   SHELL_INTEGRATION_SETUP,
   buildCdCommand,
   endsWithInputPrompt,
-  isShellEscalationCommand
+  isShellEscalationCommand,
+  matchesPasswordPromptPattern
 } from './shellIntegration';
 
 const US = '\x1f';
@@ -332,6 +333,29 @@ describe('endsWithInputPrompt — придержать реинжект на з�
     'Warning: something happened:\n'
   ])('не запрос ввода: %j', (tail) => {
     expect(endsWithInputPrompt(tail)).toBe(false);
+  });
+});
+
+describe('matchesPasswordPromptPattern (TERM-09) — только явный статичный список, без «:»-эвристики', () => {
+  it.each([
+    '[sudo] password for nikita:',
+    '[sudo] password for nikita: ',
+    'Password:',
+    'Пароль:',
+    "Enter passphrase for key '/root/.ssh/id_ed25519':"
+  ])('распознаёт: %j', (tail) => {
+    expect(matchesPasswordPromptPattern(tail)).toBe(true);
+  });
+
+  it.each([
+    'root@football-bot:~# ',
+    'user@host:~$ ',
+    // произвольная строка на «:» — НЕ распознаётся (в отличие от endsWithInputPrompt)
+    'Warning: something happened:',
+    'Available options:',
+    'total 42\r\n'
+  ])('не распознаёт: %j', (tail) => {
+    expect(matchesPasswordPromptPattern(tail)).toBe(false);
   });
 });
 
