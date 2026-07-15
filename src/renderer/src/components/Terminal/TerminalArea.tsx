@@ -66,8 +66,11 @@ export function TerminalArea(): JSX.Element {
   const [pastePreview, setPastePreview] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [dangerPrompt, setDangerPrompt] = useState<DangerousCommandPrompt | null>(null);
-  const [activeHint, setActiveHint] = useState<'snippet' | 'palette' | null>(null);
+  const [activeHint, setActiveHint] = useState<'snippet' | 'palette' | 'root' | null>(null);
   const prevSnippetsRevision = useRef(snippetsRevision);
+  // BRD-07: последняя известная привилегия на сессию — нужна, чтобы ловить
+  // именно ПЕРЕХОД в root/sudo, а не показывать подсказку на каждый рендер.
+  const lastPrivilege = useRef<Map<string, 'normal' | 'sudo' | 'root'>>(new Map());
   const [onboardingDone, setOnboardingDone] = useState(false);
   /** Не удалось определить «на промпте ли» сессия (busybox без shell-интеграции
    *  и т.п.) — индикатор в BreadcrumbBar (§ плана «единый терминал-ввод»). */
@@ -198,6 +201,23 @@ export function TerminalArea(): JSX.Element {
       void markHint('snippetPaletteHint');
     }
   }, [snippetsRevision, showTerminal, markHint]);
+
+  // BRD-07: одноразовая подсказка при переходе в root/sudo активной сессии
+  // (та же детекция привилегии, что у breadcrumb, BRD-03). Лимит показов — 3
+  // (не 2, как у остальных подсказок — так задано в ТЗ для этой конкретно).
+  useEffect(() => {
+    if (!active || !showTerminal) return;
+    const priv = breadcrumbs[active.sessionId]?.privilege ?? 'normal';
+    const prev = lastPrivilege.current.get(active.sessionId) ?? 'normal';
+    lastPrivilege.current.set(active.sessionId, priv);
+    if (prev === 'normal' && priv !== 'normal') {
+      const cfg = getCurrentConfig();
+      if (cfg && !cfg.ui.expertMode && (cfg.shownCounts['rootHint'] ?? 0) < 3) {
+        setActiveHint('root');
+        void markHint('rootHint');
+      }
+    }
+  }, [active, breadcrumbs, showTerminal, markHint]);
 
   const handlePaste = useCallback((sessionId: string) => {
     void window.lucidSSH.clipboardRead().then((text) => {
@@ -372,10 +392,16 @@ export function TerminalArea(): JSX.Element {
         />
       )}
 
-      {/* Одноразовая подсказка SNIP-08 / SNIP-09 */}
+      {/* Одноразовая подсказка SNIP-08 / SNIP-09 / BRD-07 */}
       {!showOnboarding && activeHint && showTerminal && active && (
         <HintBar
-          textKey={activeHint === 'palette' ? 'hint.snippetPalette' : undefined}
+          textKey={
+            activeHint === 'palette'
+              ? 'hint.snippetPalette'
+              : activeHint === 'root'
+                ? 'hint.rootSession'
+                : undefined
+          }
           onClose={() => setActiveHint(null)}
         />
       )}
