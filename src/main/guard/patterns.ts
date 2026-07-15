@@ -132,8 +132,9 @@ const PATTERNS: GuardPattern[] = [
   }
 ];
 
-/** Разбиение составной команды на простые (; && || |) без учёта кавычек — консервативно. */
-function splitCompound(command: string): string[] {
+/** Разбиение составной команды на простые (; && || |) без учёта кавычек — консервативно.
+ *  Экспорт: переиспользуется детекцией эскалации шелла (shellIntegration.ts). */
+export function splitCompound(command: string): string[] {
   return command
     .split(/;|&&|\|\||\|/)
     .map((s) => s.trim())

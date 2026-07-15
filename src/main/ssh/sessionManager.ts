@@ -15,7 +15,14 @@ import {
   replaceKnownKey,
   sha256Fingerprint
 } from './knownHosts';
-import { BreadcrumbParser, CommandGate, EchoGate, SHELL_INTEGRATION_SETUP } from './shellIntegration';
+import {
+  BreadcrumbParser,
+  CommandGate,
+  EchoGate,
+  SHELL_INTEGRATION_SETUP,
+  endsWithInputPrompt,
+  isShellEscalationCommand
+} from './shellIntegration';
 import { startDashboard, stopDashboard } from './dashboard';
 import { loadErrorPatterns } from '../content/loader';
 import { detectError, isEmptyOutput } from '../errors/detector';
@@ -81,6 +88,14 @@ interface ManagedSession {
    *  вырезается из вывода сервера, т.к. терминал уже показал её локально
    *  во время набора (буфер строки на промпте, см. XtermView). */
   pendingEcho?: { text: string; armedAt: number };
+  /** Взведён реинжект интеграции: отправлена команда эскалации (su/sudo/шелл),
+   *  ждём промпт нового шелла, чтобы повторить настройку (фикс BRD-03/04). */
+  reinjectArmed?: boolean;
+  /** Хвост вывода с момента взвода — распознавание запроса пароля (не инжектить
+   *  настройку в поле ввода пароля). */
+  reinjectTail?: string;
+  /** Таймер тишины: инжект уходит после паузы в выводе нового шелла. */
+  reinjectTimer?: NodeJS.Timeout;
 }
 
 interface PendingHostKey {
@@ -115,6 +130,11 @@ const MAX_PASSWORD_ATTEMPTS = 3;
 const SETUP_SILENCE_MS = 300;
 const SETUP_CAP_MS = 2000;
 const ECHO_FLUSH_TIMEOUT_MS = 3000;
+// Реинжект после эскалации ждёт дольше, чем настройка на коннекте: инжект во
+// время сетевой паузы ПЕРЕД медленным запросом пароля отправил бы текст
+// настройки как «пароль» (в т.ч. в auth.log сервера). 800 мс + проверка
+// хвоста на «:» сводят риск к минимуму; сбой самоизлечивается маркером.
+const REINJECT_SILENCE_MS = 800;
 
 function send(channel: string, ...args: unknown[]): void {
   const win = getMainWindow();
@@ -589,6 +609,7 @@ function openShell(session: ManagedSession, client: Client): void {
       session.setupSent = false;
       session.commandGate.reset();
       clearSetupTimers(session);
+      disarmReinject(session); // новый shell — прежняя эскалация не в счёт
       setStatus(session, 'connected');
       log(session, 'info', 'clog.shellOpen', undefined, 'session');
 
@@ -608,6 +629,24 @@ function openShell(session: ManagedSession, client: Client): void {
         const display = effective.join('');
         if (display) {
           send(IPC.evTerminalData, session.id, display);
+        }
+        // Реинжект после эскалации (фикс BRD-03/04): маркер = старый шелл снова
+        // на промпте (эскалация сорвалась/завершилась) — отбой; иначе ждём паузу
+        // в выводе нового шелла, придерживая инжект на запросе пароля.
+        if (session.reinjectArmed) {
+          if (marks.length > 0) {
+            disarmReinject(session);
+          } else {
+            session.reinjectTail = ((session.reinjectTail ?? '') + display).slice(-256);
+            clearTimeout(session.reinjectTimer);
+            session.reinjectTimer = undefined;
+            if (!endsWithInputPrompt(session.reinjectTail)) {
+              session.reinjectTimer = setTimeout(
+                () => reinjectShellSetup(session),
+                REINJECT_SILENCE_MS
+              );
+            }
+          }
         }
         // Приписываем вывод СВОЕМУ маркеру: effective[i] — это то, что пришло
         // между (i-1)-м и i-м маркером в этом чанке. Несколько маркеров могут
@@ -775,9 +814,19 @@ function clearSetupTimers(session: ManagedSession): void {
   clearTimeout(session.setupSilenceTimer);
   clearTimeout(session.setupCapTimer);
   clearTimeout(session.echoFlushTimer);
+  clearTimeout(session.reinjectTimer);
   session.setupSilenceTimer = undefined;
   session.setupCapTimer = undefined;
   session.echoFlushTimer = undefined;
+  session.reinjectTimer = undefined;
+}
+
+/** Отбой реинжекта: эскалация сорвалась/завершилась либо инжект уже отправлен. */
+function disarmReinject(session: ManagedSession): void {
+  clearTimeout(session.reinjectTimer);
+  session.reinjectTimer = undefined;
+  session.reinjectArmed = false;
+  session.reinjectTail = '';
 }
 
 /**
@@ -791,10 +840,31 @@ function sendShellSetup(session: ManagedSession): void {
   session.setupSent = true;
   clearTimeout(session.setupSilenceTimer);
   clearTimeout(session.setupCapTimer);
+  writeShellSetup(session);
+}
+
+/**
+ * Повтор настройки после эскалации (su/sudo/вложенный shell — фикс BRD-03/04):
+ * новый процесс shell стартует без хука PROMPT_COMMAND, маркеры перестают
+ * приходить, и Страж/детектор/история молча отключаются. Вызывается таймером
+ * тишины после команды эскалации (см. stream.on('data') и sendCommandLine).
+ * Настройка идемпотентна (case-гарды в SHELL_INTEGRATION_SETUP), ложный инжект
+ * в старый шелл безвреден.
+ */
+function reinjectShellSetup(session: ManagedSession): void {
+  if (!session.reinjectArmed || !session.shell) return;
+  disarmReinject(session);
+  writeShellSetup(session);
+}
+
+/** Общее тело первичной настройки и реинжекта: подавление эха + страховка. */
+function writeShellSetup(session: ManagedSession): void {
+  if (!session.shell) return;
   session.echoGate.arm();
   session.shell.write(SHELL_INTEGRATION_SETUP);
   // Маркер не пришёл (shell без bash/zsh, ошибка настройки) — показать
   // накопленный вывод вместо того, чтобы молча его проглотить.
+  clearTimeout(session.echoFlushTimer);
   session.echoFlushTimer = setTimeout(() => {
     const buffered = session.echoGate.flush();
     if (buffered) {
@@ -835,6 +905,16 @@ const PENDING_ECHO_TIMEOUT_MS = 1500;
 export function sendCommandLine(sessionId: string, command: string): void {
   const session = sessions.get(sessionId);
   if (!session) return;
+  // Команда эскалации (su/sudo/вложенный shell) сменит процесс шелла и хук
+  // интеграции пропадёт — взводим реинжект (только если интеграция вообще
+  // работала: без первого маркера повтор настройки бессмысленен и лишь
+  // добавит видимого мусора на хосте, где она уже видимо не завелась).
+  if (session.setupSent && session.firstMarkSeen && isShellEscalationCommand(command)) {
+    session.reinjectArmed = true;
+    session.reinjectTail = '';
+    clearTimeout(session.reinjectTimer);
+    session.reinjectTimer = undefined;
+  }
   session.pendingEcho = { text: `${command}\r\n`, armedAt: Date.now() };
   sendInput(sessionId, `${command}\n`);
 }

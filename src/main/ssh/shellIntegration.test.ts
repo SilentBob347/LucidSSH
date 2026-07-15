@@ -4,12 +4,14 @@ import {
   CommandGate,
   EchoGate,
   SHELL_INTEGRATION_SETUP,
-  buildCdCommand
+  buildCdCommand,
+  endsWithInputPrompt,
+  isShellEscalationCommand
 } from './shellIntegration';
 
 const US = '\x1f';
-const mk = (u: string, h: string, p: string, e: string, c = '0'): string =>
-  `\x1b_lucidssh${US}${u}${US}${h}${US}${p}${US}${e}${US}${c}\x1b\\`;
+const mk = (u: string, h: string, p: string, e: string, c = '0', sudoUser = ''): string =>
+  `\x1b_lucidssh${US}${u}${US}${h}${US}${p}${US}${e}${US}${c}${US}${sudoUser}\x1b\\`;
 
 describe('BreadcrumbParser', () => {
   it('вырезает маркер и извлекает breadcrumb + exit code', () => {
@@ -36,6 +38,32 @@ describe('BreadcrumbParser', () => {
     const parser = new BreadcrumbParser();
     const { marks } = parser.push(mk('ubuntu', 'srv', '/home/ubuntu', '1000'));
     expect(marks[0]?.crumb.privilege).toBe('normal');
+  });
+
+  it('euid=0 с SUDO_USER (sudo -i) → privilege sudo', () => {
+    const parser = new BreadcrumbParser();
+    const { marks } = parser.push(mk('root', 'srv', '/root', '0', '0', 'nikita'));
+    expect(marks[0]?.crumb.privilege).toBe('sudo');
+  });
+
+  it('euid=0 без SUDO_USER (root-логин, su -) → privilege root', () => {
+    const parser = new BreadcrumbParser();
+    const { marks } = parser.push(mk('root', 'srv', '/root', '0', '0', ''));
+    expect(marks[0]?.crumb.privilege).toBe('root');
+  });
+
+  it('SUDO_USER при euid≠0 (sudo -u www) → всё равно normal', () => {
+    const parser = new BreadcrumbParser();
+    const { marks } = parser.push(mk('www', 'srv', '/var/www', '33', '0', 'nikita'));
+    expect(marks[0]?.crumb.privilege).toBe('normal');
+  });
+
+  it('маркер старого формата (5 полей, без SUDO_USER) разбирается как раньше', () => {
+    const parser = new BreadcrumbParser();
+    const legacy = `\x1b_lucidssh${US}root${US}h${US}/${US}0${US}0\x1b\\`;
+    const { marks } = parser.push(legacy);
+    expect(marks[0]?.crumb.privilege).toBe('root');
+    expect(marks[0]?.exitCode).toBe(0);
   });
 
   it('собирает маркер, разрезанный между двумя чанками', () => {
@@ -242,6 +270,68 @@ describe('CommandGate — маркер без Enter = перерисовка п�
     let ran = 0;
     while (gate.consume().ran) ran++;
     expect(ran).toBeLessThanOrEqual(20);
+  });
+});
+
+describe('isShellEscalationCommand — команды, сменяющие процесс shell (фикс BRD-03/04)', () => {
+  it.each([
+    'sudo -i',
+    'sudo -s',
+    'sudo su',
+    'sudo su -',
+    'sudo su - postgres',
+    'su',
+    'su -',
+    'su - deploy',
+    'sudo bash',
+    'sudo -u deploy -i',
+    'sudo -iu deploy',
+    'bash',
+    'zsh -l',
+    '/bin/bash',
+    'exec su -',
+    'doas -s',
+    'cd /tmp && sudo -i'
+  ])('эскалация: %s', (cmd) => {
+    expect(isShellEscalationCommand(cmd)).toBe(true);
+  });
+
+  it.each([
+    'sudo apt update',
+    'sudo systemctl restart nginx',
+    'sudo -u www id',
+    'bash deploy.sh',
+    'sh -c "ls"',
+    'ssh host',
+    'ls -la',
+    'suspend',
+    'echo su',
+    'cat /etc/sudoers'
+  ])('не эскалация: %s', (cmd) => {
+    expect(isShellEscalationCommand(cmd)).toBe(false);
+  });
+});
+
+describe('endsWithInputPrompt — придержать реинжект на запросе пароля', () => {
+  it.each([
+    '[sudo] password for nikita:',
+    '[sudo] password for nikita: ',
+    'Password:',
+    'Пароль:',
+    "Enter passphrase for key '/root/.ssh/id_ed25519':"
+  ])('запрос ввода: %j', (tail) => {
+    expect(endsWithInputPrompt(tail)).toBe(true);
+  });
+
+  it.each([
+    'root@football-bot:~# ',
+    'user@host:~$ ',
+    'srv % ',
+    'total 42\r\n',
+    // двоеточие есть, но строка завершена переводом строки — ввод не ждут
+    'Warning: something happened:\n'
+  ])('не запрос ввода: %j', (tail) => {
+    expect(endsWithInputPrompt(tail)).toBe(false);
   });
 });
 

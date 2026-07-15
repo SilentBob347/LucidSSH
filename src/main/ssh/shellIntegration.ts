@@ -1,4 +1,5 @@
 import type { Breadcrumb } from '@shared/breadcrumb';
+import { splitCompound } from '../guard/patterns';
 
 /**
  * Shell integration для breadcrumb (BRD-04, §19 Security_Guide).
@@ -56,8 +57,11 @@ export const SHELL_INTEGRATION_SETUP =
   // байтом в команде: сырой 0x1f — это Ctrl+_, в интерактивном bash readline
   // выполняет его как undo и корёжит команду (на реальных серверах маркер
   // склеивался без разделителей и breadcrumb не работал; мок без readline это скрывал).
-  ` __lucidssh_mark() { __lc=$?; printf '\\033_lucidssh\\037%s\\037%s\\037%s\\037%s\\037%s\\033\\\\' ` +
-  `"\${USER:-$(id -un 2>/dev/null)}" "\${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD" "$(id -u 2>/dev/null)" "$__lc"; }\n` +
+  // 6-е поле — SUDO_USER удалённого шелла: отличает root-через-sudo (амбер
+  // «sudo», BRD-03) от настоящего root-логина (красный). sudo проставляет её
+  // сам даже при env_reset; `su -` окружение чистит — там поле пустое → root.
+  ` __lucidssh_mark() { __lc=$?; printf '\\033_lucidssh\\037%s\\037%s\\037%s\\037%s\\037%s\\037%s\\033\\\\' ` +
+  `"\${USER:-$(id -un 2>/dev/null)}" "\${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD" "$(id -u 2>/dev/null)" "$__lc" "\${SUDO_USER:-}"; }\n` +
   ` if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __lucidssh_mark 2>/dev/null || eval 'precmd_functions+=(__lucidssh_mark)'; ` +
   // bash: маркер через PROMPT_COMMAND, НЕ через встраивание в PS1. Маркер в PS1
   // становится частью СТРОКИ приглашения: readline перепечатывает её при
@@ -253,21 +257,21 @@ export class CommandGate {
 function parseMarker(marker: string): ShellMark | null {
   const m = marker.match(MARKER_RE);
   if (!m || !m[1]) return null;
-  // Формат содержимого: US u US h US p US euid US exit → split даёт ['', u, h, p, euid, exit].
+  // Формат: US u US h US p US euid US exit US sudoUser → split даёт ['', u, h, p, euid, exit, su].
   const parts = m[1].split(US);
   const fields = parts[0] === '' ? parts.slice(1) : parts;
   if (fields.length < 4) return null;
-  const [username, host, path, euidStr, exitStr] = fields;
+  const [username, host, path, euidStr, exitStr, sudoUser] = fields;
   const euid = Number(euidStr);
   const exitNum = exitStr === undefined ? NaN : Number(exitStr);
+  // sudo = root с сохранённым SUDO_USER удалённого шелла (6-е поле маркера);
+  // root без него — настоящий root-логин или `su -` (окружение вычищено).
   const privilege: Breadcrumb['privilege'] =
-    euid === 0 ? 'root' : process.env['SUDO_USER'] ? 'sudo' : 'normal';
+    euid === 0 ? (sudoUser ? 'sudo' : 'root') : 'normal';
   const crumb: Breadcrumb = {
     username: (username ?? '').slice(0, 64),
     host: (host ?? '').slice(0, 128),
     path: (path ?? '').slice(0, 4096),
-    // sudo определяется по факту euid=0 при непустом исходном пользователе;
-    // без euid считаем normal
     privilege: Number.isFinite(euid) ? privilege : 'normal'
   };
   return { crumb, exitCode: Number.isInteger(exitNum) ? exitNum : null };
@@ -281,4 +285,75 @@ function parseMarker(marker: string): ShellMark | null {
 export function buildCdCommand(path: string): string {
   const escaped = path.replace(/'/g, `'\\''`);
   return `cd '${escaped}'`;
+}
+
+// ---------------------------------------------------------------------------
+// Реинжект интеграции после эскалации привилегий (фикс BRD-03/04, 15.07.2026).
+// su/sudo/вложенный shell — НОВЫЙ процесс без хука PROMPT_COMMAND (он не
+// экспортируется, а sudo и так чистит окружение): маркеры перестают приходить,
+// breadcrumb замирает, а renderer навсегда считает «выполняется программа» —
+// Страж/детектор/история молча отключаются. Лечение: распознать команду
+// эскалации при отправке и повторить SHELL_INTEGRATION_SETUP, когда новый шелл
+// покажет промпт (см. ReinjectGate-логику в sessionManager.ts).
+// ---------------------------------------------------------------------------
+
+/** Шеллы, голый запуск которых теряет хук (вложенный bash — тот же баг). */
+const SHELL_NAMES = new Set(['bash', 'sh', 'zsh', 'dash', 'ash', 'ksh']);
+/** Флаги sudo/doas, принимающие отдельное значение следующим словом. */
+const VALUE_FLAGS = new Set(['-u', '-g', '-p', '-U', '-C', '-D', '-R', '-T', '-t', '-h']);
+
+/**
+ * Команда, после которой текущий shell сменяется новым (эскалация или вложенный
+ * shell). Консервативно: ложный пропуск = сегодняшнее поведение (интеграция
+ * замирает), ложное срабатывание = видимый мусор настройки в чужом REPL —
+ * поэтому произвольные `sudo <команда>` не считаются.
+ */
+export function isShellEscalationCommand(command: string): boolean {
+  return splitCompound(command).some(isEscalationSegment);
+}
+
+function isEscalationSegment(segment: string): boolean {
+  const words = segment.trim().split(/\s+/).filter((w) => w.length > 0);
+  if (words[0] === 'exec') words.shift(); // `exec su -` / `exec bash`
+
+  let interactiveFlag = false;
+  while (words[0] === 'sudo' || words[0] === 'doas') {
+    words.shift();
+    while (words[0]?.startsWith('-')) {
+      const flag = words.shift()!;
+      // -i (login shell) / -s (shell) — в т.ч. слитно: -iu, -su
+      if (/^-[a-z]*[is]/.test(flag) || flag === '--login') interactiveFlag = true;
+      // Флаг со значением следующим словом — в т.ч. слитный `-iu deploy`
+      if (VALUE_FLAGS.has(flag) || /^-[a-z]*u$/i.test(flag) || flag === '--user') {
+        words.shift();
+      }
+    }
+  }
+
+  if (words.length === 0) return interactiveFlag; // `sudo -i`, `sudo -s`
+  const head = words[0]!;
+  if (head === 'su') return true; // su / su - / su - user / sudo su …
+  // Голый запуск шелла: без аргументов либо только -l/-i (`bash deploy.sh` — нет)
+  const name = head.slice(head.lastIndexOf('/') + 1);
+  if (!SHELL_NAMES.has(name)) return false;
+  return words.slice(1).every((w) => w === '-l' || w === '-i' || w === '--login');
+}
+
+/**
+ * Явные паттерны запроса пароля (статический список + русские варианты).
+ * Экспорт: TERM-09 (подсказка «ввод скрыт») переиспользует этот же список.
+ */
+export const PASSWORD_PROMPT_RE =
+  /(\[sudo\] password for [^\n]*|password[^\n]*:|пароль[^\n]*:|enter passphrase[^\n]*:)[ \t]*$/i;
+
+/**
+ * Хвост вывода похож на ожидание ввода (запрос пароля и т.п.) — реинжект
+ * настройки нужно придержать, иначе её текст уйдёт как «пароль». Локале-
+ * независимая эвристика: незавершённая строка, оканчивающаяся двоеточием
+ * (промпты шеллов кончаются на #/$/%/>, запросы ввода — почти всегда на «:»).
+ */
+export function endsWithInputPrompt(output: string): boolean {
+  const lastLine = output.slice(output.lastIndexOf('\n') + 1).replace(/[ \t\r]+$/, '');
+  if (lastLine.endsWith(':')) return true;
+  return PASSWORD_PROMPT_RE.test(lastLine);
 }
