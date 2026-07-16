@@ -5,7 +5,7 @@ How the engineering skills should consume this repo's domain documentation when 
 ## Before exploring, read these
 
 - **`docs/agent/CONTEXT.md`** — glossary and rationale for decisions, **not** a requirements registry.
-- **`docs/agent/adr/`** — read ADRs that touch the area you're about to work in.
+- **`docs/agent/adr/`** (published) and **`private/adr/`** (not published) — read ADRs that touch the area you're about to work in, in both locations. An ADR lives in `private/adr/` instead of `docs/agent/adr/` when its rationale discloses business/monetization decisions or unreleased-feature specifics that fail the private/public doc-split criteria (see `CLAUDE.md`'s public/private note); otherwise it's public.
 
 If any of these files don't exist yet, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
@@ -16,14 +16,19 @@ This repo places domain docs under `docs/agent/` instead of the repo root (the s
 ## File structure (as used in this repo)
 
 ```
-docs/agent/
-├── CONTEXT.md
+docs/agent/                        (published)
+├── CONTEXT.md                     (not yet created — see below)
 ├── adr/
-│   ├── 0001-....md
-│   └── 0002-....md
+│   └── 0002-....md                (architecture-only ADRs)
 ├── issue-tracker.md   (this setup skill's own config)
 └── domain.md           (this file)
+
+private/adr/                       (not published)
+├── 0001-....md                    (business/monetization ADRs)
+└── 0003-....md
 ```
+
+ADR numbering is a single global sequence across both directories — don't restart numbering in `private/adr/`. Scan both directories for the highest existing number before assigning a new one.
 
 ## `private/TZ.md` stays the requirements source of truth
 
