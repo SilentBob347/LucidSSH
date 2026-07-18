@@ -255,6 +255,10 @@ export async function connectQuickHost(
  * разрешён повторный запрос пароля (allowAuthRetry), 'other' — прочие случаи
  * (уже залогированы, и session переведена в disconnected через
  * finishDisconnected — вызывающему дальше ничего делать не нужно).
+ *
+ * Тестовый рычаг (Часть 2 спеки): реальный `Client` создаётся через
+ * подменяемую фабрику `clientFactory` — см. `__setClientFactoryForTest` и
+ * `attemptConnectForTest` внизу файла.
  */
 function attemptConnect(
   session: ManagedSession,
@@ -273,7 +277,11 @@ function attemptConnect(
     };
 
     const cfg = loadConfig();
-    const client = new Client();
+    // Тестовый дублёр реализует только узкий FakeableClient — приводим к
+    // Client один раз здесь, на границе seam'а (см. FakeableClient внизу
+    // файла); дальше по функции и в openShell/dashboard.ts используется
+    // обычный тип Client, ничего о подмене не зная.
+    const client = clientFactory() as unknown as Client;
     session.client = client;
 
     client.on('greeting', (greeting: string) => {
@@ -404,6 +412,11 @@ function attemptConnect(
     }
   });
 }
+
+/** Тестовый алиас без изменения сигнатуры (Часть 2 спеки, по образцу
+ *  `parseMetricsForTest` в dashboard.ts) — тесты зовут машину состояний
+ *  подключения напрямую, минуя establish()/hosts/repository.ts/keychain. */
+export const attemptConnectForTest = attemptConnect;
 
 async function establish(session: ManagedSession, host: Host): Promise<void> {
   session.connectStartedAt = Date.now();
@@ -919,4 +932,44 @@ export function activeSessionCount(): number {
   return [...sessions.values()].filter(
     (s) => s.status === 'connected' || s.status === 'connecting' || s.status === 'reconnecting'
   ).length;
+}
+
+// ---------------------------------------------------------------------------
+// Transport seam (Часть 2 спеки): фабрика Client подменяема на уровне модуля —
+// тестам не нужен настоящий SSH-сервер, чтобы проверить attemptConnect (повтор
+// пароля, keyboard-interactive, host-key verifier, отказ Quick Connect от
+// автопереподключения). Публичные функции (connectHost, connectQuickHost,
+// IPC-слой в ipc/sessions.ts) щели не видят — она приходит в игру только
+// внутри attemptConnect. FakeableClient — узкий контракт: только то, чем
+// реально пользуются sessionManager/dashboard.ts, не весь API ssh2.Client.
+// ---------------------------------------------------------------------------
+
+type ClientEventMap = {
+  greeting: (greeting: string) => void;
+  handshake: (negotiated: { kex?: string; cs?: { cipher?: string; mac?: string } }) => void;
+  'keyboard-interactive': (
+    name: string,
+    instructions: string,
+    lang: string,
+    prompts: Array<{ prompt: string; echo: boolean }>,
+    finish: (answers: string[]) => void
+  ) => void;
+  ready: () => void;
+  error: (err: Error & { level?: string }) => void;
+  close: () => void;
+};
+
+export interface FakeableClient {
+  connect(config: Parameters<Client['connect']>[0]): void;
+  on<E extends keyof ClientEventMap>(event: E, handler: ClientEventMap[E]): unknown;
+  shell: Client['shell'];
+  exec: Client['exec'];
+}
+
+let clientFactory: () => FakeableClient = () => new Client();
+
+/** Тестовый рычаг (по образцу `parseMetricsForTest` в dashboard.ts): подменить
+ *  фабрику Client фальшивым дублёром или сбросить к настоящему ssh2.Client. */
+export function __setClientFactoryForTest(factory: (() => FakeableClient) | null): void {
+  clientFactory = factory ?? (() => new Client());
 }
