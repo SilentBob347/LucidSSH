@@ -11,3 +11,6 @@ coverage/
 
 # Локальные бэкапы дизайна (тяжёлые zip); источник истины по UI — docs/
 Design backup/
+
+# Локальный issue-tracker (docs/agent/issue-tracker.md) — вне репозитория намеренно
+.scratch/
