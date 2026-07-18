@@ -3,20 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../ssh/sessionManager', () => ({
   getSession: vi.fn(),
   recordBlockedCommand: vi.fn(),
-  sendCommandLine: vi.fn(),
-  setLastCommand: vi.fn()
+  sendCommandLine: vi.fn()
 }));
 vi.mock('../hosts/repository', () => ({ getHost: vi.fn() }));
 vi.mock('../config/store', () => ({ loadConfig: vi.fn() }));
 vi.mock('./patterns', () => ({ analyzeCommand: vi.fn() }));
 vi.mock('../i18n', () => ({ t: vi.fn((key: string) => key) }));
 
-import {
-  getSession,
-  recordBlockedCommand,
-  sendCommandLine,
-  setLastCommand
-} from '../ssh/sessionManager';
+import { getSession, recordBlockedCommand, sendCommandLine } from '../ssh/sessionManager';
 import { getHost } from '../hosts/repository';
 import { loadConfig } from '../config/store';
 import { analyzeCommand } from './patterns';
@@ -26,7 +20,6 @@ import { submitCommand, confirmDangerousCommand, cancelDangerousCommand } from '
 const mockGetSession = vi.mocked(getSession);
 const mockRecordBlockedCommand = vi.mocked(recordBlockedCommand);
 const mockSendCommandLine = vi.mocked(sendCommandLine);
-const mockSetLastCommand = vi.mocked(setLastCommand);
 const mockGetHost = vi.mocked(getHost);
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockAnalyzeCommand = vi.mocked(analyzeCommand);
@@ -61,13 +54,11 @@ describe('submitCommand', () => {
     const res = submitCommand('s1', 'ls');
     expect(res).toEqual({ status: 'sent' });
     expect(mockSendCommandLine).not.toHaveBeenCalled();
-    expect(mockSetLastCommand).not.toHaveBeenCalled();
   });
 
   it('безопасная команда уходит на сервер с переводом строки', () => {
     const res = submitCommand('s1', 'ls -la');
     expect(res).toEqual({ status: 'sent' });
-    expect(mockSetLastCommand).toHaveBeenCalledWith('s1', 'ls -la');
     expect(mockSendCommandLine).toHaveBeenCalledWith('s1', 'ls -la');
   });
 
@@ -169,8 +160,7 @@ describe('confirmDangerousCommand', () => {
     const id = block();
     const ok = confirmDangerousCommand(id, 'www');
     expect(ok).toBe(true);
-    expect(mockSetLastCommand).toHaveBeenLastCalledWith('s1', 'rm -rf /var/www', 'confirmed');
-    expect(mockSendCommandLine).toHaveBeenLastCalledWith('s1', 'rm -rf /var/www');
+    expect(mockSendCommandLine).toHaveBeenLastCalledWith('s1', 'rm -rf /var/www', 'confirmed');
   });
 
   it('неверный текст — не отправляет и возвращает false', () => {

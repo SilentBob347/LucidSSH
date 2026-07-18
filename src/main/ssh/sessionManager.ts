@@ -16,14 +16,13 @@ import {
   sha256Fingerprint
 } from './knownHosts';
 import {
-  BreadcrumbParser,
-  CommandGate,
-  EchoGate,
-  SHELL_INTEGRATION_SETUP,
-  endsWithInputPrompt,
-  isShellEscalationCommand,
-  matchesPasswordPromptPattern
-} from './shellIntegration';
+  ShellIntegrationSession,
+  SETUP_CAP_MS,
+  type ShellIntegrationEvent,
+  type ShellIntegrationResult,
+  type ShellIntegrationTimer,
+  type TimerAction
+} from './shellIntegrationSession';
 import { startDashboard, stopDashboard } from './dashboard';
 import { loadErrorPatterns } from '../content/loader';
 import { detectError, isEmptyOutput } from '../errors/detector';
@@ -39,6 +38,14 @@ import { notifyDisconnect, notifyCommandDone } from '../notifications/notifier';
  * SQLite и секрет из Credential Manager; host key проверяется ДО аутентификации
  * (это гарантирует и протокол SSH, и hostVerifier ssh2); renderer получает
  * только sessionId и статусы. Секрет не кэшируется дольше подключения.
+ *
+ * Разбор вывода shell-интеграции (breadcrumb, эхо setup-команды, реинжект
+ * после su/sudo, детекция запроса пароля) живёт за `ShellIntegrationSession`
+ * (см. `.scratch/shell-integration-session/spec.md`) — эта коробка «не имеет
+ * рук»: сама не пишет в provод и не заводит настоящих таймеров, только
+ * сообщает решения (`ShellIntegrationResult`), которые ниже применяет
+ * `applyResult`. Реальные `setTimeout` для её именованных таймеров живут в
+ * `ManagedSession.shellTimers`.
  */
 
 interface ManagedSession {
@@ -54,56 +61,23 @@ interface ManagedSession {
   userClosed: boolean;
   reconnectAttempts: number;
   connectStartedAt: number;
-  breadcrumbParser: BreadcrumbParser;
-  /** Вывод с момента предыдущего маркера — для детектора ошибок (ERR-01). */
-  outputSinceMark: string;
-  /** Последняя команда, отправленная через композер/Стража (для {original} и истории). */
-  lastCommand: string;
-  /** Момент отправки последней команды — для порога долгой команды (NOTIF-02). */
-  lastCommandStartedAt: number;
   /** Была ли сессия хоть раз подключена — чтобы уведомлять о потере, не о неудаче (NOTIF-01). */
   everConnected: boolean;
-  /** Статус Стража для последней команды (confirmed при подтверждении опасной). */
-  pendingGuardStatus?: GuardStatus;
-  /** Первый маркер после подключения — приветствие, не результат команды. */
-  firstMarkSeen: boolean;
-  /** Гейт подавления эха setup-команды: MOTD виден, эхо настройки — нет. */
-  echoGate: EchoGate;
-  /** Гейт «команда выполнялась»: отсекает маркеры от перерисовок приглашения. */
-  commandGate: CommandGate;
-  /** Отправлена ли настройка shell integration в текущий shell. */
-  setupSent: boolean;
-  /** Пауза в выводе после MOTD — сигнал отправить настройку. */
-  setupSilenceTimer?: NodeJS.Timeout;
-  /** Кап: настройка уходит даже если сервер молчит (нет MOTD/приглашения). */
-  setupCapTimer?: NodeJS.Timeout;
-  /** Страховка: shell без bash/zsh не пришлёт маркер — показать накопленное. */
-  echoFlushTimer?: NodeJS.Timeout;
   /** Канал закрылся с распознанной ssh-connection-ошибкой (nologin и т.п.) —
    *  автопереподключение бессмысленно, см. client.on('close', ...). */
   shellUnavailable?: boolean;
   /** Имя пользователя для Quick Connect (HM-11, hostId=0 — нет строки в hosts,
    *  getHost(0) всегда null) — фоллбэк для recordCommand, где обычно берётся из host. */
   quickConnectUsername?: string;
-  /** Ожидаемое эхо только что отправленной через sendCommandLine команды —
-   *  вырезается из вывода сервера, т.к. терминал уже показал её локально
-   *  во время набора (буфер строки на промпте, см. XtermView). */
-  pendingEcho?: { text: string; armedAt: number };
-  /** Взведён реинжект интеграции: отправлена команда эскалации (su/sudo/шелл),
-   *  ждём промпт нового шелла, чтобы повторить настройку (фикс BRD-03/04). */
-  reinjectArmed?: boolean;
-  /** Хвост вывода с момента взвода — распознавание запроса пароля (не инжектить
-   *  настройку в поле ввода пароля). */
-  reinjectTail?: string;
-  /** Таймер тишины: инжект уходит после паузы в выводе нового шелла. */
-  reinjectTimer?: NodeJS.Timeout;
-  /** Хвост вывода для детекции запроса пароля (TERM-09), независим от
-   *  reinject-гейта — пароль может запрашиваться вне эскалации (git, passwd,
-   *  вложенный ssh и т.п.). */
-  passwordPromptTail?: string;
-  /** true между «увидели запрос пароля» и следующим маркером (не шлём
-   *  событие повторно на каждый чанк, пока промпт пароля один и тот же). */
-  passwordPromptActive?: boolean;
+  /** Конвейер разбора вывода текущего shell-канала. Новый экземпляр — на
+   *  каждое открытие канала (в т.ч. после переподключения/эскалации), старый
+   *  выбрасывается; отдельного reset() нет — чистое состояние гарантирует
+   *  конструктор (см. ShellIntegrationSession). */
+  shellIntegration: ShellIntegrationSession | null;
+  /** Реальные таймеры именованных запросов коробки (см. applyTimerActions).
+   *  Живёт бок о бок с shellIntegration — оба создаются заново в openShell,
+   *  этого достаточно вместо ручного списка полей для сброса. */
+  shellTimers: Partial<Record<ShellIntegrationTimer, NodeJS.Timeout>>;
 }
 
 interface PendingHostKey {
@@ -132,17 +106,6 @@ const HOSTKEY_DECISION_TIMEOUT_MS = 5 * 60 * 1000;
 const AUTH_PROMPT_TIMEOUT_MS = 2 * 60 * 1000;
 const MAX_PASSPHRASE_ATTEMPTS = 3;
 const MAX_PASSWORD_ATTEMPTS = 3;
-// Отправка shell integration: ждём паузу в выводе после MOTD (иначе окно
-// подавления эха съест приветствие), но не дольше капа. Маркер-страховка —
-// если shell не bash/zsh и маркер не придёт, накопленное эхо показывается.
-const SETUP_SILENCE_MS = 300;
-const SETUP_CAP_MS = 2000;
-const ECHO_FLUSH_TIMEOUT_MS = 3000;
-// Реинжект после эскалации ждёт дольше, чем настройка на коннекте: инжект во
-// время сетевой паузы ПЕРЕД медленным запросом пароля отправил бы текст
-// настройки как «пароль» (в т.ч. в auth.log сервера). 800 мс + проверка
-// хвоста на «:» сводят риск к минимуму; сбой самоизлечивается маркером.
-const REINJECT_SILENCE_MS = 800;
 
 function send(channel: string, ...args: unknown[]): void {
   const win = getMainWindow();
@@ -171,15 +134,6 @@ function log(
   s.log.push(entry);
   if (s.log.length > 500) s.log.shift();
   send(IPC.evConnectionLog, s.id, entry);
-}
-
-/** Накопление вывода между маркерами с тем же капом, что и раньше (ERR-01). */
-function appendOutput(session: ManagedSession, text: string): void {
-  if (!text) return;
-  session.outputSinceMark += text;
-  if (session.outputSinceMark.length > 65536) {
-    session.outputSinceMark = session.outputSinceMark.slice(-65536);
-  }
 }
 
 /** Тип ключа из блоба host key (первое length-prefixed поле). */
@@ -234,15 +188,9 @@ export async function connectHost(hostId: number): Promise<{ sessionId: string }
     userClosed: false,
     reconnectAttempts: 0,
     connectStartedAt: Date.now(),
-    breadcrumbParser: new BreadcrumbParser(),
-    outputSinceMark: '',
-    lastCommand: '',
-    lastCommandStartedAt: 0,
     everConnected: false,
-    firstMarkSeen: false,
-    echoGate: new EchoGate(),
-    commandGate: new CommandGate(),
-    setupSent: false
+    shellIntegration: null,
+    shellTimers: {}
   };
   sessions.set(session.id, session);
   setStatus(session, 'connecting');
@@ -288,15 +236,9 @@ export async function connectQuickHost(
     userClosed: false,
     reconnectAttempts: 0,
     connectStartedAt: Date.now(),
-    breadcrumbParser: new BreadcrumbParser(),
-    outputSinceMark: '',
-    lastCommand: '',
-    lastCommandStartedAt: 0,
     everConnected: false,
-    firstMarkSeen: false,
-    echoGate: new EchoGate(),
-    commandGate: new CommandGate(),
-    setupSent: false,
+    shellIntegration: null,
+    shellTimers: {},
     quickConnectUsername: username
   };
   sessions.set(session.id, session);
@@ -612,90 +554,38 @@ function openShell(session: ManagedSession, client: Client): void {
       }
       session.shell = stream;
       session.everConnected = true;
-      // Новый shell (в т.ч. после переподключения) — настройка ещё не отправлена,
-      // гейты и таймеры прошлого shell сбрасываются.
-      session.setupSent = false;
-      session.commandGate.reset();
-      clearSetupTimers(session);
-      disarmReinject(session); // новый shell — прежняя эскалация не в счёт
-      session.passwordPromptActive = false;
-      session.passwordPromptTail = '';
+      // Новый shell (в т.ч. после переподключения) — свежий конвейер разбора и
+      // пустой реестр таймеров сами по себе заменяют ручной список сброса
+      // прежних гейтов/полей (setupSent, commandGate.reset(), disarmReinject, …).
+      clearAllShellTimers(session);
+      session.shellIntegration = new ShellIntegrationSession();
       setStatus(session, 'connected');
       log(session, 'info', 'clog.shellOpen', undefined, 'session');
 
-      // Вывод сервера проходит через парсер breadcrumb: APC-маркеры вырезаются
-      // (в xterm не попадают), из них формируется breadcrumb (BRD-04) и
-      // отслеживается exit code для детектора ошибок (ERR-01). EchoGate
-      // дополнительно прячет эхо setup-команды (MOTD остаётся видимым).
+      // Вывод сервера проходит через ShellIntegrationSession: APC-маркеры
+      // вырезаются (в xterm не попадают), из них формируется breadcrumb
+      // (BRD-04) и отслеживается exit code для детектора ошибок (ERR-01).
       stream.on('data', (data: Buffer) => {
-        const raw = stripPendingEcho(session, data.toString('utf8'));
-        const { pieces, marks } = session.breadcrumbParser.push(raw);
-        if (!session.setupSent) {
-          // MOTD ещё идёт — настройка уходит после паузы в выводе
-          clearTimeout(session.setupSilenceTimer);
-          session.setupSilenceTimer = setTimeout(() => sendShellSetup(session), SETUP_SILENCE_MS);
-        }
-        const effective = session.echoGate.filter(pieces, marks.length);
-        const display = effective.join('');
-        if (display) {
-          send(IPC.evTerminalData, session.id, display);
-        }
-        // Реинжект после эскалации (фикс BRD-03/04): маркер = старый шелл снова
-        // на промпте (эскалация сорвалась/завершилась) — отбой; иначе ждём паузу
-        // в выводе нового шелла, придерживая инжект на запросе пароля.
-        if (session.reinjectArmed) {
-          if (marks.length > 0) {
-            disarmReinject(session);
-          } else {
-            session.reinjectTail = ((session.reinjectTail ?? '') + display).slice(-256);
-            clearTimeout(session.reinjectTimer);
-            session.reinjectTimer = undefined;
-            if (!endsWithInputPrompt(session.reinjectTail)) {
-              session.reinjectTimer = setTimeout(
-                () => reinjectShellSetup(session),
-                REINJECT_SILENCE_MS
-              );
-            }
-          }
-        }
-        // TERM-09: явный запрос пароля (статичный список паттернов) — событие
-        // только на нарастающем фронте (не на каждый чанк одного и того же
-        // промпта); маркер ниже сбрасывает признак — снова на обычном промпте.
-        if (display) {
-          session.passwordPromptTail = ((session.passwordPromptTail ?? '') + display).slice(-256);
-          if (
-            !session.passwordPromptActive &&
-            matchesPasswordPromptPattern(session.passwordPromptTail)
-          ) {
-            session.passwordPromptActive = true;
-            send(IPC.evPasswordPrompt, session.id);
-          }
-        }
-        // Приписываем вывод СВОЕМУ маркеру: effective[i] — это то, что пришло
-        // между (i-1)-м и i-м маркером в этом чанке. Несколько маркеров могут
-        // прийти в одном data-событии (см. баг: два маркера одним пакетом).
-        for (let i = 0; i < marks.length; i++) {
-          appendOutput(session, effective[i] ?? '');
-          send(IPC.evBreadcrumb, session.id, marks[i]!.crumb);
-          handleCommandFinished(session, marks[i]!.exitCode);
-          session.passwordPromptActive = false;
-          session.passwordPromptTail = '';
-        }
-        appendOutput(session, effective[effective.length - 1] ?? '');
+        const box = session.shellIntegration;
+        if (!box) return;
+        applyResult(session, box.feed(data.toString('utf8')));
       });
       stream.stderr?.on('data', (data: Buffer) => {
         send(IPC.evTerminalData, session.id, data.toString('utf8'));
       });
       stream.on('close', () => {
-        clearSetupTimers(session);
+        clearAllShellTimers(session);
+        const box = session.shellIntegration;
         session.shell = null;
         stopDashboard(session.id);
-        checkShellUnavailable(session);
+        if (box) applyResult(session, box.close());
       });
 
       // Кап на случай сервера без MOTD/приглашения: настройка уйдёт даже
-      // если данных от сервера не было и silence-таймер не взводился.
-      session.setupCapTimer = setTimeout(() => sendShellSetup(session), SETUP_CAP_MS);
+      // если данных от сервера не было и silence-таймер не взводился. Это
+      // единственный таймер, который коробка не может попросить сама —
+      // её интерфейс не включает «канал открылся».
+      applyTimerActions(session, [{ timer: 'setup-cap', action: 'schedule', ms: SETUP_CAP_MS }]);
 
       // Мини-дашборд: отдельный exec-канал, интервал 10 с (DASH-02).
       // Логгер — причина недоступности метрик попадает в «Детали подключения» (DASH-05).
@@ -706,19 +596,76 @@ function openShell(session: ManagedSession, client: Client): void {
   );
 }
 
+/** Применяет решение ShellIntegrationSession: пишет в provод, показывает
+ *  текст в терминале, (пере)заводит/отменяет таймеры, разбирает события —
+ *  единственное место, где коробка встречается с реальным IO. */
+function applyResult(session: ManagedSession, result: ShellIntegrationResult): void {
+  if (result.toWrite) session.shell?.write(result.toWrite);
+  if (result.display) send(IPC.evTerminalData, session.id, result.display);
+  applyTimerActions(session, result.timerActions);
+  for (const event of result.events) {
+    handleShellIntegrationEvent(session, event);
+  }
+}
+
+function clearShellTimer(session: ManagedSession, timer: ShellIntegrationTimer): void {
+  const handle = session.shellTimers[timer];
+  if (handle) {
+    clearTimeout(handle);
+    delete session.shellTimers[timer];
+  }
+}
+
+function clearAllShellTimers(session: ManagedSession): void {
+  for (const timer of Object.keys(session.shellTimers) as ShellIntegrationTimer[]) {
+    clearShellTimer(session, timer);
+  }
+}
+
+/** Заводит/отменяет именованные таймеры коробки — она сама «рук не имеет»
+ *  (см. shellIntegrationSession.ts). По истечении таймер зовёт box.tick(). */
+function applyTimerActions(session: ManagedSession, actions: TimerAction[]): void {
+  for (const action of actions) {
+    clearShellTimer(session, action.timer);
+    if (action.action !== 'schedule') continue;
+    session.shellTimers[action.timer] = setTimeout(() => {
+      delete session.shellTimers[action.timer];
+      const box = session.shellIntegration;
+      if (!box) return;
+      applyResult(session, box.tick(action.timer));
+    }, action.ms);
+  }
+}
+
+function handleShellIntegrationEvent(session: ManagedSession, event: ShellIntegrationEvent): void {
+  switch (event.kind) {
+    case 'breadcrumb':
+      send(IPC.evBreadcrumb, session.id, event.crumb);
+      break;
+    case 'command-finished':
+      handleCommandFinished(session, event);
+      break;
+    case 'password-prompt':
+      send(IPC.evPasswordPrompt, session.id);
+      break;
+    case 'unmarked-output':
+      checkShellUnavailable(session, event.output);
+      break;
+  }
+}
+
 /**
  * Некоторые серверы аутентифицируют успешно, но не могут открыть интерактивную
  * сессию (login shell = nologin и т.п.) — канал сразу закрывается, ssh2 не
  * эмитит 'error' (это не ошибка аутентификации). Наш маркер breadcrumb в таком
  * случае никогда не приходит, поэтому обычный путь детектора (по exit code
  * команды) не срабатывает. Текст, который сервер успел прислать перед
- * закрытием канала, сверяется с базой паттернов scope 'ssh-connection';
- * совпадение показывается как отдельное объяснение, а сессия помечается, чтобы
- * client.on('close', ...) не пытался переподключиться — повтор бесполезен.
+ * закрытием канала (событие `unmarked-output` от ShellIntegrationSession.close()),
+ * сверяется с базой паттернов scope 'ssh-connection'; совпадение показывается
+ * как отдельное объяснение, а сессия помечается, чтобы client.on('close', ...)
+ * не пытался переподключиться — повтор бесполезен.
  */
-function checkShellUnavailable(session: ManagedSession): void {
-  const output = session.outputSinceMark;
-  if (!output.trim()) return;
+function checkShellUnavailable(session: ManagedSession, output: string): void {
   const patterns = loadErrorPatterns(loadConfig().language);
   const result = detectError(patterns, 'ssh-connection', output, null, '');
   if (result.matched) {
@@ -728,41 +675,24 @@ function checkShellUnavailable(session: ManagedSession): void {
 }
 
 /**
- * Обработка завершения команды по маркеру (ERR-01). Первый маркер после
- * подключения — приветствие/сам setup, не команда, поэтому пропускается.
- * При exit code ≠ 0 и включённой панели детектора (SET-05) — матч по базе.
+ * Обработка события «команда завершилась» от ShellIntegrationSession. Пустая
+ * `command` — прямой ввод в xterm (main не знает его текста, история его не
+ * пишет, см. HIST-01). При exit code ≠ 0 и включённой панели детектора
+ * (SET-05) — матч по базе.
  */
-function handleCommandFinished(session: ManagedSession, exitCode: number | null): void {
-  const output = session.outputSinceMark;
-  session.outputSinceMark = '';
-
-  if (!session.firstMarkSeen) {
-    session.firstMarkSeen = true;
-    return;
-  }
-
-  // Маркер без Enter'а с прошлого маркера — перерисовка приглашения, а не
-  // завершение команды (см. CommandGate). Открытие/закрытие самой панели
-  // детектора вызывает resize → SIGWINCH → readline перепечатывает промпт
-  // вместе со встроенным в PS1 маркером и СТАРЫМ $? — без этой проверки
-  // панель затирается fallback'ом и переоткрывается сама по кругу.
-  const cycle = session.commandGate.consume();
-  if (!cycle.ran) return;
-
-  // Команда, которая только что завершилась — нужна и для истории, и для
-  // подстановки {original}/{target} в шагах детектора ниже. Читаем ДО очистки
-  // session.lastCommand (следующий блок её обнуляет).
-  const command = session.lastCommand;
+function handleCommandFinished(
+  session: ManagedSession,
+  event: Extract<ShellIntegrationEvent, { kind: 'command-finished' }>
+): void {
+  const { command, exitCode, output, guardStatus, typed, durationMs } = event;
 
   // Запись в историю выполненной команды из композера (HIST-01). Прямой ввод в
   // xterm не записывается — его текст main не знает. Маскирование секретов — в
   // recordHistory (HIST-07).
-  if (session.lastCommand) {
-    recordCommand(session, session.lastCommand, exitCode, session.pendingGuardStatus, output);
+  if (command) {
+    recordCommand(session, command, exitCode, guardStatus, output);
     // NOTIF-02: тост о долгой/упавшей команде, если окно не в фокусе
-    notifyCommandDone(session.hostName, exitCode, Date.now() - session.lastCommandStartedAt);
-    session.lastCommand = '';
-    session.pendingGuardStatus = undefined;
+    notifyCommandDone(session.hostName, exitCode, durationMs);
   }
 
   if (exitCode === null || exitCode === 0) return;
@@ -770,7 +700,7 @@ function handleCommandFinished(session: ManagedSession, exitCode: number | null)
   // намеренное действие пользователя, а не ошибка команды.
   if (isSignalExitCode(exitCode)) return;
   // Пустой Enter: команды не было, $? унаследован от предыдущей — не детектор.
-  if (!cycle.typed && !command) return;
+  if (!typed && !command) return;
   if (!loadConfig().ui.hints.errorPanel) return; // отключено в «Интерфейсе»
 
   const patterns = loadErrorPatterns(loadConfig().language);
@@ -791,16 +721,6 @@ function handleCommandFinished(session: ManagedSession, exitCode: number | null)
     };
   }
   send(IPC.evError, session.id, explanation);
-}
-
-/** Запомнить последнюю отправленную команду (для {original} и истории). */
-export function setLastCommand(sessionId: string, command: string, guardStatus?: GuardStatus): void {
-  const session = sessions.get(sessionId);
-  if (session) {
-    session.lastCommand = command.trim();
-    session.lastCommandStartedAt = Date.now();
-    session.pendingGuardStatus = guardStatus;
-  }
 }
 
 /** Запись команды в историю с учётом отключения истории (HIST-07). */
@@ -835,138 +755,30 @@ export function recordBlockedCommand(sessionId: string, command: string): void {
   if (session) recordCommand(session, command, undefined, 'blocked');
 }
 
-function clearSetupTimers(session: ManagedSession): void {
-  clearTimeout(session.setupSilenceTimer);
-  clearTimeout(session.setupCapTimer);
-  clearTimeout(session.echoFlushTimer);
-  clearTimeout(session.reinjectTimer);
-  session.setupSilenceTimer = undefined;
-  session.setupCapTimer = undefined;
-  session.echoFlushTimer = undefined;
-  session.reinjectTimer = undefined;
-}
-
-/** Отбой реинжекта: эскалация сорвалась/завершилась либо инжект уже отправлен. */
-function disarmReinject(session: ManagedSession): void {
-  clearTimeout(session.reinjectTimer);
-  session.reinjectTimer = undefined;
-  session.reinjectArmed = false;
-  session.reinjectTail = '';
-}
-
-/**
- * Отправка настройки shell integration (BRD-04): статическая строка, значения
- * подставляет удалённый shell из своих переменных (§19 гайда). Отправляется
- * один раз на shell, ПОСЛЕ того как MOTD дошёл до xterm (см. таймеры в
- * openShell) — с этого момента EchoGate прячет эхо настройки до первого маркера.
- */
-function sendShellSetup(session: ManagedSession): void {
-  if (session.setupSent || !session.shell) return;
-  session.setupSent = true;
-  clearTimeout(session.setupSilenceTimer);
-  clearTimeout(session.setupCapTimer);
-  writeShellSetup(session);
-}
-
-/**
- * Повтор настройки после эскалации (su/sudo/вложенный shell — фикс BRD-03/04):
- * новый процесс shell стартует без хука PROMPT_COMMAND, маркеры перестают
- * приходить, и Страж/детектор/история молча отключаются. Вызывается таймером
- * тишины после команды эскалации (см. stream.on('data') и sendCommandLine).
- * Настройка идемпотентна (case-гарды в SHELL_INTEGRATION_SETUP), ложный инжект
- * в старый шелл безвреден.
- */
-function reinjectShellSetup(session: ManagedSession): void {
-  if (!session.reinjectArmed || !session.shell) return;
-  disarmReinject(session);
-  writeShellSetup(session);
-}
-
-/** Общее тело первичной настройки и реинжекта: подавление эха + страховка. */
-function writeShellSetup(session: ManagedSession): void {
-  if (!session.shell) return;
-  session.echoGate.arm();
-  session.shell.write(SHELL_INTEGRATION_SETUP);
-  // Маркер не пришёл (shell без bash/zsh, ошибка настройки) — показать
-  // накопленный вывод вместо того, чтобы молча его проглотить.
-  clearTimeout(session.echoFlushTimer);
-  session.echoFlushTimer = setTimeout(() => {
-    const buffered = session.echoGate.flush();
-    if (buffered) {
-      send(IPC.evTerminalData, session.id, buffered);
-      session.outputSinceMark += buffered;
-    }
-  }, ECHO_FLUSH_TIMEOUT_MS);
-}
-
 /** Отправка ввода пользователя в сессию — сырая, без Стража; вызывающая
  *  сторона (guard/manager.ts или XtermView при «не на промпте») сама решает,
  *  когда это уместно (см. GUARD-02/04). */
 export function sendInput(sessionId: string, data: string): void {
   const session = sessions.get(sessionId);
-  if (!session?.shell) return;
-  // Пользователь успел напечатать до отправки настройки — настройка уходит
-  // первой отдельной строкой, ввод следом: bash выполнит её раньше, эхо ввода
-  // придёт уже после маркера и подавлено не будет.
-  if (!session.setupSent) sendShellSetup(session);
-  // Настройка выше пишется мимо этого учёта (session.shell.write) — её маркер
-  // и так съедается firstMarkSeen, кредит ей не нужен.
-  session.commandGate.noteInput(data);
-  session.shell.write(data);
+  if (!session?.shellIntegration) return;
+  applyResult(session, session.shellIntegration.sendRawInput(data));
 }
-
-/** Сколько ждём ожидаемое эхо, прежде чем сдаться и не резать дальнейший
- *  вывод (сервер без echo, экзотический stty и т.п. — редкость, но лучше
- *  показать дубль строки, чем потерять реальный вывод навсегда). */
-const PENDING_ECHO_TIMEOUT_MS = 1500;
 
 /**
  * Отправка ОДОБРЕННОЙ стражем команды (submitCommand/confirmDangerousCommand,
  * GUARD-02). В отличие от sendInput, дополнительно вырезает из вывода сервера
  * эхо именно этой команды — терминал уже показал её локально во время набора
  * (буфер строки на промпте в XtermView), без подавления команда дублировалась
- * бы на экране (набор + отдельное эхо от pty).
+ * бы на экране (набор + отдельное эхо от pty). guardStatus — статус Стража
+ * для этой команды (confirmed при подтверждении опасной, иначе не передаётся) —
+ * единственный писатель lastCommand/pendingGuardStatus внутри ShellIntegrationSession
+ * (User Story 6 спеки: одна запись вместо двух независимых полей, которые
+ * могли разойтись).
  */
-export function sendCommandLine(sessionId: string, command: string): void {
+export function sendCommandLine(sessionId: string, command: string, guardStatus?: GuardStatus): void {
   const session = sessions.get(sessionId);
-  if (!session) return;
-  // Команда эскалации (su/sudo/вложенный shell) сменит процесс шелла и хук
-  // интеграции пропадёт — взводим реинжект (только если интеграция вообще
-  // работала: без первого маркера повтор настройки бессмысленен и лишь
-  // добавит видимого мусора на хосте, где она уже видимо не завелась).
-  if (session.setupSent && session.firstMarkSeen && isShellEscalationCommand(command)) {
-    session.reinjectArmed = true;
-    session.reinjectTail = '';
-    clearTimeout(session.reinjectTimer);
-    session.reinjectTimer = undefined;
-  }
-  session.pendingEcho = { text: `${command}\r\n`, armedAt: Date.now() };
-  sendInput(sessionId, `${command}\n`);
-}
-
-/** Вырезает из чанка вывода ожидаемое эхо только что отправленной команды
- *  (см. sendCommandLine). Хвост, разрезанный между чанками, докапливается
- *  через укороченный pendingEcho.text, как в BreadcrumbParser.pending. */
-function stripPendingEcho(session: ManagedSession, raw: string): string {
-  const pending = session.pendingEcho;
-  if (!pending) return raw;
-  if (Date.now() - pending.armedAt > PENDING_ECHO_TIMEOUT_MS) {
-    session.pendingEcho = undefined;
-    return raw;
-  }
-  if (raw.length === 0) return raw;
-  if (raw.startsWith(pending.text)) {
-    session.pendingEcho = undefined;
-    return raw.slice(pending.text.length);
-  }
-  if (pending.text.startsWith(raw)) {
-    session.pendingEcho = { text: pending.text.slice(raw.length), armedAt: pending.armedAt };
-    return '';
-  }
-  // Не совпало (сервер прислал что-то раньше эха, echo выключен и т.п.) —
-  // сдаёмся, реальный вывод важнее.
-  session.pendingEcho = undefined;
-  return raw;
+  if (!session?.shellIntegration) return;
+  applyResult(session, session.shellIntegration.writeCommand(command, guardStatus));
 }
 
 /** Изменение размера pty под размер xterm. */
@@ -1096,7 +908,7 @@ export function destroySession(sessionId: string): void {
   const session = sessions.get(sessionId);
   if (!session) return;
   session.userClosed = true;
-  clearSetupTimers(session);
+  clearAllShellTimers(session);
   stopDashboard(sessionId);
   cancelAuthPrompts(sessionId);
   session.client?.destroy();

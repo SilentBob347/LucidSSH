@@ -2,12 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DangerousCommandPrompt, SubmitResult } from '@shared/guard';
 import { getHost } from '../hosts/repository';
 import { loadConfig } from '../config/store';
-import {
-  getSession,
-  recordBlockedCommand,
-  sendCommandLine,
-  setLastCommand
-} from '../ssh/sessionManager';
+import { getSession, recordBlockedCommand, sendCommandLine } from '../ssh/sessionManager';
 import { analyzeCommand } from './patterns';
 import { t } from '../i18n';
 
@@ -71,7 +66,6 @@ export function submitCommand(sessionId: string, command: string): SubmitResult 
     }
   }
 
-  setLastCommand(sessionId, command); // для {original} в детекторе ошибок
   sendCommandLine(sessionId, command);
   return { status: 'sent' };
 }
@@ -87,8 +81,7 @@ export function confirmDangerousCommand(requestId: string, confirmationText: str
   pending.delete(requestId);
   if (confirmationText !== p.confirmationText) return false;
   // Подтверждённая опасная команда попадёт в историю со статусом confirmed (HIST-05)
-  setLastCommand(p.sessionId, p.command, 'confirmed');
-  sendCommandLine(p.sessionId, p.command);
+  sendCommandLine(p.sessionId, p.command, 'confirmed');
   return true;
 }
 
