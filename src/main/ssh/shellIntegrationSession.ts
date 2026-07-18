@@ -57,7 +57,11 @@ export type ShellIntegrationEvent =
   | { kind: 'password-prompt' }
   /** `close()` без единого маркера (nologin/ash-сценарии) — накопленный вывод
    *  для сверки с базой паттернов scope 'ssh-connection'. */
-  | { kind: 'unmarked-output'; output: string };
+  | { kind: 'unmarked-output'; output: string }
+  /** echo-flush сработал, а маркер после последней отправки настройки
+   *  (первичной или реинжекта) так и не пришёл — shell-интеграция не
+   *  подтвердилась (см. .scratch/prompt-confirmation-signal/spec.md). */
+  | { kind: 'integration-unconfirmed' };
 
 /** Ответ коробки на любой из её методов: что показать в терминале, что
  *  записать в provод, какие таймеры (пере)завести/отменить, что произошло —
@@ -86,6 +90,12 @@ export class ShellIntegrationSession {
   private pendingGuardStatus: GuardStatus | undefined;
   /** Первый маркер после подключения — приветствие, не результат команды. */
   private firstMarkSeen = false;
+  /** Взводится при каждой отправке настройки (первичной и реинжекте),
+   *  снимается любым пришедшим маркером — «ждём ли мы ещё маркер после
+   *  ПОСЛЕДНЕЙ отправки настройки». Отдельно от firstMarkSeen: реинжект
+   *  после sudo/su должен снова требовать подтверждения, даже если исходное
+   *  подключение маркер уже видело. */
+  private awaitingFirstMarkAfterSetup = false;
   /** Отправлена ли настройка shell integration в текущий shell. */
   private setupSent = false;
   /** Ожидаемое эхо только что отправленной через writeCommand команды —
@@ -143,6 +153,7 @@ export class ShellIntegrationSession {
     for (let i = 0; i < marks.length; i++) {
       this.appendOutput(effective[i] ?? '');
       const mark = marks[i]!;
+      this.awaitingFirstMarkAfterSetup = false;
       result.events.push({ kind: 'breadcrumb', crumb: mark.crumb });
       this.handleCommandFinished(mark.exitCode, result);
       this.passwordPromptActive = false;
@@ -204,6 +215,11 @@ export class ShellIntegrationSession {
         if (buffered) {
           result.display = buffered;
           this.appendOutput(buffered);
+        }
+        // То же самое обстоятельство («настройка ушла, маркер за 3 сек. не
+        // пришёл») сигналит и renderer'у — пора вернуться под защиту Стража.
+        if (this.awaitingFirstMarkAfterSetup) {
+          result.events.push({ kind: 'integration-unconfirmed' });
         }
         break;
       }
@@ -271,6 +287,7 @@ export class ShellIntegrationSession {
   /** Общее тело первичной настройки и реинжекта: подавление эха + страховка. */
   private emitSetupWrite(result: ShellIntegrationResult): void {
     this.echoGate.arm();
+    this.awaitingFirstMarkAfterSetup = true;
     result.toWrite += SHELL_INTEGRATION_SETUP;
     result.timerActions.push({ timer: 'echo-flush', action: 'schedule', ms: ECHO_FLUSH_TIMEOUT_MS });
   }

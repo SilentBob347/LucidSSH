@@ -68,7 +68,6 @@ const printedAuthPrompts = new Set<string>();
 const commandBuffers = new Map<string, string>();
 const atPromptState = new Map<string, boolean>();
 const shellStateUnknown = new Map<string, boolean>();
-const promptTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 const dangerListeners = new Map<string, (prompt: DangerousCommandPrompt) => void>();
 const commandSentListeners = new Map<string, () => void>();
 const shellStateListeners = new Map<string, (unknown: boolean) => void>();
@@ -84,19 +83,6 @@ const historyIndex = new Map<string, number>();
  *  при возврате стрелкой вниз ниже самой новой записи. */
 const historyDraft = new Map<string, string>();
 
-/** Сколько ждём маркер breadcrumb после ПЕРВОЙ отправленной в сессии команды,
- *  прежде чем решить, что shell-интеграция на этом хосте не работает (busybox
- *  без PROMPT_COMMAND/PS1-fallback и т.п.) — см. план, раздел про fail-safe.
- *  Таймаут взводится только пока breadcrumb ни разу не приходил: после первого
- *  подтверждённого маркера механизм считается рабочим, и «нет маркера, пока
- *  висит долгая интерактивная программа (htop/vim)» — это нормальное
- *  состояние, а не сигнал поломки (баг из ручного теста 13.07.2026: таймаут
- *  ложно взводился на КАЖДУЮ команду и вырывал управление у htop через 4с). */
-const PROMPT_TIMEOUT_MS = 4000;
-/** Сессии, где хоть один breadcrumb-маркер уже подтверждённо приходил —
- *  дальше «нет маркера» просто значит «шелл занят», без таймаута. */
-const shellIntegrationConfirmed = new Set<string>();
-
 function isAtPrompt(sessionId: string): boolean {
   return atPromptState.get(sessionId) ?? true;
 }
@@ -110,35 +96,18 @@ function setShellStateUnknown(sessionId: string, v: boolean): void {
 /** Вызывается на каждый breadcrumb-маркер сессии — «мы точно на промпте». */
 function markAtPrompt(sessionId: string): void {
   atPromptState.set(sessionId, true);
-  shellIntegrationConfirmed.add(sessionId);
-  const timer = promptTimeouts.get(sessionId);
-  if (timer) {
-    clearTimeout(timer);
-    promptTimeouts.delete(sessionId);
-  }
   setShellStateUnknown(sessionId, false);
 }
 
-function armPromptTimeout(sessionId: string): void {
-  // Механизм уже подтверждён рабочим — «нет маркера» означает «команда/
-  // программа ещё выполняется», это нормально сколь угодно долго (htop, vim,
-  // вложенный ssh…), таймаут тут не нужен и был бы источником ложных срабатываний.
-  if (shellIntegrationConfirmed.has(sessionId)) return;
-  const existing = promptTimeouts.get(sessionId);
-  if (existing) clearTimeout(existing);
-  promptTimeouts.set(
-    sessionId,
-    setTimeout(() => {
-      promptTimeouts.delete(sessionId);
-      if (!atPromptState.get(sessionId)) {
-        // Маркер так и не пришёл на первую же команду — считаем shell-
-        // интеграцию нерабочей на этом хосте: fail-safe возвращаем проверку
-        // и предупреждаем пользователя (дальше таймаут больше не взводится).
-        atPromptState.set(sessionId, true);
-        setShellStateUnknown(sessionId, true);
-      }
-    }, PROMPT_TIMEOUT_MS)
-  );
+/** Вызывается на сигнал main-процесса «shell-интеграция не подтвердилась»
+ *  (маркер не пришёл за echo-flush после отправки настройки, см.
+ *  .scratch/prompt-confirmation-signal/spec.md) — fail-safe: возвращаем
+ *  сессию под защиту Стража и предупреждаем пользователя. Источник точнее
+ *  прежнего локального таймаута — main знает реальный момент отправки
+ *  настройки, а не гадает по первой команде пользователя. */
+function markIntegrationUnconfirmed(sessionId: string): void {
+  atPromptState.set(sessionId, true);
+  setShellStateUnknown(sessionId, true);
 }
 
 let breadcrumbSubscribed = false;
@@ -146,19 +115,16 @@ function ensureBreadcrumbSubscription(): void {
   if (breadcrumbSubscribed) return;
   breadcrumbSubscribed = true;
   window.lucidSSH.onBreadcrumb((sessionId) => markAtPrompt(sessionId));
+  window.lucidSSH.onIntegrationUnconfirmed((sessionId) => markIntegrationUnconfirmed(sessionId));
 }
 
 function clearSessionInputState(sessionId: string): void {
   commandBuffers.delete(sessionId);
   atPromptState.delete(sessionId);
   shellStateUnknown.delete(sessionId);
-  const timer = promptTimeouts.get(sessionId);
-  if (timer) clearTimeout(timer);
-  promptTimeouts.delete(sessionId);
   commandHistories.delete(sessionId);
   historyIndex.delete(sessionId);
   historyDraft.delete(sessionId);
-  shellIntegrationConfirmed.delete(sessionId);
 }
 
 /** Заменяет текущую набранную (но ещё не отправленную) строку на newText —
@@ -205,7 +171,6 @@ function finalizeLine(sessionId: string): void {
   commandBuffers.set(sessionId, '');
   cache.get(sessionId)?.term.write('\r\n');
   atPromptState.set(sessionId, false);
-  armPromptTimeout(sessionId);
   historyIndex.delete(sessionId);
   historyDraft.delete(sessionId);
   if (sent.trim().length > 0) {

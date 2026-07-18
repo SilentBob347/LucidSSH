@@ -185,6 +185,36 @@ describe('ShellIntegrationSession — отправка настройки (пе�
   });
 });
 
+describe('ShellIntegrationSession — integration-unconfirmed (страховка без маркера)', () => {
+  it('маркер не пришёл к echo-flush — событие integration-unconfirmed', () => {
+    const box = new ShellIntegrationSession();
+    box.sendRawInput('x'); // отправляет настройку
+    box.feed('shell без PROMPT_COMMAND, эхо без маркера');
+    const result = box.tick('echo-flush');
+    expect(result.events).toContainEqual({ kind: 'integration-unconfirmed' });
+  });
+
+  it('маркер пришёл до echo-flush — события нет', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box); // отправляет настройку и уже получает первый маркер
+    const result = box.tick('echo-flush');
+    expect(result.events).not.toContainEqual({ kind: 'integration-unconfirmed' });
+  });
+
+  it('реинжект после эскалации без ответа нового шелла — тоже порождает integration-unconfirmed', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box); // firstMarkSeen уже true от исходного подключения
+    box.writeCommand('sudo -i');
+    box.feed('root@web-01:~# '); // тишина без маркера — взводит реинжект
+    box.tick('reinject'); // повторная отправка настройки новому шеллу
+
+    // Новый шелл так и не прислал маркер — echo-flush должен просигналить,
+    // несмотря на то что firstMarkSeen от старого подключения уже true.
+    const result = box.tick('echo-flush');
+    expect(result.events).toContainEqual({ kind: 'integration-unconfirmed' });
+  });
+});
+
 describe('ShellIntegrationSession.writeCommand — эхо отправленной команды не дублируется', () => {
   it('эхо команды вырезается из следующего чанка вывода', () => {
     const box = new ShellIntegrationSession();

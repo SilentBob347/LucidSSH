@@ -664,6 +664,9 @@ function handleShellIntegrationEvent(session: ManagedSession, event: ShellIntegr
     case 'unmarked-output':
       checkShellUnavailable(session, event.output);
       break;
+    case 'integration-unconfirmed':
+      send(IPC.evIntegrationUnconfirmed, session.id);
+      break;
   }
 }
 

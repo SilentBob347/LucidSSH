@@ -124,7 +124,8 @@ export const IPC = {
   evError: 'ev:error',
   evUpdateStatus: 'ev:update-status',
   evHistoryRecorded: 'ev:history-recorded', // HistoryDrawer перечитывает список, если открыт
-  evPasswordPrompt: 'ev:password-prompt' // TERM-09 — подсказка «ввод пароля скрыт»
+  evPasswordPrompt: 'ev:password-prompt', // TERM-09 — подсказка «ввод пароля скрыт»
+  evIntegrationUnconfirmed: 'ev:integration-unconfirmed' // shell-интеграция не подтвердилась за echo-flush
 } as const;
 
 export interface AppInfo {
