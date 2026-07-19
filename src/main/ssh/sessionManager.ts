@@ -82,6 +82,12 @@ interface ManagedSession {
 
 interface PendingHostKey {
   sessionId: string;
+  /** Адрес/порт сервера, к которому относится этот ключ — берутся из `host`,
+   *  переданного в handleHostKey, а не из getHost(session.hostId): для Quick
+   *  Connect (HM-11) hostId=0 и getHost(0) всегда null (SSH-03/04-регресс,
+   *  см. .scratch/quickconnect-hostkey-confirm-bug/spec.md). */
+  address: string;
+  port: number;
   verify: (valid: boolean) => void;
   keyType: string;
   rawKey: Buffer;
@@ -527,6 +533,8 @@ function handleHostKey(
 
   pendingHostKeys.set(requestId, {
     sessionId: session.id,
+    address: host.address,
+    port: host.port,
     verify,
     keyType,
     rawKey,
@@ -814,14 +822,13 @@ export function confirmHostKey(requestId: string, decision: 'accept' | 'reject')
   clearTimeout(pending.timeout);
 
   const session = sessions.get(pending.sessionId);
-  const host = session ? getHost(session.hostId) : null;
 
-  if (decision === 'accept' && session && host) {
+  if (decision === 'accept' && session) {
     if (pending.isChanged) {
-      replaceKnownKey(host.address, host.port, pending.keyType, pending.rawKey);
+      replaceKnownKey(pending.address, pending.port, pending.keyType, pending.rawKey);
       log(session, 'warn', 'clog.hostkeyReplaced', undefined, 'hostkey');
     } else {
-      addKnownKey(host.address, host.port, pending.keyType, pending.rawKey);
+      addKnownKey(pending.address, pending.port, pending.keyType, pending.rawKey);
       log(session, 'info', 'clog.hostkeyAccepted', undefined, 'hostkey');
     }
     pending.verify(true);

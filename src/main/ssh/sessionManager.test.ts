@@ -29,16 +29,26 @@ vi.mock('../i18n', () => ({ t: vi.fn((key: string) => key) }));
 vi.mock('../history/repository', () => ({ recordHistory: vi.fn() }));
 vi.mock('../notifications/notifier', () => ({ notifyDisconnect: vi.fn(), notifyCommandDone: vi.fn() }));
 
+import { IPC } from '@shared/ipc';
+import type { HostKeyPrompt } from '@shared/ssh';
 import { loadConfig } from '../config/store';
 import { startDashboard } from './dashboard';
+import { getMainWindow } from '../window/mainWindow';
+import { getSecretForConnection } from '../keychain';
+import { addKnownKey } from './knownHosts';
 import {
   attemptConnectForTest,
+  connectQuickHost,
+  confirmHostKey,
   __setClientFactoryForTest,
   type FakeableClient
 } from './sessionManager';
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockStartDashboard = vi.mocked(startDashboard);
+const mockGetMainWindow = vi.mocked(getMainWindow);
+const mockGetSecretForConnection = vi.mocked(getSecretForConnection);
+const mockAddKnownKey = vi.mocked(addKnownKey);
 
 const fakeConfig = (): AppConfig =>
   ({
@@ -218,5 +228,67 @@ describe('attemptConnectForTest', () => {
     expect(result).toBe('other');
     expect(session.status).toBe('disconnected');
     expect(mockStartDashboard).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Регресс на `.scratch/quickconnect-hostkey-confirm-bug/spec.md`: confirmHostKey
+ * брал address/port через getHost(session.hostId), который для Quick Connect
+ * (hostId=0, HM-11) всегда null — accept проваливался в reject-ветку. Тест гоняет
+ * confirmHostKey через реальный pendingHostKeys/sessions, populate которых
+ * возможен только публичным путём connectQuickHost (карты приватны модулю).
+ */
+describe('confirmHostKey — Quick Connect (hostId=0)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLoadConfig.mockReturnValue(fakeConfig());
+    mockGetSecretForConnection.mockResolvedValue('pw');
+  });
+
+  afterEach(() => {
+    __setClientFactoryForTest(null);
+  });
+
+  it('accept сохраняет ключ и подтверждает подключение, а не отклоняет его', async () => {
+    const sentPrompts: HostKeyPrompt[] = [];
+    mockGetMainWindow.mockReturnValue({
+      isDestroyed: () => false,
+      webContents: {
+        send: vi.fn((channel: string, payload: HostKeyPrompt) => {
+          if (channel === IPC.evHostKeyPrompt) sentPrompts.push(payload);
+        })
+      }
+    } as unknown as ReturnType<typeof getMainWindow>);
+
+    const { client, emit } = makeFakeClient();
+    __setClientFactoryForTest(() => client);
+
+    const mockConnect = vi.mocked(client.connect);
+
+    void connectQuickHost('10.0.0.9', 22, 'nikita');
+    // establish() ждёт getSecretForConnection() (замокан resolved-промисом) до
+    // вызова attemptConnect()/client.connect() — даём микротаскам догнать.
+    await vi.waitFor(() => {
+      if (mockConnect.mock.calls.length === 0) throw new Error('client.connect ещё не вызван');
+    });
+
+    // hostVerifier не событие on(), а прямое поле connectConfig — зовём его так,
+    // как это сделал бы ssh2 при рукопожатии.
+    const connectConfig = mockConnect.mock.calls[0]?.[0] as unknown as {
+      hostVerifier: (key: Buffer, verify: (valid: boolean) => void) => void;
+    };
+    const verifySpy = vi.fn();
+    connectConfig.hostVerifier(Buffer.from('fake-key'), verifySpy);
+
+    expect(sentPrompts).toHaveLength(1);
+    const requestId = sentPrompts[0]?.requestId;
+    if (!requestId) throw new Error('requestId отсутствует в отправленном prompt');
+
+    confirmHostKey(requestId, 'accept');
+
+    expect(verifySpy).toHaveBeenCalledWith(true);
+    expect(mockAddKnownKey).toHaveBeenCalledWith('10.0.0.9', 22, expect.any(String), expect.any(Buffer));
+
+    emit('ready');
   });
 });
