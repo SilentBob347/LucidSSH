@@ -20,15 +20,27 @@ export interface SaveAsHostPrompt {
   username: string;
 }
 
+/**
+ * Факты об одной открытой вкладке, ранее жившие в пяти параллельных
+ * `Record<sessionId, ...>` с независимой очисткой каждого — что однажды уже
+ * привело к утечке (`label` не чистился в `closeTab`). Теперь одна запись на
+ * sessionId, удаляемая одной операцией при закрытии вкладки.
+ */
+export interface SessionExtras {
+  /** Промпт пароля/passphrase прямо в терминале (SSH-06). */
+  authPrompt?: AuthPromptRequest;
+  breadcrumb?: Breadcrumb;
+  dashboard?: DashboardMetrics;
+  error?: ErrorExplanation;
+  /** Локальное переименование вкладки (TERM-02); имя не уходит в main. */
+  label?: string;
+}
+
 interface SessionsStore {
   sessions: SessionInfo[];
   activeSessionId: string | null;
   hostKeyPrompt: HostKeyPrompt | null;
-  /** Промпт пароля/passphrase прямо в терминале (SSH-06), по sessionId. */
-  authPrompts: Record<string, AuthPromptRequest>;
-  breadcrumbs: Record<string, Breadcrumb>;
-  dashboards: Record<string, DashboardMetrics>;
-  errors: Record<string, ErrorExplanation>;
+  sessionExtras: Record<string, SessionExtras>;
   dismissError: (sessionId: string) => void;
   connect: (hostId: number) => Promise<void>;
   /** HM-11: подключение по `user@host[:port]` без сохранённого хоста. */
@@ -52,15 +64,34 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [hostKeyPrompt, setHostKeyPrompt] = useState<HostKeyPrompt | null>(null);
-  const [authPrompts, setAuthPrompts] = useState<Record<string, AuthPromptRequest>>({});
-  const [breadcrumbs, setBreadcrumbs] = useState<Record<string, Breadcrumb>>({});
-  const [dashboards, setDashboards] = useState<Record<string, DashboardMetrics>>({});
-  const [errors, setErrors] = useState<Record<string, ErrorExplanation>>({});
+  const [sessionExtras, setSessionExtras] = useState<Record<string, SessionExtras>>({});
   // HM-11: sessionId → детали Quick Connect, ждущие первого connected/disconnected,
   // чтобы один раз предложить «Сохранить как хост?». Не влияет на рендер само по
   // себе — только читается/чистится, наружу отдаётся производный saveAsHostPrompt.
   const quickConnectPending = useRef(new Map<string, { address: string; port: number; username: string }>());
   const [saveAsHostPrompt, setSaveAsHostPrompt] = useState<SaveAsHostPrompt | null>(null);
+
+  /** Точечный merge одного факта в запись сессии, остальные поля не трогает. */
+  const setExtraField = useCallback(
+    <K extends keyof SessionExtras>(sessionId: string, field: K, value: SessionExtras[K]) => {
+      setSessionExtras((prev) => ({
+        ...prev,
+        [sessionId]: { ...prev[sessionId], [field]: value }
+      }));
+    },
+    []
+  );
+
+  /** Точечная очистка одного факта записи сессии — соседние поля не трогает. */
+  const clearExtraField = useCallback((sessionId: string, field: keyof SessionExtras) => {
+    setSessionExtras((prev) => {
+      const entry = prev[sessionId];
+      if (!entry || entry[field] === undefined) return prev;
+      const next = { ...entry };
+      delete next[field];
+      return { ...prev, [sessionId]: next };
+    });
+  }, []);
 
   useEffect(() => {
     const offStatus = window.lucidSSH.onSessionStatus(
@@ -70,12 +101,7 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
         );
         // Промпт пароля актуален только пока идёт подключение (SSH-06).
         if (status !== 'connecting') {
-          setAuthPrompts((prev) => {
-            if (!(sessionId in prev)) return prev;
-            const next = { ...prev };
-            delete next[sessionId];
-            return next;
-          });
+          clearExtraField(sessionId, 'authPrompt');
         }
         // HM-11: первое разрешение (успех или неуспех) — предложить сохранить хост.
         if (status === 'connected' || status === 'disconnected') {
@@ -89,16 +115,16 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
     );
     const offPrompt = window.lucidSSH.onHostKeyPrompt(setHostKeyPrompt);
     const offAuthPrompt = window.lucidSSH.onAuthPrompt((prompt) => {
-      setAuthPrompts((prev) => ({ ...prev, [prompt.sessionId]: prompt }));
+      setExtraField(prompt.sessionId, 'authPrompt', prompt);
     });
     const offCrumb = window.lucidSSH.onBreadcrumb((sessionId, crumb) => {
-      setBreadcrumbs((prev) => ({ ...prev, [sessionId]: crumb }));
+      setExtraField(sessionId, 'breadcrumb', crumb);
     });
     const offDash = window.lucidSSH.onDashboard((sessionId, metrics) => {
-      setDashboards((prev) => ({ ...prev, [sessionId]: metrics }));
+      setExtraField(sessionId, 'dashboard', metrics);
     });
     const offError = window.lucidSSH.onError((sessionId, explanation) => {
-      setErrors((prev) => ({ ...prev, [sessionId]: explanation }));
+      setExtraField(sessionId, 'error', explanation);
     });
     return () => {
       offStatus();
@@ -108,21 +134,19 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       offDash();
       offError();
     };
-  }, []);
+  }, [setExtraField, clearExtraField]);
 
-  const dismissError = useCallback((sessionId: string) => {
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next[sessionId];
-      return next;
-    });
-  }, []);
-
-  const [labels, setLabels] = useState<Record<string, string>>({});
+  const dismissError = useCallback(
+    (sessionId: string) => clearExtraField(sessionId, 'error'),
+    [clearExtraField]
+  );
 
   const applyLabels = useCallback(
-    (list: SessionInfo[], overrides: Record<string, string>): SessionInfo[] =>
-      list.map((s) => (overrides[s.sessionId] ? { ...s, hostName: overrides[s.sessionId]! } : s)),
+    (list: SessionInfo[], extras: Record<string, SessionExtras>): SessionInfo[] =>
+      list.map((s) => {
+        const label = extras[s.sessionId]?.label;
+        return label ? { ...s, hostName: label } : s;
+      }),
     []
   );
 
@@ -130,10 +154,10 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
     async (hostId: number) => {
       const { sessionId } = await window.lucidSSH.connectHost(hostId);
       const list = await window.lucidSSH.listSessions();
-      setSessions(applyLabels(list, labels));
+      setSessions(applyLabels(list, sessionExtras));
       setActiveSessionId(sessionId);
     },
-    [applyLabels, labels]
+    [applyLabels, sessionExtras]
   );
 
   const connectQuick = useCallback(
@@ -143,22 +167,25 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       const { sessionId } = await window.lucidSSH.connectQuick(input);
       quickConnectPending.current.set(sessionId, parsed);
       const list = await window.lucidSSH.listSessions();
-      setSessions(applyLabels(list, labels));
+      setSessions(applyLabels(list, sessionExtras));
       setActiveSessionId(sessionId);
     },
-    [applyLabels, labels]
+    [applyLabels, sessionExtras]
   );
 
   const dismissSaveAsHostPrompt = useCallback(() => setSaveAsHostPrompt(null), []);
 
-  const renameTab = useCallback((sessionId: string, name: string) => {
-    const trimmed = name.trim().slice(0, 60);
-    if (!trimmed) return;
-    setLabels((prev) => ({ ...prev, [sessionId]: trimmed }));
-    setSessions((prev) =>
-      prev.map((s) => (s.sessionId === sessionId ? { ...s, hostName: trimmed } : s))
-    );
-  }, []);
+  const renameTab = useCallback(
+    (sessionId: string, name: string) => {
+      const trimmed = name.trim().slice(0, 60);
+      if (!trimmed) return;
+      setExtraField(sessionId, 'label', trimmed);
+      setSessions((prev) =>
+        prev.map((s) => (s.sessionId === sessionId ? { ...s, hostName: trimmed } : s))
+      );
+    },
+    [setExtraField]
+  );
 
   const reorderTab = useCallback((sessionId: string, beforeId: string | null) => {
     setSessions((prev) => {
@@ -182,22 +209,8 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
         );
         return next;
       });
-      setBreadcrumbs((prev) => {
-        const next = { ...prev };
-        delete next[sessionId];
-        return next;
-      });
-      setDashboards((prev) => {
-        const next = { ...prev };
-        delete next[sessionId];
-        return next;
-      });
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[sessionId];
-        return next;
-      });
-      setAuthPrompts((prev) => {
+      setSessionExtras((prev) => {
+        if (!(sessionId in prev)) return prev;
         const next = { ...prev };
         delete next[sessionId];
         return next;
@@ -225,16 +238,12 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
 
   const answerAuthPrompt = useCallback(
     async (sessionId: string, answers: string[]) => {
-      const prompt = authPrompts[sessionId];
+      const prompt = sessionExtras[sessionId]?.authPrompt;
       if (!prompt) return;
-      setAuthPrompts((prev) => {
-        const next = { ...prev };
-        delete next[sessionId];
-        return next;
-      });
+      clearExtraField(sessionId, 'authPrompt');
       await window.lucidSSH.answerAuthPrompt(prompt.requestId, answers);
     },
-    [authPrompts]
+    [sessionExtras, clearExtraField]
   );
 
   const value = useMemo<SessionsStore>(
@@ -242,10 +251,7 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       sessions,
       activeSessionId,
       hostKeyPrompt,
-      authPrompts,
-      breadcrumbs,
-      dashboards,
-      errors,
+      sessionExtras,
       dismissError,
       connect,
       connectQuick,
@@ -263,10 +269,7 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       sessions,
       activeSessionId,
       hostKeyPrompt,
-      authPrompts,
-      breadcrumbs,
-      dashboards,
-      errors,
+      sessionExtras,
       dismissError,
       connect,
       connectQuick,

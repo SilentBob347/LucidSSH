@@ -43,11 +43,8 @@ export function TerminalArea(): JSX.Element {
     activeSessionId,
     reconnect,
     closeTab,
-    breadcrumbs,
-    dashboards,
-    errors,
+    sessionExtras,
     dismissError,
-    authPrompts,
     answerAuthPrompt
   } = useSessions();
   const { config, update, markHint } = useConfig();
@@ -95,6 +92,7 @@ export function TerminalArea(): JSX.Element {
   }, [sessions]);
 
   const active = sessions.find((s) => s.sessionId === activeSessionId);
+  const activeExtras = active ? sessionExtras[active.sessionId] : undefined;
 
   // Мост composerBus → терминал активной сессии: каталог/история/сниппеты/
   // breadcrumb-«cd» по-прежнему зовут insertIntoComposer/getComposerValue, не
@@ -121,7 +119,7 @@ export function TerminalArea(): JSX.Element {
   // auth-диалог уже начался, держат терминал смонтированным до конца
   // подключения (между попытками промпта нет, но терминал не должен мигать).
   const activeAuthPrompt =
-    active && active.status === 'connecting' ? authPrompts[active.sessionId] : undefined;
+    active && active.status === 'connecting' ? activeExtras?.authPrompt : undefined;
   if (active && activeAuthPrompt) authTouched.current.add(active.sessionId);
   const showAuthTerminal =
     active && active.status === 'connecting' && authTouched.current.has(active.sessionId);
@@ -209,7 +207,7 @@ export function TerminalArea(): JSX.Element {
   // (не 2, как у остальных подсказок — так задано в ТЗ для этой конкретно).
   useEffect(() => {
     if (!active || !showTerminal) return;
-    const priv = breadcrumbs[active.sessionId]?.privilege ?? 'normal';
+    const priv = activeExtras?.breadcrumb?.privilege ?? 'normal';
     const prev = lastPrivilege.current.get(active.sessionId) ?? 'normal';
     lastPrivilege.current.set(active.sessionId, priv);
     if (prev === 'normal' && priv !== 'normal') {
@@ -219,7 +217,7 @@ export function TerminalArea(): JSX.Element {
         void markHint('rootHint');
       }
     }
-  }, [active, breadcrumbs, showTerminal, markHint]);
+  }, [active, activeExtras, showTerminal, markHint]);
 
   // TERM-09: подсказка «ввод пароля скрыт — это нормально» на явный запрос
   // пароля (детекция — main, статичный список паттернов, shellIntegration.ts).
@@ -258,8 +256,8 @@ export function TerminalArea(): JSX.Element {
       {/* Breadcrumb + мини-дашборд (BRD-01, DASH-01) — для живой сессии */}
       {showTerminal && active && (
         <BreadcrumbBar
-          crumb={breadcrumbs[active.sessionId]}
-          metrics={dashboards[active.sessionId]}
+          crumb={activeExtras?.breadcrumb}
+          metrics={activeExtras?.dashboard}
           onOpenDashboard={() => setDashboardModalOpen(true)}
           guardEnabled={
             (config?.guard.globalEnabled ?? true) &&
@@ -288,7 +286,7 @@ export function TerminalArea(): JSX.Element {
       {active && dashboardModalOpen && (
         <ServerDashboardModal
           hostName={active.hostName}
-          metrics={dashboards[active.sessionId]}
+          metrics={activeExtras?.dashboard}
           onClose={() => setDashboardModalOpen(false)}
         />
       )}
@@ -390,10 +388,10 @@ export function TerminalArea(): JSX.Element {
           <ConnectionLogPanel sessionId={active.sessionId} onClose={() => setDetailsOpen(false)} />
         )}
         {/* Детектор ошибок выезжает снизу, не перекрывая строку ввода (ERR-03) */}
-        {active && errors[active.sessionId] && (
+        {active && activeExtras?.error && (
           <ErrorDetector
             sessionId={active.sessionId}
-            explanation={errors[active.sessionId]!}
+            explanation={activeExtras.error}
             onClose={() => dismissError(active.sessionId)}
           />
         )}
