@@ -125,8 +125,8 @@ const api = {
   confirmDangerousCommand: (requestId: string, confirmationText: string): Promise<{ allowed: boolean }> =>
     ipcRenderer.invoke(IPC.guardConfirm, requestId, confirmationText),
   cancelDangerousCommand: (requestId: string): void => ipcRenderer.send(IPC.guardCancel, requestId),
-  sendTerminalInput: (sessionId: string, data: string): void =>
-    ipcRenderer.send(IPC.sessionSendInput, sessionId, data),
+  sendTerminalInput: (sessionId: string, data: string): Promise<SubmitResult> =>
+    ipcRenderer.invoke(IPC.sessionSendInput, sessionId, data),
   resizeSession: (sessionId: string, cols: number, rows: number): void =>
     ipcRenderer.send(IPC.sessionResize, sessionId, cols, rows),
   onTerminalData: (cb: (sessionId: string, data: string) => void): (() => void) => {

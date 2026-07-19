@@ -12,13 +12,13 @@ import {
   getSession,
   getSessionLog,
   listSessions,
-  resizeSession,
-  sendInput
+  resizeSession
 } from '../ssh/sessionManager';
 import {
   cancelDangerousCommand,
   confirmDangerousCommand,
-  submitCommand
+  submitCommand,
+  submitRawInput
 } from '../guard/manager';
 import type { SubmitResult } from '@shared/guard';
 import { validateHostInput, validateId, validateSecret } from '../hosts/validate';
@@ -84,23 +84,25 @@ export function registerSessionIpcHandlers(): void {
     return getSessionLog(validateSessionId(rawSessionId));
   });
 
-  // Сырой ввод в терминал — только пока сессия НЕ на промпте (внутри
-  // интерактивной программы, vim/htop): renderer сам решает это в XtermView и
-  // не зовёт этот канал для обычных команд — те идут через guardSubmit
-  // (GUARD-02/04). Ограничение длины — защита от гигантских payload'ов.
-  // ipcMain.on — без канала ответа: синхронный throw здесь улетает как
-  // необработанное исключение в main и валит всё приложение, поэтому «сессии
-  // уже нет» (закрыли вкладку, а событие уже летело) — тихий no-op, а не
-  // IpcValidationError; формат/тип входа проверяем строго, как и раньше.
-  ipcMain.on(IPC.sessionSendInput, (event, rawSessionId: unknown, rawData: unknown): void => {
-    assertSenderIsMainWindow(event);
-    const id = assertSessionIdFormat(rawSessionId);
-    if (typeof rawData !== 'string' || rawData.length > 100_000) {
-      throw new IpcValidationError('data: invalid');
+  // Сырой ввод в терминал — по большей части пока сессия НЕ на промпте (внутри
+  // интерактивной программы, vim/htop): renderer сам решает это в XtermView, но
+  // граница IPC не полагается на то, что renderer всегда угадает правильно —
+  // submitRawInput сама прогоняет достаточно длинные куски через Стража
+  // (.scratch/raw-input-guard-check/spec.md, GUARD-02/04). Ограничение длины —
+  // защита от гигантских payload'ов. «Сессии уже нет» (закрыли вкладку, а
+  // вызов уже летел) — тихий { status: 'sent' } из submitRawInput, не ошибка;
+  // формат/тип входа проверяем строго, как и раньше.
+  ipcMain.handle(
+    IPC.sessionSendInput,
+    (event, rawSessionId: unknown, rawData: unknown): SubmitResult => {
+      assertSenderIsMainWindow(event);
+      const id = assertSessionIdFormat(rawSessionId);
+      if (typeof rawData !== 'string' || rawData.length > 100_000) {
+        throw new IpcValidationError('data: invalid');
+      }
+      return submitRawInput(id, rawData);
     }
-    if (!getSession(id)) return;
-    sendInput(id, rawData);
-  });
+  );
 
   ipcMain.on(
     IPC.sessionResize,

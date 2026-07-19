@@ -2,21 +2,36 @@ import { randomUUID } from 'node:crypto';
 import type { DangerousCommandPrompt, SubmitResult } from '@shared/guard';
 import { getHost } from '../hosts/repository';
 import { loadConfig } from '../config/store';
-import { getSession, recordBlockedCommand, sendCommandLine } from '../ssh/sessionManager';
+import {
+  getSession,
+  recordBlockedCommand,
+  sendCommandLine,
+  sendInput
+} from '../ssh/sessionManager';
 import { analyzeCommand } from './patterns';
 import { t } from '../i18n';
 
 /**
  * Перехват команд Стражем в main process ДО отправки по SSH (GUARD-02).
  * Проверяются команды из всех источников: композер, каталог, история, сниппеты
- * (GUARD-04) — все они приходят через submitCommand.
+ * (GUARD-04) — все они приходят через submitCommand. Сырой IPC-канал
+ * (sessionSendInput — вставка/клик мимо промпта, .scratch/raw-input-guard-check/spec.md)
+ * проверяется через submitRawInput, единственный сырой путь отправки на сервер.
  * Логирование в историю (blocked/confirmed, GUARD-06) добавится на Этапе 7.
  */
+
+/** Живое нажатие клавиши — 1 символ либо короткая escape-последовательность
+ *  (стрелка и т.п., ~3 байта); собранный текст команды заметно длиннее. Ниже
+ *  порога — не проверяем вовсе, это неотличимо от посимвольного ввода. */
+const RAW_CHECK_THRESHOLD = 5;
 
 interface Pending {
   sessionId: string;
   command: string;
   confirmationText: string;
+  /** Как отправлять при подтверждении: 'command' — sendCommandLine (промпт,
+   *  как раньше), 'raw' — sendInput (сырой текст, без перевода строки/эха). */
+  mode: 'command' | 'raw';
 }
 
 const pending = new Map<string, Pending>();
@@ -50,7 +65,8 @@ export function submitCommand(sessionId: string, command: string): SubmitResult 
       pending.set(requestId, {
         sessionId,
         command,
-        confirmationText
+        confirmationText,
+        mode: 'command'
       });
       const prompt: DangerousCommandPrompt = {
         requestId,
@@ -71,6 +87,50 @@ export function submitCommand(sessionId: string, command: string): SubmitResult 
 }
 
 /**
+ * Проверка Стражем «сырого» пути ввода (sessionSendInput) — вставка/клик по
+ * каталогу/истории/сниппету/breadcrumb, доставленные одним IPC-вызовом, в
+ * момент, когда сессия не на промпте (см. .scratch/raw-input-guard-check/spec.md).
+ * Живой посимвольный ввод (короче RAW_CHECK_THRESHOLD) не проверяется —
+ * объективно неотличим от одного нажатия клавиши. В отличие от submitCommand,
+ * непроверенный текст уходит через sendInput (без перевода строки/эхо-логики,
+ * которая рассчитана на команду, набранную на промпте, а не на произвольный
+ * текст, летящий в интерактивную программу).
+ */
+export function submitRawInput(sessionId: string, data: string): SubmitResult {
+  const session = getSession(sessionId);
+  if (!session) return { status: 'sent' }; // неизвестная сессия — sendInput сам no-op
+
+  if (data.length >= RAW_CHECK_THRESHOLD && guardEnabledFor(sessionId)) {
+    const danger = analyzeCommand(data);
+    if (danger) {
+      const requestId = randomUUID();
+      const confirmationText =
+        danger.confirmationKind === 'word' ? t('guard.confirmWord') : danger.confirmationText;
+      pending.set(requestId, {
+        sessionId,
+        command: data,
+        confirmationText,
+        mode: 'raw'
+      });
+      const prompt: DangerousCommandPrompt = {
+        requestId,
+        sessionId,
+        command: data,
+        patternId: danger.patternId,
+        target: danger.target,
+        scope: danger.scope,
+        confirmationKind: danger.confirmationKind,
+        confirmationText
+      };
+      return { status: 'blocked', prompt };
+    }
+  }
+
+  sendInput(sessionId, data);
+  return { status: 'sent' };
+}
+
+/**
  * Подтверждение опасной команды: отправляется только при точном совпадении
  * введённого текста с именем объекта/словом подтверждения (GUARD-02).
  * Возвращает allowed — выполнилась ли отправка.
@@ -80,8 +140,13 @@ export function confirmDangerousCommand(requestId: string, confirmationText: str
   if (!p) return false;
   pending.delete(requestId);
   if (confirmationText !== p.confirmationText) return false;
-  // Подтверждённая опасная команда попадёт в историю со статусом confirmed (HIST-05)
-  sendCommandLine(p.sessionId, p.command, 'confirmed');
+  if (p.mode === 'raw') {
+    // Сырой текст — точно как был вставлен, без перевода строки/эхо-логики.
+    sendInput(p.sessionId, p.command);
+  } else {
+    // Подтверждённая опасная команда попадёт в историю со статусом confirmed (HIST-05)
+    sendCommandLine(p.sessionId, p.command, 'confirmed');
+  }
   return true;
 }
 

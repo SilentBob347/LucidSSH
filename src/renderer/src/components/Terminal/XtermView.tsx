@@ -227,7 +227,9 @@ function handleCommandChar(sessionId: string, data: string): void {
       // и шлём сигнал на сервер, как ожидает пользователь по привычке.
       commandBuffers.set(sessionId, '');
       term?.write('^C\r\n');
-      window.lucidSSH.sendTerminalInput(sessionId, ch);
+      // Один символ — заведомо короче порога проверки Стража, status всегда
+      // 'sent'; await не нужен по сути, но сигнатура теперь Promise.
+      void window.lucidSSH.sendTerminalInput(sessionId, ch);
       continue;
     }
     if (code === 0x7f || code === 0x08) {
@@ -310,7 +312,7 @@ export function copySelection(sessionId: string): void {
 /** Сырая отправка текста в сессию, без буфера/Стража — только когда сессия
  *  НЕ на промпте (внутри интерактивной программы), см. insertText ниже. */
 export function pasteText(sessionId: string, text: string): void {
-  window.lucidSSH.sendTerminalInput(sessionId, text);
+  void sendRawChecked(sessionId, text);
 }
 
 /**
@@ -330,6 +332,17 @@ export function insertText(sessionId: string, text: string): void {
   // (каталог/история/сниппет), и следующий Enter активирует ЕЁ (нативное
   // поведение <button>), а не уходит в терминал: команда вставляется повторно.
   cache.get(sessionId)?.term.focus();
+}
+
+/** Общая точка сырой отправки: main проверяет достаточно длинные куски
+ *  Стражем независимо от того, что решил renderer (см. submitRawInput,
+ *  .scratch/raw-input-guard-check/spec.md) — заблокированный кусок так же
+ *  открывает DangerGuardModal, как заблокированная команда на промпте. */
+async function sendRawChecked(sessionId: string, text: string): Promise<void> {
+  const result = await window.lucidSSH.sendTerminalInput(sessionId, text);
+  if (result.status === 'blocked') {
+    dangerListeners.get(sessionId)?.(result.prompt);
+  }
 }
 
 /** Текущий незавершённый ввод на промпте (для «Сохранить как сниппет»). */
@@ -391,8 +404,10 @@ function createTerminal(sessionId: string): Cached {
     }
     if (!isAtPrompt(sessionId)) {
       // Внутри интерактивной программы (vim/htop) — сырой посимвольный поток,
-      // Enter там значит не «выполнить команду».
-      window.lucidSSH.sendTerminalInput(sessionId, data);
+      // Enter там значит не «выполнить команду». Кусок может оказаться целой
+      // вставленной командой (однострочный paste доходит сюда же, не только
+      // через textarea paste-event) — проверяем через тот же sendRawChecked.
+      void sendRawChecked(sessionId, data);
       return;
     }
     handleCommandChar(sessionId, data);
