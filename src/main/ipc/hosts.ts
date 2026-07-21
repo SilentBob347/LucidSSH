@@ -1,10 +1,12 @@
-import { dialog, ipcMain } from 'electron';
+import { dialog, ipcMain, shell } from 'electron';
 import { readFile, writeFile } from 'node:fs/promises';
 import { IPC } from '@shared/ipc';
 import type { Host, HostGroup, ImportPreview } from '@shared/hosts';
 import * as repo from '../hosts/repository';
 import * as keychain from '../keychain';
 import { keyFileExists } from '../hosts/keyFile';
+import { applyPassphrase, clearPendingDeployment, findSshKeygen, generateKeyPair } from '../ssh/keygen';
+import { PASSPHRASE_MIN, type KeygenGenerateRequest, type KeygenGenerateResult } from '@shared/keygen';
 import {
   validateGroupName,
   validateHostInput,
@@ -97,12 +99,15 @@ export function registerHostIpcHandlers(): void {
   ipcMain.handle(IPC.hostDelete, async (event, rawId: unknown): Promise<void> => {
     assertSenderIsMainWindow(event);
     const id = validateId(rawId, 'hostId');
+    const host = repo.getHost(id);
     repo.deleteHost(id);
     // Секрет удаляется вместе с хостом (§10 гайда)
     await keychain.deleteSecret(id);
     updateConfig((cfg) => {
       cfg.history.perHostDisabled = cfg.history.perHostDisabled.filter((h) => h !== id);
     });
+    // HM-12: незачем хранить в config.json ожидающий ключ удалённого хоста
+    if (host?.keyPath) clearPendingDeployment(host.keyPath);
   });
 
   ipcMain.handle(IPC.hostHasSecret, async (event, rawId: unknown): Promise<boolean> => {
@@ -136,6 +141,44 @@ export function registerHostIpcHandlers(): void {
       throw new IpcValidationError('keyPath: string expected');
     }
     return keyFileExists(rawPath);
+  });
+
+  // --- Мастер создания SSH-ключа (HM-12) ---
+  ipcMain.handle(IPC.keygenAvailable, async (event): Promise<boolean> => {
+    assertSenderIsMainWindow(event);
+    return (await findSshKeygen()) !== null;
+  });
+
+  ipcMain.handle(
+    IPC.keygenGenerate,
+    (event, raw: unknown): Promise<KeygenGenerateResult> => {
+      assertSenderIsMainWindow(event);
+      return generateKeyPair(validateKeygenRequest(raw));
+    }
+  );
+
+  ipcMain.handle(
+    IPC.keygenSetPassphrase,
+    async (event, rawPath: unknown, rawPass: unknown): Promise<{ ok: boolean }> => {
+      assertSenderIsMainWindow(event);
+      if (typeof rawPath !== 'string' || rawPath.length === 0 || rawPath.length > 500) {
+        throw new IpcValidationError('keyPath: string expected');
+      }
+      // Минимум PASSPHRASE_MIN символов — ограничение самого ssh-keygen
+      if (typeof rawPass !== 'string' || rawPass.length < PASSPHRASE_MIN || rawPass.length > 1024) {
+        throw new IpcValidationError('passphrase: invalid');
+      }
+      // applyPassphrase дополнительно принимает только пути, созданные мастером
+      // в этом запуске — произвольный файл через этот канал не трогается.
+      return { ok: await applyPassphrase(rawPath, rawPass) };
+    }
+  );
+
+  // Захардкоженный deep-link на компоненты Windows (§22 гайда — внешние
+  // ссылки только на заранее определённые адреса).
+  ipcMain.on(IPC.keygenOpenInstall, (event) => {
+    assertSenderIsMainWindow(event);
+    void shell.openExternal('ms-settings:optionalfeatures');
   });
 
   // --- Группы ---
@@ -308,6 +351,31 @@ export function registerHostIpcHandlers(): void {
     // completed вычисляется лениво: конфиг + наличие хостов (OB-01)
     return loadOnboardingCompleted();
   });
+}
+
+/** Валидация запроса генерации ключа (HM-12): поля формы хоста могут быть
+ *  ещё не заполнены (пустое имя/адрес допустимы — slug возьмётся из остатка). */
+function validateKeygenRequest(raw: unknown): KeygenGenerateRequest {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new IpcValidationError('keygenRequest: object expected');
+  }
+  const r = raw as Record<string, unknown>;
+  const str = (v: unknown, name: string, maxLen: number): string => {
+    if (typeof v !== 'string' || v.length > maxLen) {
+      throw new IpcValidationError(`${name}: string expected`);
+    }
+    return v.trim();
+  };
+  const port = r['port'];
+  if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new IpcValidationError('port: 1..65535 expected');
+  }
+  return {
+    name: str(r['name'], 'name', 100),
+    address: str(r['address'], 'address', 255),
+    port,
+    username: str(r['username'], 'username', 64)
+  };
 }
 
 function loadOnboardingCompleted(): boolean {

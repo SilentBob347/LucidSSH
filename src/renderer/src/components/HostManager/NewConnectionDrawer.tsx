@@ -8,6 +8,7 @@ import { useSessions } from '@/stores/sessions';
 import { Icon } from '@/components/common/Icon';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ToggleRow } from '@/components/Settings/controls';
+import { SshKeyWizard } from './SshKeyWizard';
 
 /**
  * Drawer «Новое подключение» (скриншот 03-Newconn, Design_Brief §3.5):
@@ -40,6 +41,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
   const [deleteSecretConfirmOpen, setDeleteSecretConfirmOpen] = useState(false);
   const [keyFileExists, setKeyFileExists] = useState(true);
+  const [keyWizardOpen, setKeyWizardOpen] = useState(false);
 
   const editHost = drawer.editHost;
 
@@ -52,6 +54,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
     setHasSavedSecret(false);
     setTestResult(null);
     setKeyFileExists(true);
+    setKeyWizardOpen(false);
     if (editHost) {
       setForm({
         name: editHost.name,
@@ -357,6 +360,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
                 {!keyFileExists && (
                   <button
                     type="button"
+                    onClick={() => setKeyWizardOpen(true)}
                     className="mt-2 h-[30px] w-full rounded-[4px] border border-[rgba(255,255,255,0.1)] bg-bg-elevated text-[12px] font-medium text-text-body hover:bg-bg-elevated-2"
                   >
                     {t('conn.generateKey')}
@@ -457,6 +461,23 @@ export function NewConnectionDrawer(): JSX.Element | null {
           </button>
         </div>
       </aside>
+
+      {keyWizardOpen && (
+        <SshKeyWizard
+          form={{
+            name: form.name,
+            address: form.address,
+            port: form.port,
+            username: form.username
+          }}
+          // Конец шага 1 мастера: форма сразу переключается на новый ключ (HM-12)
+          onGenerated={(keyPath) => set({ authMethod: 'key', keyPath })}
+          // Passphrase уходит тем же путём, что у существующих ключей:
+          // поле секрета формы → keytar при сохранении хоста
+          onPassphraseSaved={(passphrase) => set({ secret: passphrase })}
+          onClose={() => setKeyWizardOpen(false)}
+        />
+      )}
 
       {deleteSecretConfirmOpen && (
         <ConfirmDialog

@@ -24,6 +24,7 @@ import {
   type TimerAction
 } from './shellIntegrationSession';
 import { startDashboard, stopDashboard } from './dashboard';
+import { deployPendingKey, hasPendingDeployment } from './keygen';
 import { loadErrorPatterns } from '../content/loader';
 import { detectError, isEmptyOutput } from '../errors/detector';
 import { t } from '../i18n';
@@ -317,7 +318,7 @@ function attemptConnect(
     // отвечаем тем же паролем, что и в connectConfig, это не альтернатива
     // password auth, а его серверный вариант (SSH-06).
     client.on('keyboard-interactive', (_name, _instructions, _lang, prompts, finish) => {
-      const answer = host.authMethod === 'password' ? (password ?? '') : '';
+      const answer = password ?? '';
       finish(prompts.map(() => answer));
     });
 
@@ -327,9 +328,24 @@ function attemptConnect(
         session,
         'info',
         'clog.ready',
-        { method: host.authMethod, ms: Date.now() - session.connectStartedAt },
+        {
+          method: password !== undefined ? 'password' : host.authMethod,
+          ms: Date.now() - session.connectStartedAt
+        },
         'auth'
       );
+      // HM-12 шаг 4: успешный пароль-логин — момент автоматической дозаписи
+      // ожидающего публичного ключа в authorized_keys (дедупликация внутри;
+      // no-op, если для этого keyPath ничего не ждёт). Помимо тихой записи в
+      // «Детали подключения», результат печатается прямо в терминал — в этот
+      // момент пользователь и так смотрит именно туда (только что вводил
+      // пароль), а лог подключения открывают редко.
+      if (password !== undefined && host.keyPath) {
+        void deployPendingKey(client, host.keyPath, (level, key) => {
+          log(session, level, key, undefined, 'session');
+          send(IPC.evTerminalData, session.id, `\r\n${t(key)}\r\n`);
+        });
+      }
       openShell(session, client);
       settle('ready');
     });
@@ -400,7 +416,9 @@ function attemptConnect(
       }
     };
 
-    if (host.authMethod === 'password') {
+    // Выбор по переданным кредам, а не по host.authMethod: для key-хоста с
+    // ожидающим дозаписи ключом (HM-12) первый вход идёт по паролю.
+    if (password !== undefined) {
       if (password) connectConfig.password = password;
     } else {
       connectConfig.privateKey = privateKey;
@@ -443,6 +461,14 @@ async function establish(session: ManagedSession, host: Host): Promise<void> {
   let privateKey: Buffer | undefined;
   let keyPassphrase = secret ?? undefined;
   if (host.authMethod === 'key') {
+    // HM-12 шаг 4: свежесгенерированный мастером ключ ещё не на сервере —
+    // первый вход выполняется по паролю (интерактивный запрос в терминале);
+    // на 'ready' ключ дозапишется в authorized_keys, и следующие подключения
+    // пойдут уже по ключу. Если пользователь не ответил на запрос пароля,
+    // пробуем обычный вход по ключу (вдруг ключ добавлен вручную).
+    if (host.keyPath && hasPendingDeployment(host.keyPath)) {
+      if ((await passwordLoginLoop(session, host)) === 'settled') return;
+    }
     for (let attempt = 0; ; attempt++) {
       try {
         privateKey = loadPrivateKey(host.keyPath ?? '', keyPassphrase);
@@ -476,30 +502,44 @@ async function establish(session: ManagedSession, host: Host): Promise<void> {
   // Пароль не сохранён: спрашиваем ДО подключения (pre-flight, как и
   // passphrase выше) — это гарантирует connectConfig.password не пустым,
   // что нужно для серверов, не предлагающих keyboard-interactive (частый
-  // случай на дефолтных настройках sshd, SSH-06). При отказе сервера —
-  // пересоздаём попытку с новым Client и переспрашиваем пароль.
+  // случай на дефолтных настройках sshd, SSH-06).
   if (!secret) {
-    for (let attempt = 0; ; attempt++) {
-      let password: string;
-      try {
-        const promptKey = attempt === 0 ? 'sshAuth.passwordPrompt' : 'sshAuth.passwordPromptRetry';
-        const [answer] = await requestAuthPrompt(
-          session,
-          [{ text: t(promptKey, { username: host.username, address: host.address }), echo: false }],
-          attempt > 0
-        );
-        password = answer ?? '';
-      } catch {
-        finishDisconnected(session);
-        return;
-      }
-      const allowRetry = attempt < MAX_PASSWORD_ATTEMPTS - 1;
-      const result = await attemptConnect(session, host, password, privateKey, keyPassphrase, allowRetry);
-      if (result !== 'auth-failed') return; // 'ready'/'other' — уже обработано внутри
-    }
+    if ((await passwordLoginLoop(session, host)) === 'cancelled') finishDisconnected(session);
+    return;
   }
 
   await attemptConnect(session, host, secret, privateKey, keyPassphrase, false);
+}
+
+/**
+ * Интерактивный вход по паролю (SSH-06): запрашивает пароль в терминале и
+ * подключается, при отказе сервера пересоздаёт попытку с новым Client и
+ * переспрашивает (до MAX_PASSWORD_ATTEMPTS). 'settled' — попытки завершены
+ * (успех или окончательная неудача уже обработаны внутри attemptConnect),
+ * 'cancelled' — пользователь не ответил на запрос пароля; что делать с
+ * сессией дальше, решает вызывающая сторона.
+ */
+async function passwordLoginLoop(
+  session: ManagedSession,
+  host: Host
+): Promise<'settled' | 'cancelled'> {
+  for (let attempt = 0; ; attempt++) {
+    let password: string;
+    try {
+      const promptKey = attempt === 0 ? 'sshAuth.passwordPrompt' : 'sshAuth.passwordPromptRetry';
+      const [answer] = await requestAuthPrompt(
+        session,
+        [{ text: t(promptKey, { username: host.username, address: host.address }), echo: false }],
+        attempt > 0
+      );
+      password = answer ?? '';
+    } catch {
+      return 'cancelled';
+    }
+    const allowRetry = attempt < MAX_PASSWORD_ATTEMPTS - 1;
+    const result = await attemptConnect(session, host, password, undefined, undefined, allowRetry);
+    if (result !== 'auth-failed') return 'settled'; // 'ready'/'other' — уже обработано внутри
+  }
 }
 
 function handleHostKey(

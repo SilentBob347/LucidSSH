@@ -20,6 +20,9 @@ export function mergeWithDefaults<T extends object>(defaults: T, saved: unknown)
         }
         out[key] = counts;
       }
+    } else if (key === 'pendingKeyDeployments') {
+      // HM-12: элементы с неверной формой отбрасываются по одному, не всем списком
+      if (Array.isArray(savVal)) out[key] = savVal.filter(isValidPendingKeyDeployment);
     } else if (typeof defVal === 'object' && defVal !== null && !Array.isArray(defVal)) {
       out[key] = mergeWithDefaults(defVal as object, savVal);
     } else if (Array.isArray(defVal)) {
@@ -29,4 +32,10 @@ export function mergeWithDefaults<T extends object>(defaults: T, saved: unknown)
     }
   }
   return out as T;
+}
+
+function isValidPendingKeyDeployment(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return typeof r['keyPath'] === 'string' && typeof r['publicKey'] === 'string';
 }

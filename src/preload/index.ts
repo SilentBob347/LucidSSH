@@ -18,6 +18,7 @@ import type { DashboardMetrics } from '@shared/dashboard';
 import type { CommandsDatabase, ErrorExplanation } from '@shared/content';
 import type { HistoryEntry, HistoryQuery, Snippet } from '@shared/history';
 import type { UpdateStatus } from '@shared/updates';
+import type { KeygenGenerateRequest, KeygenGenerateResult } from '@shared/keygen';
 
 /**
  * Минимальный preload (SEC-05): только конкретные операции,
@@ -74,6 +75,14 @@ const api = {
   setGroupCollapsed: (id: number, collapsed: boolean): Promise<void> =>
     ipcRenderer.invoke(IPC.groupSetCollapsed, id, collapsed),
   deleteGroup: (id: number): Promise<void> => ipcRenderer.invoke(IPC.groupDelete, id),
+
+  // --- Мастер создания SSH-ключа (HM-12) ---
+  keygenAvailable: (): Promise<boolean> => ipcRenderer.invoke(IPC.keygenAvailable),
+  keygenGenerate: (req: KeygenGenerateRequest): Promise<KeygenGenerateResult> =>
+    ipcRenderer.invoke(IPC.keygenGenerate, req),
+  keygenSetPassphrase: (keyPath: string, passphrase: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.keygenSetPassphrase, keyPath, passphrase),
+  keygenOpenInstall: (): void => ipcRenderer.send(IPC.keygenOpenInstall),
 
   // --- Экспорт / импорт (EXP-01…04) ---
   exportHosts: (): Promise<{ saved: boolean }> => ipcRenderer.invoke(IPC.hostsExport),

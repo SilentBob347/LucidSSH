@@ -52,6 +52,7 @@ export function createDefaultConfig(appVersion: string): AppConfig {
       perHostDisabled: []
     },
     shownCounts: {},
+    pendingKeyDeployments: [],
     updates: {
       autoCheck: true,
       source: ''

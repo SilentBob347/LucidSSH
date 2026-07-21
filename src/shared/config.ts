@@ -1,3 +1,5 @@
+import type { PendingKeyDeployment } from './keygen';
+
 /**
  * Формат %APPDATA%\LucidSSH\config.json (Data_Structures.md §6).
  * Секретов здесь нет и быть не может (SEC-01).
@@ -60,6 +62,8 @@ export interface AppConfig {
   };
   /** id подсказки → сколько раз показана (лимит 3, §5.1 ТЗ). */
   shownCounts: Record<string, number>;
+  /** HM-12: ключи мастера, ждущие дозаписи на сервер — переживает перезапуск. */
+  pendingKeyDeployments: PendingKeyDeployment[];
   updates: {
     autoCheck: boolean; // OQ-09
     source: string;

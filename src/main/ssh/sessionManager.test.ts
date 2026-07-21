@@ -11,7 +11,7 @@ import type { Host } from '@shared/hosts';
 // тестом вручную — см. Testing Decisions). Мокаем по образцу guard/manager.test.ts.
 vi.mock('../hosts/repository', () => ({ getHost: vi.fn() }));
 vi.mock('../keychain', () => ({ getSecretForConnection: vi.fn() }));
-vi.mock('../config/store', () => ({ loadConfig: vi.fn() }));
+vi.mock('../config/store', () => ({ loadConfig: vi.fn(), updateConfig: vi.fn() }));
 vi.mock('../window/mainWindow', () => ({ getMainWindow: vi.fn(() => null) }));
 vi.mock('./knownHosts', () => ({
   addKnownKey: vi.fn(),
@@ -55,7 +55,10 @@ const fakeConfig = (): AppConfig =>
     version: '0.0.0',
     language: 'ru',
     connection: { autoreconnect: true, keepaliveIntervalSec: 30, connectTimeoutSec: 10 },
-    ui: { hints: { errorPanel: true } }
+    ui: { hints: { errorPanel: true } },
+    // HM-12: deployPendingKey (keygen.ts) читает это через тот же мокнутый
+    // loadConfig — без поля падает на .find() при 'ready' с паролем.
+    pendingKeyDeployments: []
   }) as unknown as AppConfig;
 
 const fakeHost = (overrides: Partial<Host> = {}): Host => ({

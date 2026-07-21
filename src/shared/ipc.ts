@@ -45,6 +45,12 @@ export const IPC = {
   groupSetCollapsed: 'groups:set-collapsed',
   groupDelete: 'groups:delete',
 
+  // --- Мастер создания SSH-ключа (HM-12) ---
+  keygenAvailable: 'keygen:available',
+  keygenGenerate: 'keygen:generate',
+  keygenSetPassphrase: 'keygen:set-passphrase',
+  keygenOpenInstall: 'keygen:open-install', // инструкция включения «Клиент OpenSSH»
+
   // --- Экспорт / импорт (EXP-01…04) ---
   hostsExport: 'hosts:export',
   hostsImportPick: 'hosts:import-pick',

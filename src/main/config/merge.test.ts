@@ -6,7 +6,8 @@ const defaults = {
   language: 'ru',
   window: { width: 1280, height: 800, maximized: false },
   history: { enabled: true, perHostDisabled: [] as number[] },
-  shownCounts: {} as Record<string, number>
+  shownCounts: {} as Record<string, number>,
+  pendingKeyDeployments: [] as Array<{ keyPath: string; publicKey: string }>
 };
 
 describe('mergeWithDefaults', () => {
@@ -47,5 +48,18 @@ describe('mergeWithDefaults', () => {
       shownCounts: { hintA: 2, hintB: 'many', hintC: Infinity }
     });
     expect(merged.shownCounts).toEqual({ hintA: 2 });
+  });
+
+  it('в pendingKeyDeployments отбрасывает элементы неверной формы по одному (HM-12)', () => {
+    const valid = { keyPath: 'C:\\Users\\u\\.ssh\\id_ed25519_web', publicKey: 'ssh-ed25519 AAAA' };
+    const merged = mergeWithDefaults(defaults, {
+      pendingKeyDeployments: [valid, { keyPath: 'x' }, 'garbage', null, 42]
+    });
+    expect(merged.pendingKeyDeployments).toEqual([valid]);
+  });
+
+  it('pendingKeyDeployments игнорируется целиком, если сохранённое значение не массив', () => {
+    const merged = mergeWithDefaults(defaults, { pendingKeyDeployments: 'garbage' });
+    expect(merged.pendingKeyDeployments).toEqual([]);
   });
 });

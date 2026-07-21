@@ -109,6 +109,46 @@
     "keyPathHelper": "Private key file (usually id_rsa or id_ed25519). The public key must be added to the server",
     "browse": "Browse…",
     "generateKey": "Create new key",
+    "keyWizard": {
+      "title": "Create SSH key",
+      "step": "Step {{current}} of {{total}}",
+      "gen": {
+        "title": "New key pair",
+        "body": "An SSH key is a pair of files: the private one stays on this PC, the public one is added to the server. Key login is safer than a password, and you won't have to type the password on every connection.",
+        "location": "An Ed25519 key will be created by the system ssh-keygen in the ~/.ssh folder on this PC.",
+        "action": "Create key",
+        "generating": "Creating…",
+        "error": "Could not create the key. A file with this name may already exist in ~/.ssh — point the \"Key file\" field to it, or rename the host and try again."
+      },
+      "missing": {
+        "title": "ssh-keygen was not found on this PC",
+        "body": "Creating a key requires the Windows \"OpenSSH Client\" component. It is usually preinstalled, but it could not be found here.",
+        "how": "To enable it: Settings → System → Optional features → \"Add a feature\" → \"OpenSSH Client\" → Install. Then reopen this wizard.",
+        "open": "Open Windows features"
+      },
+      "pass": {
+        "title": "Passphrase — a password for the key file itself",
+        "body": "If the key file is stolen, it cannot be used without the passphrase. You will need to enter it when connecting. You can leave it empty — then login will require no typing at all.",
+        "placeholder": "At least 5 characters",
+        "helper": "Stored in Windows Credential Manager after saving the host — like passwords",
+        "skip": "No passphrase",
+        "setAction": "Set passphrase",
+        "error": "Could not set the passphrase — the key remains without one. You can continue and set it later with ssh-keygen -p."
+      },
+      "pub": {
+        "title": "Public key",
+        "body": "This line is safe to show and share — it is what gets added to the server. Never send the private key file to anyone.",
+        "copy": "Copy",
+        "copied": "Copied",
+        "next": "Next"
+      },
+      "install": {
+        "title": "Adding the key to the server",
+        "body": "On the first connection to this host, enter the server password — LucidSSH will add the public key to ~/.ssh/authorized_keys on the server automatically. After that, login will use the key, no password needed.",
+        "note": "The form has already been switched to the new key — just save the host and connect.",
+        "done": "Done"
+      }
+    },
     "passphrase": "Key passphrase",
     "passphraseHelper": "The passphrase you set when creating the key. Not the server password",
     "group": "Group",
@@ -314,6 +354,9 @@
     "dashboardExecError": "Dashboard: could not open the exec channel ({{error}}) - metrics shown as '—'",
     "dashboardTimeout": "Dashboard: the server did not answer the metrics request within 8 s - showing '—'",
     "dashboardNoData": "Dashboard: server response not recognized (stdout: {{stdout}} · stderr: {{stderr}}) - showing '—'",
+    "keyDeployed": "Public key added to the server's authorized_keys — the next login will use the key",
+    "keyDeployExists": "Public key is already in the server's authorized_keys — nothing to add",
+    "keyDeployFailed": "Could not add the public key to the server — will retry on the next password login, or add it manually (the Copy button in the key wizard)",
     "error": {
       "auth": "Authentication error — the server rejected the password or key",
       "timeout": "Connection timeout — the server did not respond in time",
