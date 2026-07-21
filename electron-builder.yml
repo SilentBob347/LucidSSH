@@ -20,6 +20,13 @@ files:
   - out/**
   - assets/**
   - package.json
+  - "!**/node_modules/better-sqlite3/deps/**"
+  - "!**/node_modules/better-sqlite3/src/**"
+# UI поставляется только на ru/en (§5a) — обрезаем встроенные Chromium-переводы
+# нативных пунктов меню/спеллчекера до нужных языков, остальные 53 .pak не нужны.
+electronLanguages:
+  - ru
+  - en-US
 win:
   icon: resources/icon.ico
   target:
