@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 /**
  * Предпросмотр многострочной вставки (TERM-05, §14 гайда): пользователь видит
@@ -24,10 +25,12 @@ export function PastePreviewDialog({
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const hasDanger = lines.some((l) => DANGER_HINT.test(l));
 
+  const backdrop = useBackdropClose(onCancel);
+
   return (
     <div
       className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      onClick={onCancel}
+      {...backdrop}
       role="presentation"
     >
       <div

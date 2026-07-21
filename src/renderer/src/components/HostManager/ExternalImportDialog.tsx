@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { ExternalImportResult, ImportSource } from '@shared/import';
 import { useHosts } from '@/stores/hosts';
 import { Icon } from '@/components/common/Icon';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 /**
  * Импорт хостов из внешних источников (HM-03 PuTTY, HM-04 ssh_config).
@@ -127,10 +128,12 @@ export function ExternalImportDialog({ onClose }: { onClose: () => void }): JSX.
     </button>
   );
 
+  const backdrop = useBackdropClose(onClose);
+
   return (
     <div
       className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      onClick={onClose}
+      {...backdrop}
       role="presentation"
     >
       <div

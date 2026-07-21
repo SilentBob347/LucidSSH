@@ -9,6 +9,7 @@ import { Icon } from '@/components/common/Icon';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ToggleRow } from '@/components/Settings/controls';
 import { SshKeyWizard } from './SshKeyWizard';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 /**
  * Drawer «Новое подключение» (скриншот 03-Newconn, Design_Brief §3.5):
@@ -109,6 +110,11 @@ export function NewConnectionDrawer(): JSX.Element | null {
     return () => window.removeEventListener('keydown', onKey);
   }, [drawer.open, closeDrawer]);
 
+  // До early return ниже: хук должен звонить каждый рендер одинаково
+  // (Rules of Hooks) — вызов после `if (...) return null` менял бы число
+  // хуков между «закрыт»/«открыт» и валил бы всё приложение.
+  const backdrop = useBackdropClose(closeDrawer);
+
   if (!drawer.open || !form) return null;
 
   const set = (patch: Partial<FormState>): void => setForm({ ...form, ...patch });
@@ -193,7 +199,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
   return (
     <div
       className="animate-[esh-fade_.15s_ease] fixed inset-0 z-40 bg-black/70"
-      onClick={closeDrawer}
+      {...backdrop}
       role="presentation"
     >
       <aside

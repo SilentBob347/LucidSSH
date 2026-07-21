@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Icon, type IconName } from '@/components/common/Icon';
 import { usePanels } from '@/stores/panels';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 /**
  * FeatureGuide — модалка «Возможности LucidSSH» (скриншот 15-Guide):
@@ -18,11 +19,12 @@ const CARDS: { key: string; icon: IconName; color: string; bg: string }[] = [
 export function FeatureGuide({ onClose }: { onClose: () => void }): JSX.Element {
   const { t } = useTranslation();
   const { openHelp } = usePanels();
+  const backdrop = useBackdropClose(onClose);
 
   return (
     <div
       className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      onClick={onClose}
+      {...backdrop}
       role="presentation"
     >
       <div

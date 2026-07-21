@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DangerousCommandPrompt } from '@shared/guard';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 /**
  * Модалка Стража (GUARD-02, GUARD-03; скриншот 05-Danger).
@@ -31,11 +32,12 @@ export function DangerGuardModal({
   const confirmLabel =
     prompt.patternId === 'rm-recursive' ? t('guard.confirmDelete') : t('guard.confirmRun');
   const matched = value === prompt.confirmationText;
+  const backdrop = useBackdropClose(onCancel);
 
   return (
     <div
       className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      onClick={onCancel}
+      {...backdrop}
       role="presentation"
     >
       <div

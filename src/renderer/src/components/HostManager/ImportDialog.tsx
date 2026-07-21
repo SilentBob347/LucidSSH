@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ImportPreview } from '@shared/hosts';
 import { useHosts } from '@/stores/hosts';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 /**
  * Импорт хостов (EXP-02…04): предпросмотр (сколько добавится / конфликтов),
@@ -33,11 +34,12 @@ export function ImportDialog({
       setBusy(false);
     }
   };
+  const backdrop = useBackdropClose(onClose);
 
   return (
     <div
       className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      onClick={onClose}
+      {...backdrop}
       role="presentation"
     >
       <div

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Snippet } from '@shared/history';
 import { Icon } from '@/components/common/Icon';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 /**
  * SnippetSaveDialog (SNIP-01, SNIP-05; Design_Brief §3.5). Модалка 440px:
@@ -97,10 +98,12 @@ export function SnippetSaveDialog({
   const inputCls =
     'h-[34px] w-full rounded-[4px] border border-border-strong bg-bg-base px-[10px] text-[13px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent';
 
+  const backdrop = useBackdropClose(onClose);
+
   return (
     <div
       className="animate-[esh-fade_.15s_ease] fixed inset-0 z-[60] flex items-center justify-center bg-black/70"
-      onClick={onClose}
+      {...backdrop}
       role="presentation"
     >
       <div

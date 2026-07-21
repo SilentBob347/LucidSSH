@@ -7,6 +7,7 @@ import { insertIntoComposer } from '@/stores/composerBus';
 import { usePanels } from '@/stores/panels';
 import { Icon } from '@/components/common/Icon';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 /**
  * Панель истории команд (HistoryDrawer, Design_Brief §3.5; скриншот 06).
@@ -87,10 +88,12 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
     refreshHistory();
   };
 
+  const backdrop = useBackdropClose(closeHistory);
+
   return (
     <div
       className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 bg-black/70"
-      onClick={closeHistory}
+      {...backdrop}
       role="presentation"
     >
       <aside

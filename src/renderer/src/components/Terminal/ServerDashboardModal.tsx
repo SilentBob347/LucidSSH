@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DashboardMetrics } from '@shared/dashboard';
 import { Icon } from '@/components/common/Icon';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 /**
  * Модалка «Дашборд сервера» (DASH-01…05, Design_Brief §3.9; docs/Final
@@ -121,11 +122,12 @@ export function ServerDashboardModal({
       : '—';
 
   const procs = metrics?.topProcesses ?? [];
+  const backdrop = useBackdropClose(onClose);
 
   return (
     <div
       className="animate-[esh-fade_.15s_ease] fixed inset-0 z-[45] flex items-center justify-center bg-black/70"
-      onClick={onClose}
+      {...backdrop}
       role="presentation"
     >
       <div

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { parseQuickConnect } from '@shared/quickConnect';
 import { Icon } from '@/components/common/Icon';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 /**
  * HM-11: «Быстрое подключение» — ввод `user@host[:port]`, соединение сразу
@@ -38,10 +39,12 @@ export function QuickConnectDialog({
     }
   };
 
+  const backdrop = useBackdropClose(onClose);
+
   return (
     <div
       className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      onClick={onClose}
+      {...backdrop}
       role="presentation"
     >
       <div

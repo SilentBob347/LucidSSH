@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PASSPHRASE_MIN } from '@shared/keygen';
 import { Icon } from '@/components/common/Icon';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 /**
  * Мастер создания SSH-ключа (HM-12), открывается из NewConnectionDrawer
@@ -132,10 +133,7 @@ export function SshKeyWizard({
   return (
     <div
       className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClose();
-      }}
+      {...useBackdropClose(onClose)}
       role="presentation"
     >
       <div

@@ -14,6 +14,7 @@ import { applyTerminalConfig } from '@/components/Terminal/XtermView';
 import { Card, Segment, SectionTitle, ToggleRow } from './controls';
 import { Icon } from '@/components/common/Icon';
 import { LogoMark } from '@/components/common/LogoMark';
+import { useBackdropClose } from '@/hooks/useBackdropClose';
 
 /**
  * Страница настроек (SET-01…08; Design_Brief §3.10; скриншот 08). Отдельная
@@ -51,6 +52,7 @@ export function SettingsScreen({ onOpenGuide }: { onOpenGuide: () => void }): JS
     isSection(settingsSection) ? settingsSection : 'interface'
   );
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const resetConfirmBackdrop = useBackdropClose(() => setResetConfirmOpen(false));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -161,7 +163,7 @@ export function SettingsScreen({ onOpenGuide }: { onOpenGuide: () => void }): JS
       {resetConfirmOpen && (
         <div
           className="animate-[esh-fade_.12s_ease] fixed inset-0 z-[60] flex items-center justify-center bg-black/70"
-          onClick={() => setResetConfirmOpen(false)}
+          {...resetConfirmBackdrop}
           role="presentation"
         >
           <div
