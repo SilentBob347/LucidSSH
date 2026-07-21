@@ -50,6 +50,21 @@ const authInterceptors = new Map<string, (data: string) => void>();
 const printedAuthPrompts = new Set<string>();
 
 /**
+ * Промпт пароля/passphrase активен (SSH-06) — вставленный текст (Ctrl+V или
+ * правый клик) уходит в ТОТ ЖЕ маскированный перехватчик, что и печать
+ * посимвольно, а не нативным вставлением в textarea: иначе секрет виден в
+ * терминале открытым текстом (маскирование рассчитано на onData, не на
+ * paste-событие) — найдено 22.07.2026 при живой проверке HM-12.
+ * Возвращает true, если вставка поглощена перехватчиком (вызывающий останавливается).
+ */
+function maskPasteIfAuthPrompt(sessionId: string, text: string): boolean {
+  const intercept = authInterceptors.get(sessionId);
+  if (!intercept) return false;
+  intercept(text);
+  return true;
+}
+
+/**
  * Единый ввод: терминал сам решает, гнать ли строку через Стража, или
  * пропускать ввод сырым (см. план «Единый терминал-ввод», 13.07.2026).
  *
@@ -503,8 +518,9 @@ export function XtermView({
     }
 
     // Перехват вставки: textarea появляется только после open() — вешаем один раз.
-    // Многострочный текст уходит в предпросмотр (TERM-05); одиночная строка —
-    // штатно через xterm.onData.
+    // При активном промпте пароля секрет маскируется (maskPasteIfAuthPrompt).
+    // Многострочный текст (вне промпта пароля) уходит в предпросмотр (TERM-05);
+    // одиночная строка (вне промпта пароля) — штатно через xterm.onData.
     const textarea = cached.term.textarea;
     if (textarea && !cached.pasteAttached) {
       cached.pasteAttached = true;
@@ -512,6 +528,11 @@ export function XtermView({
         'paste',
         (e: ClipboardEvent) => {
           const text = e.clipboardData?.getData('text') ?? '';
+          if (maskPasteIfAuthPrompt(sessionId, text)) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
           if (text.includes('\n') || text.includes('\r')) {
             e.preventDefault();
             e.stopPropagation();
@@ -539,6 +560,7 @@ export function XtermView({
       if (getCurrentConfig()?.terminal.rightClickPaste) {
         void window.lucidSSH.clipboardRead().then((text) => {
           if (!text) return;
+          if (maskPasteIfAuthPrompt(sessionId, text)) return;
           if (text.includes('\n') || text.includes('\r')) cbRef.current.onMultilinePaste(text);
           else insertText(sessionId, text);
         });
