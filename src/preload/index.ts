@@ -66,6 +66,8 @@ const api = {
   hostHasSecret: (id: number): Promise<boolean> => ipcRenderer.invoke(IPC.hostHasSecret, id),
   hostDeleteSecret: (id: number): Promise<void> => ipcRenderer.invoke(IPC.hostDeleteSecret, id),
   pickKeyFile: (): Promise<string | null> => ipcRenderer.invoke(IPC.hostPickKeyFile),
+  keyFileExists: (path: string): Promise<boolean> =>
+    ipcRenderer.invoke(IPC.hostKeyFileExists, path),
   createGroup: (name: string): Promise<{ id: number }> => ipcRenderer.invoke(IPC.groupCreate, name),
   renameGroup: (id: number, name: string): Promise<void> =>
     ipcRenderer.invoke(IPC.groupRename, id, name),

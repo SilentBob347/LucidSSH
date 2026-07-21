@@ -108,6 +108,7 @@
     "keyPath": "Key file",
     "keyPathHelper": "Private key file (usually id_rsa or id_ed25519). The public key must be added to the server",
     "browse": "Browse…",
+    "generateKey": "Create new key",
     "passphrase": "Key passphrase",
     "passphraseHelper": "The passphrase you set when creating the key. Not the server password",
     "group": "Group",

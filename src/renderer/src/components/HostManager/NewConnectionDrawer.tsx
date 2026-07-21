@@ -39,6 +39,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
   const [deleteSecretConfirmOpen, setDeleteSecretConfirmOpen] = useState(false);
+  const [keyFileExists, setKeyFileExists] = useState(true);
 
   const editHost = drawer.editHost;
 
@@ -50,6 +51,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
     setError(false);
     setHasSavedSecret(false);
     setTestResult(null);
+    setKeyFileExists(true);
     if (editHost) {
       setForm({
         name: editHost.name,
@@ -78,6 +80,22 @@ export function NewConnectionDrawer(): JSX.Element | null {
       });
     }
   }, [drawer.open, editHost, drawer.presetGroupId, drawer.presetQuickConnect]);
+
+  useEffect(() => {
+    if (!drawer.open || !form || form.authMethod !== 'key') return;
+    let cancelled = false;
+    void window.lucidSSH
+      .keyFileExists(form.keyPath)
+      .then((exists) => {
+        if (!cancelled) setKeyFileExists(exists);
+      })
+      .catch(() => {
+        if (!cancelled) setKeyFileExists(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [drawer.open, form?.authMethod, form?.keyPath]);
 
   useEffect(() => {
     if (!drawer.open) return;
@@ -336,6 +354,14 @@ export function NewConnectionDrawer(): JSX.Element | null {
                   </button>
                 </div>
                 <div className={helper}>{t('conn.keyPathHelper')}</div>
+                {!keyFileExists && (
+                  <button
+                    type="button"
+                    className="mt-2 h-[30px] w-full rounded-[4px] border border-[rgba(255,255,255,0.1)] bg-bg-elevated text-[12px] font-medium text-text-body hover:bg-bg-elevated-2"
+                  >
+                    {t('conn.generateKey')}
+                  </button>
+                )}
               </div>
               <div>
                 <label className={label} htmlFor="conn-passphrase">

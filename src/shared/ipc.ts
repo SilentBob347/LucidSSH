@@ -37,6 +37,7 @@ export const IPC = {
   hostHasSecret: 'hosts:has-secret',
   hostDeleteSecret: 'hosts:delete-secret',
   hostPickKeyFile: 'hosts:pick-key-file',
+  hostKeyFileExists: 'hosts:key-file-exists', // HM-12 (тикет 01) — показ/скрытие «Создать новый ключ»
   hostsReorder: 'hosts:reorder',
   groupsList: 'groups:list',
   groupCreate: 'groups:create',

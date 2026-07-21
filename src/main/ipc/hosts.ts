@@ -4,6 +4,7 @@ import { IPC } from '@shared/ipc';
 import type { Host, HostGroup, ImportPreview } from '@shared/hosts';
 import * as repo from '../hosts/repository';
 import * as keychain from '../keychain';
+import { keyFileExists } from '../hosts/keyFile';
 import {
   validateGroupName,
   validateHostInput,
@@ -127,6 +128,14 @@ export function registerHostIpcHandlers(): void {
       properties: ['openFile', 'showHiddenFiles']
     });
     return res.canceled ? null : (res.filePaths[0] ?? null);
+  });
+
+  ipcMain.handle(IPC.hostKeyFileExists, (event, rawPath: unknown): boolean => {
+    assertSenderIsMainWindow(event);
+    if (typeof rawPath !== 'string' || rawPath.length > 500) {
+      throw new IpcValidationError('keyPath: string expected');
+    }
+    return keyFileExists(rawPath);
   });
 
   // --- Группы ---
