@@ -1,4 +1,6 @@
 import type { Breadcrumb } from '@shared/breadcrumb';
+import type { InteractiveProgramName } from '@shared/interactivePrograms';
+import { isInteractiveProgramName } from '@shared/interactivePrograms';
 import { splitCompound } from '../guard/patterns';
 
 /**
@@ -310,6 +312,24 @@ const VALUE_FLAGS = new Set(['-u', '-g', '-p', '-U', '-C', '-D', '-R', '-T', '-t
  */
 export function isShellEscalationCommand(command: string): boolean {
   return splitCompound(command).some(isEscalationSegment);
+}
+
+/**
+ * Запуск известной интерактивной программы (BRD-05) — в т.ч. с `sudo`-префиксом
+ * или в составной команде (`cd /var && less log`, разбивается через
+ * splitCompound). Возвращает первую распознанную программу среди сегментов
+ * составной команды. Детекция ограничена фиксированным списком (§ ТЗ BRD-05) —
+ * распознавание произвольного foreground-процесса не входит в это требование.
+ */
+export function detectInteractiveProgram(command: string): InteractiveProgramName | null {
+  for (const segment of splitCompound(command)) {
+    const words = segment.trim().split(/\s+/).filter((w) => w.length > 0);
+    const head = words[0] === 'sudo' ? words[1] : words[0];
+    if (!head) continue;
+    const name = head.slice(head.lastIndexOf('/') + 1);
+    if (isInteractiveProgramName(name)) return name;
+  }
+  return null;
 }
 
 function isEscalationSegment(segment: string): boolean {

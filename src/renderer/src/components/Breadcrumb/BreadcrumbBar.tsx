@@ -3,6 +3,7 @@ import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Breadcrumb } from '@shared/breadcrumb';
 import type { DashboardMetrics } from '@shared/dashboard';
+import type { InteractiveProgramName } from '@shared/interactivePrograms';
 import { insertIntoComposer } from '@/stores/composerBus';
 import { useConfig } from '@/stores/config';
 import { Icon } from '@/components/common/Icon';
@@ -61,7 +62,8 @@ export function BreadcrumbBar({
   guardEnabled,
   guardOffReason,
   shellStateUnknown,
-  onOpenGuardSettings
+  onOpenGuardSettings,
+  interactiveProgram
 }: {
   crumb: Breadcrumb | undefined;
   metrics: DashboardMetrics | undefined;
@@ -76,6 +78,9 @@ export function BreadcrumbBar({
    *  вслепую, см. XtermView). Перекрывает цвет индикатора на «внимание». */
   shellStateUnknown?: boolean;
   onOpenGuardSettings?: () => void;
+  /** BRD-05/06: запущена известная интерактивная программа — путь временно
+   *  заменяется статусом на месте (см. комментарий у места отрисовки). */
+  interactiveProgram?: { program: InteractiveProgramName; showHotkeys: boolean };
 }): JSX.Element {
   const { t } = useTranslation();
   const { config } = useConfig();
@@ -145,26 +150,48 @@ export function BreadcrumbBar({
             <span className="shrink-0 text-text-dim">@</span>
             <span className="shrink-0 text-text-body">{crumb.host}</span>
             <span className="mx-[2px] shrink-0 text-accent">&gt;</span>
-            <div className="flex shrink-0 items-center">
-              {pathSegments(crumb.path).map((seg, i, arr) => {
-                const isLast = i === arr.length - 1;
-                return (
-                  <span key={i} className="flex shrink-0 items-center">
-                    {i > 0 && seg.label !== '~' && <span className="text-accent">/</span>}
-                    <button
-                      type="button"
-                      title={t('breadcrumb.insertCd')}
-                      onClick={() => insertIntoComposer(`cd ${seg.full}`)}
-                      className={`max-w-[160px] truncate hover:text-lavender-light hover:underline ${
-                        isLast ? 'text-text-strong' : 'text-text-muted'
-                      }`}
-                    >
-                      {seg.label}
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
+            {/* BRD-05/06: пока запущена известная интерактивная программа, путь
+                временно заменяется статусом (вместо отдельной строки над
+                breadcrumb) — так высота панели не меняется и не триггерит
+                resize терминала (см. XtermView ResizeObserver), который иначе
+                вызывал у удалённого shell лишнюю перерисовку prompt. */}
+            {interactiveProgram ? (
+              <span className="flex min-w-0 shrink items-center gap-[7px] overflow-hidden">
+                <Icon name="terminal" size={13} className="shrink-0 text-lavender-light" />
+                <span className="shrink-0 text-text-strong">
+                  {t('breadcrumb.interactiveOpen', { program: interactiveProgram.program })}
+                </span>
+                {interactiveProgram.showHotkeys && (
+                  <>
+                    <span className="shrink-0 text-accent">·</span>
+                    <span className="truncate text-text-dim">
+                      {t(`interactiveProgram.hotkeys.${interactiveProgram.program}`)}
+                    </span>
+                  </>
+                )}
+              </span>
+            ) : (
+              <div className="flex shrink-0 items-center">
+                {pathSegments(crumb.path).map((seg, i, arr) => {
+                  const isLast = i === arr.length - 1;
+                  return (
+                    <span key={i} className="flex shrink-0 items-center">
+                      {i > 0 && seg.label !== '~' && <span className="text-accent">/</span>}
+                      <button
+                        type="button"
+                        title={t('breadcrumb.insertCd')}
+                        onClick={() => insertIntoComposer(`cd ${seg.full}`)}
+                        className={`max-w-[160px] truncate hover:text-lavender-light hover:underline ${
+                          isLast ? 'text-text-strong' : 'text-text-muted'
+                        }`}
+                      >
+                        {seg.label}
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </>
         ) : (
           <span className="text-text-faint">—</span>

@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type { AppConfig } from '@shared/config';
+import { INTERACTIVE_PROGRAMS } from '@shared/interactivePrograms';
 import { loadConfig, updateConfig } from '../config/store';
 import { assertSenderIsMainWindow, IpcValidationError } from './validate';
 
@@ -105,5 +106,7 @@ const KNOWN_HINTS = new Set([
   'ctrlcHint',
   'snippetPaletteHint',
   'rootHint',
-  'passwordHint'
+  'passwordHint',
+  // BRD-06: счётчик показов хоткеев — отдельный на каждую интерактивную программу.
+  ...INTERACTIVE_PROGRAMS.map((program) => `interactiveHotkeys.${program}`)
 ]);

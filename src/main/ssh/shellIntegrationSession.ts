@@ -1,10 +1,12 @@
 import type { Breadcrumb } from '@shared/breadcrumb';
 import type { GuardStatus } from '@shared/history';
+import type { InteractiveProgramName } from '@shared/interactivePrograms';
 import {
   BreadcrumbParser,
   CommandGate,
   EchoGate,
   SHELL_INTEGRATION_SETUP,
+  detectInteractiveProgram,
   endsWithInputPrompt,
   isShellEscalationCommand,
   matchesPasswordPromptPattern
@@ -55,6 +57,11 @@ export type ShellIntegrationEvent =
       durationMs: number;
     }
   | { kind: 'password-prompt' }
+  /** BRD-05: команда запускает известную интерактивную программу (nano/vim/…) —
+   *  renderer показывает статус-строку над breadcrumb до следующего маркера
+   *  (см. 'breadcrumb' — конец интерактивной программы отдельным событием не
+   *  сигналится, скрытие переиспользует уже существующий маркер прихода на промпт). */
+  | { kind: 'interactive-program'; program: InteractiveProgramName }
   /** `close()` без единого маркера (nologin/ash-сценарии) — накопленный вывод
    *  для сверки с базой паттернов scope 'ssh-connection'. */
   | { kind: 'unmarked-output'; output: string }
@@ -176,6 +183,15 @@ export class ShellIntegrationSession {
     // работала: без первого маркера повтор настройки бессмысленен).
     if (this.setupSent && this.firstMarkSeen && isShellEscalationCommand(command)) {
       this.armReinject(result);
+    }
+
+    // BRD-05: статус-строка над breadcrumb. writeCommand зовётся только для
+    // команды, отправленной с реального промпта (композер/Страж/каталог/
+    // сниппеты/история) — сырой ввод внутри уже запущенной программы идёт
+    // через sendRawInput и сюда не попадает.
+    if (this.firstMarkSeen) {
+      const program = detectInteractiveProgram(command);
+      if (program) result.events.push({ kind: 'interactive-program', program });
     }
 
     this.pendingEcho = { text: `${command}\r\n`, armedAt: Date.now() };

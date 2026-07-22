@@ -727,6 +727,9 @@ function handleShellIntegrationEvent(session: ManagedSession, event: ShellIntegr
     case 'integration-unconfirmed':
       send(IPC.evIntegrationUnconfirmed, session.id);
       break;
+    case 'interactive-program':
+      send(IPC.evInteractiveProgram, session.id, event.program);
+      break;
   }
 }
 

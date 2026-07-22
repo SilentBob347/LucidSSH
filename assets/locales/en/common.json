@@ -233,7 +233,18 @@
     "guardOn": "Guard is on for this host. Click for Guard settings.",
     "guardOff": "Guard is off for this host — commands aren't checked. Click for Guard settings.",
     "guardOffGlobal": "Guard is off globally (for all hosts) in settings. Click to open Settings → Security.",
-    "shellStateUnknown": "Guard isn't sure about this session — details in notifications 🔔."
+    "shellStateUnknown": "Guard isn't sure about this session — details in notifications 🔔.",
+    "interactiveOpen": "{{program}} is currently open"
+  },
+  "interactiveProgram": {
+    "hotkeys": {
+      "nano": "Ctrl+O — save · Ctrl+X — exit",
+      "vim": "Esc — command mode · :wq — save and quit · :q! — quit without saving",
+      "less": "q — quit",
+      "man": "q — quit",
+      "htop": "F10 or q — quit",
+      "top": "q — quit"
+    }
   },
   "dashboard": {
     "cpu": "CPU",

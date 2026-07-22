@@ -25,6 +25,7 @@ import { OnboardingHints } from './OnboardingHints';
 import { DangerGuardModal } from '@/components/Guard/DangerGuardModal';
 import { AccessRiskModal } from '@/components/Guard/AccessRiskModal';
 import { BreadcrumbBar } from '@/components/Breadcrumb/BreadcrumbBar';
+import type { InteractiveProgramName } from '@shared/interactivePrograms';
 import { ServerDashboardModal } from './ServerDashboardModal';
 import { ErrorDetector } from './ErrorDetector';
 import { useConfig, getCurrentConfig } from '@/stores/config';
@@ -69,6 +70,12 @@ export function TerminalArea(): JSX.Element {
   const [activeHint, setActiveHint] = useState<
     'snippet' | 'palette' | 'root' | 'password' | null
   >(null);
+  // BRD-05/06: статус-строка над breadcrumb — по sessionId (не только активная
+  // вкладка), т.к. программа может остаться запущенной в фоне, пока пользователь
+  // смотрит другую вкладку; скрывается по возврату prompt, см. эффект ниже.
+  const [interactivePrograms, setInteractivePrograms] = useState<
+    Record<string, { program: InteractiveProgramName; showHotkeys: boolean }>
+  >({});
   const prevSnippetsRevision = useRef(snippetsRevision);
   // BRD-07: последняя известная привилегия на сессию — нужна, чтобы ловить
   // именно ПЕРЕХОД в root/sudo, а не показывать подсказку на каждый рендер.
@@ -249,6 +256,37 @@ export function TerminalArea(): JSX.Element {
     return off;
   }, [active, showTerminal, markHint]);
 
+  // BRD-05: главный процесс детектирует запуск известной интерактивной
+  // программы (nano/vim/less/man/htop/top, в т.ч. с sudo-префиксом или в
+  // составной команде) и шлёт событие с её именем — сама детекция и разбор
+  // команды в main (shellIntegrationSession.ts), здесь только решение о
+  // показе (лимит показов хоткеев BRD-06/SET-05 + «Режим эксперта»).
+  useEffect(() => {
+    const off = window.lucidSSH.onInteractiveProgram((sessionId, program) => {
+      const cfg = getCurrentConfig();
+      const hintId = `interactiveHotkeys.${program}`;
+      const showHotkeys = !!cfg && !cfg.ui.expertMode && (cfg.shownCounts[hintId] ?? 0) < 3;
+      if (showHotkeys) void markHint(hintId);
+      setInteractivePrograms((prev) => ({ ...prev, [sessionId]: { program, showHotkeys } }));
+    });
+    return off;
+  }, [markHint]);
+
+  // Скрытие статус-строки при возврате prompt (конец программы) — переиспользует
+  // тот же маркер shell-интеграции, что и breadcrumb (BRD-04): он приходит на
+  // КАЖДОЕ приглашение, в т.ч. сразу после выхода из интерактивной программы.
+  useEffect(() => {
+    const off = window.lucidSSH.onBreadcrumb((sessionId) => {
+      setInteractivePrograms((prev) => {
+        if (!(sessionId in prev)) return prev;
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
+    });
+    return off;
+  }, []);
+
   const handlePaste = useCallback((sessionId: string) => {
     void window.lucidSSH.clipboardRead().then((text) => {
       if (!text) return;
@@ -268,7 +306,10 @@ export function TerminalArea(): JSX.Element {
         catalogOpen={config?.ui.catalogPanelOpen ?? false}
       />
 
-      {/* Breadcrumb + мини-дашборд (BRD-01, DASH-01) — для живой сессии */}
+      {/* Breadcrumb + мини-дашборд (BRD-01, DASH-01) — для живой сессии.
+          BRD-05/06: статус интерактивной программы — тем же элементом, вместо
+          пути (см. BreadcrumbBar) — отдельная строка меняла бы высоту панели
+          и триггерила resize терминала на каждый показ/скрытие (см. ниже). */}
       {showTerminal && active && (
         <BreadcrumbBar
           crumb={activeExtras?.breadcrumb}
@@ -296,6 +337,7 @@ export function TerminalArea(): JSX.Element {
                   }
                 : undefined
           }
+          interactiveProgram={interactivePrograms[active.sessionId]}
         />
       )}
       {active && dashboardModalOpen && (

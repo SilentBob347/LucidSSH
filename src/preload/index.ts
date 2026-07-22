@@ -19,6 +19,7 @@ import type { CommandsDatabase, ErrorExplanation } from '@shared/content';
 import type { HistoryEntry, HistoryQuery, Snippet } from '@shared/history';
 import type { UpdateStatus } from '@shared/updates';
 import type { KeygenGenerateRequest, KeygenGenerateResult } from '@shared/keygen';
+import type { InteractiveProgramName } from '@shared/interactivePrograms';
 
 /**
  * Минимальный preload (SEC-05): только конкретные операции,
@@ -193,6 +194,17 @@ const api = {
     const listener = (_e: Electron.IpcRendererEvent, sessionId: string): void => cb(sessionId);
     ipcRenderer.on(IPC.evIntegrationUnconfirmed, listener);
     return () => ipcRenderer.removeListener(IPC.evIntegrationUnconfirmed, listener);
+  },
+  onInteractiveProgram: (
+    cb: (sessionId: string, program: InteractiveProgramName) => void
+  ): (() => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      sessionId: string,
+      program: InteractiveProgramName
+    ): void => cb(sessionId, program);
+    ipcRenderer.on(IPC.evInteractiveProgram, listener);
+    return () => ipcRenderer.removeListener(IPC.evInteractiveProgram, listener);
   },
   onDashboard: (cb: (sessionId: string, metrics: DashboardMetrics) => void): (() => void) => {
     const listener = (

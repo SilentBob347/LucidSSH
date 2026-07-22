@@ -5,6 +5,7 @@ import {
   EchoGate,
   SHELL_INTEGRATION_SETUP,
   buildCdCommand,
+  detectInteractiveProgram,
   endsWithInputPrompt,
   isShellEscalationCommand,
   matchesPasswordPromptPattern
@@ -310,6 +311,36 @@ describe('isShellEscalationCommand — команды, сменяющие про
     'cat /etc/sudoers'
   ])('не эскалация: %s', (cmd) => {
     expect(isShellEscalationCommand(cmd)).toBe(false);
+  });
+});
+
+describe('detectInteractiveProgram (BRD-05) — запуск известной интерактивной программы', () => {
+  it.each([
+    ['nano', 'nano'],
+    ['nano file.txt', 'nano'],
+    ['vim /etc/hosts', 'vim'],
+    ['less /var/log/syslog', 'less'],
+    ['man ls', 'man'],
+    ['htop', 'htop'],
+    ['top', 'top'],
+    ['sudo nano /etc/hosts', 'nano'],
+    ['sudo htop', 'htop'],
+    ['cd /var && less log', 'less'],
+    ['cd /var; htop', 'htop'],
+    ['/usr/bin/vim file', 'vim']
+  ] as const)('%s → %s', (cmd, expected) => {
+    expect(detectInteractiveProgram(cmd)).toBe(expected);
+  });
+
+  it.each([
+    'ls -la',
+    'cat man.txt',
+    'echo top',
+    'topless', // не должно матчиться как отдельное слово 'top'
+    'nginx',
+    'sudo apt update'
+  ])('не интерактивная программа: %s', (cmd) => {
+    expect(detectInteractiveProgram(cmd)).toBeNull();
   });
 });
 

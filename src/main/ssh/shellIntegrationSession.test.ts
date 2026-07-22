@@ -273,3 +273,32 @@ describe('ShellIntegrationSession.writeCommand — эхо отправленно
     expect(result.display).toBe('hi\r\n');
   });
 });
+
+describe('ShellIntegrationSession.writeCommand — запуск интерактивной программы (BRD-05)', () => {
+  it('известная программа порождает событие interactive-program', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    const result = box.writeCommand('htop');
+    expect(result.events).toEqual([{ kind: 'interactive-program', program: 'htop' }]);
+  });
+
+  it('sudo-префикс и составная команда — тоже детектируются', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    const result = box.writeCommand('cd /var && sudo less log');
+    expect(result.events).toEqual([{ kind: 'interactive-program', program: 'less' }]);
+  });
+
+  it('обычная команда — без события', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    const result = box.writeCommand('ls -la');
+    expect(result.events).toEqual([]);
+  });
+
+  it('до первого маркера (ещё нет firstMarkSeen) — без события', () => {
+    const box = new ShellIntegrationSession();
+    const result = box.writeCommand('htop');
+    expect(result.events).toEqual([]);
+  });
+});
