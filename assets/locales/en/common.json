@@ -431,6 +431,18 @@
       "drop-database": "This command irreversibly drops the database or table “{{target}}”.",
       "kill-init": "Signaling process 1 (init/systemd) will crash the whole system.",
       "generic": "This command is recognized as potentially destructive. Review it before running."
+    },
+    "accessRisk": {
+      "title": "Risk of losing SSH access",
+      "explain": {
+        "sshd-config": "This command modifies the SSH server configuration. A mistake in the config may make the server unreachable over SSH after the service restarts.",
+        "firewall": "This command changes firewall rules. A bad rule may block the SSH port and drop the connection to the server.",
+        "passwd": "This command changes a user's password. If the new password is lost or mistyped, password login may become impossible.",
+        "sshd-service": "This command stops or restarts the SSH service. If the service fails to come back up, you won't be able to reconnect over SSH."
+      },
+      "recommendation": "Recommendation: before running this, open a second tab with a new connection to this server and make sure it works before closing the current session.",
+      "sshdTest": "After editing the config, validate it with sshd -t before restarting the service.",
+      "run": "Run anyway"
     }
   },
   "statusBar": {

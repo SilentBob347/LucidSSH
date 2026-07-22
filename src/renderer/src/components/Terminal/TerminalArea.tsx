@@ -5,7 +5,7 @@ import { useSessions } from '@/stores/sessions';
 import { TabBar } from './TabBar';
 import { ConnectionLogPanel } from './ConnectionLogPanel';
 import { ConnectionStepper } from './ConnectionStepper';
-import type { DangerousCommandPrompt } from '@shared/guard';
+import type { AccessRiskPrompt, DangerousCommandPrompt } from '@shared/guard';
 import {
   XtermView,
   destroyTerminal,
@@ -23,6 +23,7 @@ import { TerminalSearchBar } from './TerminalSearchBar';
 import { HintBar } from './HintBar';
 import { OnboardingHints } from './OnboardingHints';
 import { DangerGuardModal } from '@/components/Guard/DangerGuardModal';
+import { AccessRiskModal } from '@/components/Guard/AccessRiskModal';
 import { BreadcrumbBar } from '@/components/Breadcrumb/BreadcrumbBar';
 import { ServerDashboardModal } from './ServerDashboardModal';
 import { ErrorDetector } from './ErrorDetector';
@@ -64,6 +65,7 @@ export function TerminalArea(): JSX.Element {
   const [pastePreview, setPastePreview] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [dangerPrompt, setDangerPrompt] = useState<DangerousCommandPrompt | null>(null);
+  const [accessRiskPrompt, setAccessRiskPrompt] = useState<AccessRiskPrompt | null>(null);
   const [activeHint, setActiveHint] = useState<
     'snippet' | 'palette' | 'root' | 'password' | null
   >(null);
@@ -336,6 +338,7 @@ export function TerminalArea(): JSX.Element {
                   authPrompt={activeAuthPrompt}
                   onAuthAnswer={(answers) => void answerAuthPrompt(active.sessionId, answers)}
                   onDanger={setDangerPrompt}
+                  onAccessRisk={setAccessRiskPrompt}
                   onCommandSent={() => handleCommandSent(active.sessionId)}
                   onShellStateChange={(unknown) => {
                     setShellStateUnknown((prev) => ({ ...prev, [active.sessionId]: unknown }));
@@ -490,6 +493,23 @@ export function TerminalArea(): JSX.Element {
           onCancel={() => {
             window.lucidSSH.cancelDangerousCommand(dangerPrompt.requestId);
             setDangerPrompt(null);
+          }}
+        />
+      )}
+
+      {/* GUARD-07: риск потери SSH-доступа — подтверждение кнопкой, без текста
+          (main сверяет текст только для kind=danger, здесь шлём пустую строку) */}
+      {accessRiskPrompt && (
+        <AccessRiskModal
+          prompt={accessRiskPrompt}
+          onConfirm={() => {
+            void window.lucidSSH.confirmDangerousCommand(accessRiskPrompt.requestId, '');
+            confirmPendingLine(accessRiskPrompt.sessionId);
+            setAccessRiskPrompt(null);
+          }}
+          onCancel={() => {
+            window.lucidSSH.cancelDangerousCommand(accessRiskPrompt.requestId);
+            setAccessRiskPrompt(null);
           }}
         />
       )}

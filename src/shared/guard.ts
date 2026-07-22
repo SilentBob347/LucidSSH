@@ -17,5 +17,22 @@ export interface DangerousCommandPrompt {
   confirmationText: string;
 }
 
+/** Категория риска потери SSH-доступа (GUARD-07). */
+export type AccessRiskId = 'sshd-config' | 'firewall' | 'passwd' | 'sshd-service';
+
+/**
+ * Предупреждение о риске потери SSH-доступа (GUARD-07): не блокировка, а
+ * рекомендация — модалка с двумя кнопками, без type-to-confirm.
+ */
+export interface AccessRiskPrompt {
+  requestId: string;
+  sessionId: string;
+  command: string;
+  riskId: AccessRiskId;
+}
+
 /** Результат отправки команды через Стража. */
-export type SubmitResult = { status: 'sent' } | { status: 'blocked'; prompt: DangerousCommandPrompt };
+export type SubmitResult =
+  | { status: 'sent' }
+  | { status: 'blocked'; prompt: DangerousCommandPrompt }
+  | { status: 'access-risk'; prompt: AccessRiskPrompt };

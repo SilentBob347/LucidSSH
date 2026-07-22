@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { DangerousCommandPrompt, SubmitResult } from '@shared/guard';
+import type { AccessRiskPrompt, DangerousCommandPrompt, SubmitResult } from '@shared/guard';
 import { getHost } from '../hosts/repository';
 import { loadConfig } from '../config/store';
 import {
@@ -8,7 +8,7 @@ import {
   sendCommandLine,
   sendInput
 } from '../ssh/sessionManager';
-import { analyzeCommand } from './patterns';
+import { analyzeAccessRisk, analyzeCommand } from './patterns';
 import { t } from '../i18n';
 
 /**
@@ -32,6 +32,9 @@ interface Pending {
   /** Как отправлять при подтверждении: 'command' — sendCommandLine (промпт,
    *  как раньше), 'raw' — sendInput (сырой текст, без перевода строки/эха). */
   mode: 'command' | 'raw';
+  /** 'danger' — type-to-confirm (GUARD-02); 'accessRisk' — предупреждение о
+   *  риске потери SSH-доступа, подтверждается кнопкой без текста (GUARD-07). */
+  kind: 'danger' | 'accessRisk';
 }
 
 const pending = new Map<string, Pending>();
@@ -66,7 +69,8 @@ export function submitCommand(sessionId: string, command: string): SubmitResult 
         sessionId,
         command,
         confirmationText,
-        mode: 'command'
+        mode: 'command',
+        kind: 'danger'
       });
       const prompt: DangerousCommandPrompt = {
         requestId,
@@ -80,10 +84,30 @@ export function submitCommand(sessionId: string, command: string): SubmitResult 
       };
       return { status: 'blocked', prompt };
     }
+    const risk = riskPrompt(sessionId, command, 'command');
+    if (risk) return { status: 'access-risk', prompt: risk };
   }
 
   sendCommandLine(sessionId, command);
   return { status: 'sent' };
+}
+
+/**
+ * GUARD-07: риск потери SSH-доступа. Проверяется только когда analyzeCommand
+ * ничего не нашёл (вызывающие следят за порядком) — команда, совпавшая с
+ * деструктивным паттерном, получает обычную type-to-confirm модалку, двойного
+ * предупреждения нет. Подтверждение — кнопкой, без текста (см. confirmDangerousCommand).
+ */
+function riskPrompt(
+  sessionId: string,
+  command: string,
+  mode: 'command' | 'raw'
+): AccessRiskPrompt | null {
+  const risk = analyzeAccessRisk(command);
+  if (!risk) return null;
+  const requestId = randomUUID();
+  pending.set(requestId, { sessionId, command, confirmationText: '', mode, kind: 'accessRisk' });
+  return { requestId, sessionId, command, riskId: risk.riskId };
 }
 
 /**
@@ -110,7 +134,8 @@ export function submitRawInput(sessionId: string, data: string): SubmitResult {
         sessionId,
         command: data,
         confirmationText,
-        mode: 'raw'
+        mode: 'raw',
+        kind: 'danger'
       });
       const prompt: DangerousCommandPrompt = {
         requestId,
@@ -124,6 +149,8 @@ export function submitRawInput(sessionId: string, data: string): SubmitResult {
       };
       return { status: 'blocked', prompt };
     }
+    const risk = riskPrompt(sessionId, data, 'raw');
+    if (risk) return { status: 'access-risk', prompt: risk };
   }
 
   sendInput(sessionId, data);
@@ -133,13 +160,15 @@ export function submitRawInput(sessionId: string, data: string): SubmitResult {
 /**
  * Подтверждение опасной команды: отправляется только при точном совпадении
  * введённого текста с именем объекта/словом подтверждения (GUARD-02).
+ * Предупреждение о риске доступа (GUARD-07) подтверждается кнопкой —
+ * текст не сверяется (renderer шлёт пустую строку).
  * Возвращает allowed — выполнилась ли отправка.
  */
 export function confirmDangerousCommand(requestId: string, confirmationText: string): boolean {
   const p = pending.get(requestId);
   if (!p) return false;
   pending.delete(requestId);
-  if (confirmationText !== p.confirmationText) return false;
+  if (p.kind !== 'accessRisk' && confirmationText !== p.confirmationText) return false;
   if (p.mode === 'raw') {
     // Сырой текст — точно как был вставлен, без перевода строки/эхо-логики.
     sendInput(p.sessionId, p.command);

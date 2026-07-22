@@ -7,7 +7,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import type { AppConfig } from '@shared/config';
 import type { AuthPromptRequest } from '@shared/ssh';
-import type { DangerousCommandPrompt } from '@shared/guard';
+import type { AccessRiskPrompt, DangerousCommandPrompt } from '@shared/guard';
 import { getCurrentConfig } from '@/stores/config';
 import { attachTerminalWriter, dropTerminalBuffer } from '@/stores/terminalBuffer';
 import { Icon } from '@/components/common/Icon';
@@ -84,6 +84,7 @@ const commandBuffers = new Map<string, string>();
 const atPromptState = new Map<string, boolean>();
 const shellStateUnknown = new Map<string, boolean>();
 const dangerListeners = new Map<string, (prompt: DangerousCommandPrompt) => void>();
+const accessRiskListeners = new Map<string, (prompt: AccessRiskPrompt) => void>();
 const commandSentListeners = new Map<string, () => void>();
 const shellStateListeners = new Map<string, (unknown: boolean) => void>();
 
@@ -210,6 +211,10 @@ async function submitBufferedCommand(sessionId: string, command: string): Promis
     // Буфер и его эхо в терминале остаются как есть — DangerGuardModal
     // показывается поверх, пользователь может стереть/поправить сам (§ плана).
     dangerListeners.get(sessionId)?.(result.prompt);
+  } else if (result.status === 'access-risk') {
+    // GUARD-07: предупреждение о риске потери SSH-доступа — буфер так же
+    // остаётся, AccessRiskModal поверх.
+    accessRiskListeners.get(sessionId)?.(result.prompt);
   } else {
     finalizeLine(sessionId);
   }
@@ -357,6 +362,8 @@ async function sendRawChecked(sessionId: string, text: string): Promise<void> {
   const result = await window.lucidSSH.sendTerminalInput(sessionId, text);
   if (result.status === 'blocked') {
     dangerListeners.get(sessionId)?.(result.prompt);
+  } else if (result.status === 'access-risk') {
+    accessRiskListeners.get(sessionId)?.(result.prompt);
   }
 }
 
@@ -461,6 +468,7 @@ export function XtermView({
   authPrompt,
   onAuthAnswer,
   onDanger,
+  onAccessRisk,
   onCommandSent,
   onShellStateChange
 }: {
@@ -472,6 +480,8 @@ export function XtermView({
   onAuthAnswer?: (answers: string[]) => void;
   /** Опасная команда, набранная прямо в терминале (GUARD-02) — открыть DangerGuardModal. */
   onDanger?: (prompt: DangerousCommandPrompt) => void;
+  /** Риск потери SSH-доступа (GUARD-07) — открыть AccessRiskModal. */
+  onAccessRisk?: (prompt: AccessRiskPrompt) => void;
   /** Команда отправлена на сервер (для SNIP-08). */
   onCommandSent?: () => void;
   /** Не удалось определить, на промпте ли сессия (busybox без shell-интеграции и т.п.). */
@@ -488,15 +498,17 @@ export function XtermView({
   useEffect(() => {
     copyListeners.set(sessionId, () => setShowCopied(true));
     if (onDanger) dangerListeners.set(sessionId, onDanger);
+    if (onAccessRisk) accessRiskListeners.set(sessionId, onAccessRisk);
     if (onCommandSent) commandSentListeners.set(sessionId, onCommandSent);
     if (onShellStateChange) shellStateListeners.set(sessionId, onShellStateChange);
     return () => {
       copyListeners.delete(sessionId);
       dangerListeners.delete(sessionId);
+      accessRiskListeners.delete(sessionId);
       commandSentListeners.delete(sessionId);
       shellStateListeners.delete(sessionId);
     };
-  }, [sessionId, onDanger, onCommandSent, onShellStateChange]);
+  }, [sessionId, onDanger, onAccessRisk, onCommandSent, onShellStateChange]);
 
   useEffect(() => {
     if (!showCopied) return;

@@ -8,13 +8,13 @@ vi.mock('../ssh/sessionManager', () => ({
 }));
 vi.mock('../hosts/repository', () => ({ getHost: vi.fn() }));
 vi.mock('../config/store', () => ({ loadConfig: vi.fn() }));
-vi.mock('./patterns', () => ({ analyzeCommand: vi.fn() }));
+vi.mock('./patterns', () => ({ analyzeCommand: vi.fn(), analyzeAccessRisk: vi.fn() }));
 vi.mock('../i18n', () => ({ t: vi.fn((key: string) => key) }));
 
 import { getSession, recordBlockedCommand, sendCommandLine, sendInput } from '../ssh/sessionManager';
 import { getHost } from '../hosts/repository';
 import { loadConfig } from '../config/store';
-import { analyzeCommand } from './patterns';
+import { analyzeAccessRisk, analyzeCommand } from './patterns';
 import { t } from '../i18n';
 import {
   submitCommand,
@@ -30,6 +30,7 @@ const mockSendInput = vi.mocked(sendInput);
 const mockGetHost = vi.mocked(getHost);
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockAnalyzeCommand = vi.mocked(analyzeCommand);
+const mockAnalyzeAccessRisk = vi.mocked(analyzeAccessRisk);
 const mockT = vi.mocked(t);
 
 // ManagedSession/Host/AppConfig не экспортированы из своих модулей (по дизайну) —
@@ -54,6 +55,7 @@ describe('submitCommand', () => {
     mockGetSession.mockReturnValue(fakeSession(1));
     mockGetHost.mockReturnValue(fakeHost(true));
     mockAnalyzeCommand.mockReturnValue(null);
+    mockAnalyzeAccessRisk.mockReturnValue(null);
   });
 
   it('неизвестная сессия — команда не отправляется', () => {
@@ -154,6 +156,7 @@ describe('submitRawInput', () => {
     mockGetSession.mockReturnValue(fakeSession(1));
     mockGetHost.mockReturnValue(fakeHost(true));
     mockAnalyzeCommand.mockReturnValue(null);
+    mockAnalyzeAccessRisk.mockReturnValue(null);
   });
 
   it('короткий кусок (1-2 байта) — проверка не запускается, данные проходят как раньше', () => {
@@ -322,5 +325,82 @@ describe('cancelDangerousCommand', () => {
     if (res.status !== 'blocked') throw new Error('expected blocked');
     cancelDangerousCommand(res.prompt.requestId);
     expect(mockRecordBlockedCommand).toHaveBeenCalledWith('s1', 'rm -rf /var/www');
+  });
+});
+
+/**
+ * GUARD-07: предупреждение о риске потери SSH-доступа — проверяется после
+ * деструктивных паттернов, подтверждается кнопкой (без type-to-confirm),
+ * подчиняется тем же переключателям GUARD-05.
+ */
+describe('GUARD-07 — риск потери SSH-доступа', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLoadConfig.mockReturnValue(fakeConfig(true));
+    mockGetSession.mockReturnValue(fakeSession(1));
+    mockGetHost.mockReturnValue(fakeHost(true));
+    mockAnalyzeCommand.mockReturnValue(null);
+    mockAnalyzeAccessRisk.mockReturnValue({ riskId: 'sshd-service' });
+  });
+
+  it('рискованная команда — status access-risk с riskId, на сервер не уходит', () => {
+    const res = submitCommand('s1', 'systemctl restart sshd');
+    expect(res).toMatchObject({
+      status: 'access-risk',
+      prompt: { sessionId: 's1', command: 'systemctl restart sshd', riskId: 'sshd-service' }
+    });
+    expect(mockSendCommandLine).not.toHaveBeenCalled();
+  });
+
+  it('команда совпала с деструктивным паттерном — обычная модалка, риск не проверяется', () => {
+    mockAnalyzeCommand.mockReturnValue({
+      patternId: 'rm-recursive',
+      target: '~/.ssh',
+      scope: 'directory',
+      confirmationKind: 'target',
+      confirmationText: '.ssh'
+    });
+    const res = submitCommand('s1', 'rm -rf ~/.ssh');
+    expect(res.status).toBe('blocked');
+    expect(mockAnalyzeAccessRisk).not.toHaveBeenCalled();
+  });
+
+  it('Страж выключен глобально — предупреждение о риске тоже не показывается (GUARD-05)', () => {
+    mockLoadConfig.mockReturnValue(fakeConfig(false));
+    const res = submitCommand('s1', 'systemctl restart sshd');
+    expect(res).toEqual({ status: 'sent' });
+    expect(mockAnalyzeAccessRisk).not.toHaveBeenCalled();
+    expect(mockSendCommandLine).toHaveBeenCalled();
+  });
+
+  it('Страж выключен для хоста — предупреждение о риске не показывается', () => {
+    mockGetHost.mockReturnValue(fakeHost(false));
+    const res = submitCommand('s1', 'systemctl restart sshd');
+    expect(res.status).toBe('sent');
+  });
+
+  it('подтверждение кнопкой (пустой текст) — команда уходит со статусом confirmed', () => {
+    const res = submitCommand('s1', 'systemctl restart sshd');
+    if (res.status !== 'access-risk') throw new Error('expected access-risk');
+    const ok = confirmDangerousCommand(res.prompt.requestId, '');
+    expect(ok).toBe(true);
+    expect(mockSendCommandLine).toHaveBeenCalledWith('s1', 'systemctl restart sshd', 'confirmed');
+  });
+
+  it('отмена — в историю как заблокированная (HIST-05)', () => {
+    const res = submitCommand('s1', 'systemctl restart sshd');
+    if (res.status !== 'access-risk') throw new Error('expected access-risk');
+    cancelDangerousCommand(res.prompt.requestId);
+    expect(mockRecordBlockedCommand).toHaveBeenCalledWith('s1', 'systemctl restart sshd');
+    expect(mockSendCommandLine).not.toHaveBeenCalled();
+  });
+
+  it('сырой путь (submitRawInput) — тот же access-risk, подтверждение шлёт через sendInput', () => {
+    const res = submitRawInput('s1', 'systemctl restart sshd');
+    if (res.status !== 'access-risk') throw new Error('expected access-risk');
+    const ok = confirmDangerousCommand(res.prompt.requestId, '');
+    expect(ok).toBe(true);
+    expect(mockSendInput).toHaveBeenCalledWith('s1', 'systemctl restart sshd');
+    expect(mockSendCommandLine).not.toHaveBeenCalled();
   });
 });

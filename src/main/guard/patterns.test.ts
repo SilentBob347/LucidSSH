@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeCommand, CONFIRM_WORD } from './patterns';
+import { analyzeAccessRisk, analyzeCommand, CONFIRM_WORD } from './patterns';
 
 /**
  * Обязательное покрытие guard/patterns.ts (CLAUDE.md §10):
@@ -116,5 +116,157 @@ describe('analyzeCommand — отсутствие ложных срабатыв�
   it('пустая и сверхдлинная строки безопасны', () => {
     expect(analyzeCommand('')).toBeNull();
     expect(analyzeCommand('a'.repeat(20_000))).toBeNull();
+  });
+});
+
+/**
+ * GUARD-07: риск потери SSH-доступа. Обязательное покрытие всех четырёх
+ * категорий (sshd_config, файрвол, passwd, sshd-сервис) — и срабатывание,
+ * и отсутствие ложных срабатываний (CLAUDE.md §10).
+ */
+describe('analyzeAccessRisk — sshd_config (write-команды)', () => {
+  const triggers = [
+    'nano /etc/ssh/sshd_config',
+    'vim /etc/ssh/sshd_config',
+    'sudo vi /etc/ssh/sshd_config',
+    "sed -i 's/#Port 22/Port 2222/' /etc/ssh/sshd_config",
+    "sudo sed -ri 's/^PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config",
+    "echo 'PermitRootLogin no' >> /etc/ssh/sshd_config",
+    'cat my.conf > /etc/ssh/sshd_config',
+    "echo 'Port 2222' | sudo tee -a /etc/ssh/sshd_config",
+    'vi /etc/ssh/sshd_config.d/50-cloud-init.conf',
+    'sudoedit /etc/ssh/sshd_config'
+  ];
+  for (const cmd of triggers) {
+    it(`срабатывает на: ${cmd}`, () => {
+      expect(analyzeAccessRisk(cmd)?.riskId).toBe('sshd-config');
+    });
+  }
+
+  const safe = [
+    'cat /etc/ssh/sshd_config',
+    'grep -i port /etc/ssh/sshd_config',
+    'less /etc/ssh/sshd_config',
+    'sudo tail -n 20 /etc/ssh/sshd_config',
+    "sed -n '/Port/p' /etc/ssh/sshd_config", // sed без -i — просмотр
+    'nano ~/notes.txt', // редактор, но не sshd_config
+    'vim /etc/ssh/sshd_config.bak', // бэкап, не сам конфиг
+    'cat /etc/ssh/sshd_config > /etc/ssh/sshd_config.bak' // снятие бэкапа — безопасно
+  ];
+  for (const cmd of safe) {
+    it(`не срабатывает на: ${cmd}`, () => {
+      expect(analyzeAccessRisk(cmd)).toBeNull();
+    });
+  }
+});
+
+describe('analyzeAccessRisk — файрвол', () => {
+  const triggers = [
+    'ufw enable',
+    'sudo ufw disable',
+    'ufw allow 8080/tcp',
+    'ufw delete allow 22',
+    'ufw default deny incoming',
+    'iptables -A INPUT -p tcp --dport 22 -j DROP',
+    'sudo iptables -F',
+    'iptables -P INPUT DROP',
+    'ip6tables -D INPUT 3',
+    'firewall-cmd --permanent --remove-service=ssh',
+    'sudo firewall-cmd --reload',
+    'firewall-cmd --set-default-zone=drop'
+  ];
+  for (const cmd of triggers) {
+    it(`срабатывает на: ${cmd}`, () => {
+      expect(analyzeAccessRisk(cmd)?.riskId).toBe('firewall');
+    });
+  }
+
+  const safe = [
+    'ufw status',
+    'ufw status verbose',
+    'iptables -L',
+    'iptables -L -n -v',
+    'iptables -S',
+    'firewall-cmd --list-all',
+    'firewall-cmd --state',
+    'firewall-cmd --get-active-zones',
+    'firewall-cmd --query-port=22/tcp'
+  ];
+  for (const cmd of safe) {
+    it(`не срабатывает на: ${cmd}`, () => {
+      expect(analyzeAccessRisk(cmd)).toBeNull();
+    });
+  }
+});
+
+describe('analyzeAccessRisk — passwd', () => {
+  const triggers = ['passwd', 'sudo passwd', 'passwd deploy', 'sudo passwd root'];
+  for (const cmd of triggers) {
+    it(`срабатывает на: ${cmd}`, () => {
+      expect(analyzeAccessRisk(cmd)?.riskId).toBe('passwd');
+    });
+  }
+
+  const safe = [
+    'cat /etc/passwd',
+    'man passwd', // просмотр справки, не вызов
+    'grep deploy /etc/passwd',
+    'ls -la /etc | grep passwd'
+  ];
+  for (const cmd of safe) {
+    it(`не срабатывает на: ${cmd}`, () => {
+      expect(analyzeAccessRisk(cmd)).toBeNull();
+    });
+  }
+});
+
+describe('analyzeAccessRisk — служба sshd', () => {
+  const triggers = [
+    'systemctl restart sshd',
+    'sudo systemctl restart sshd',
+    'systemctl stop ssh',
+    'systemctl disable sshd',
+    'sudo systemctl --now disable sshd',
+    'systemctl restart sshd.service',
+    'service ssh restart',
+    'sudo service sshd stop'
+  ];
+  for (const cmd of triggers) {
+    it(`срабатывает на: ${cmd}`, () => {
+      expect(analyzeAccessRisk(cmd)?.riskId).toBe('sshd-service');
+    });
+  }
+
+  const safe = [
+    'systemctl status sshd',
+    'systemctl restart nginx',
+    'systemctl restart ssh-agent', // не sshd, юнит с другим именем
+    'service nginx restart',
+    'service ssh status',
+    'systemctl enable sshd', // включение службы доступу не грозит
+    'systemctl restart nginx # then check ssh' // «ssh» в комментарии — не юнит
+  ];
+  for (const cmd of safe) {
+    it(`не срабатывает на: ${cmd}`, () => {
+      expect(analyzeAccessRisk(cmd)).toBeNull();
+    });
+  }
+});
+
+describe('analyzeAccessRisk — общее поведение', () => {
+  it('рискованная часть составной команды распознаётся', () => {
+    expect(analyzeAccessRisk('cd /etc && systemctl restart sshd')?.riskId).toBe('sshd-service');
+  });
+
+  it('пустая и сверхдлинная строки безопасны', () => {
+    expect(analyzeAccessRisk('')).toBeNull();
+    expect(analyzeAccessRisk('a'.repeat(20_000))).toBeNull();
+  });
+
+  it('rm -rf ~/.ssh остаётся деструктивным паттерном (analyzeCommand), не категорией риска', () => {
+    // Порядок «сначала analyzeCommand, потом analyzeAccessRisk» — в guard/manager.ts;
+    // здесь фиксируем, что сама команда распознаётся обычным Стражем.
+    expect(analyzeCommand('rm -rf ~/.ssh')?.patternId).toBe('rm-recursive');
+    expect(analyzeAccessRisk('rm -rf ~/.ssh')).toBeNull();
   });
 });
