@@ -287,7 +287,17 @@
       "disconnected": "Отключено"
     },
     "reconnect": "Переподключить",
-    "disconnectedNote": "Соединение с «{{name}}» разорвано."
+    "disconnectedNote": "Соединение с «{{name}}» разорвано.",
+    "stepper": {
+      "stage": {
+        "dns": "Поиск адреса (DNS)",
+        "port": "Подключение к порту",
+        "handshake": "SSH handshake",
+        "hostkey": "Проверка отпечатка сервера",
+        "auth": "Авторизация",
+        "shell": "Запуск терминала"
+      }
+    }
   },
   "ctx": {
     "copy": "Копировать",

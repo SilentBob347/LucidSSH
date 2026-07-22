@@ -285,7 +285,17 @@
       "disconnected": "Disconnected"
     },
     "reconnect": "Reconnect",
-    "disconnectedNote": "Connection to “{{name}}” was lost."
+    "disconnectedNote": "Connection to “{{name}}” was lost.",
+    "stepper": {
+      "stage": {
+        "dns": "Resolving address (DNS)",
+        "port": "Connecting to port",
+        "handshake": "SSH handshake",
+        "hostkey": "Verifying server fingerprint",
+        "auth": "Authenticating",
+        "shell": "Starting terminal"
+      }
+    }
   },
   "ctx": {
     "copy": "Copy",

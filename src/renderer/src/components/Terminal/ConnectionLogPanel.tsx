@@ -1,8 +1,7 @@
 import type { JSX } from 'react';
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ConnectionLogEntry } from '@shared/ssh';
 import { Icon } from '@/components/common/Icon';
+import { useConnectionLog } from '@/hooks/useConnectionLog';
 
 /**
  * Лог соединения SSH-уровня (CLOG-01…03): шаги tcp/handshake/hostkey/auth,
@@ -17,21 +16,7 @@ export function ConnectionLogPanel({
   onClose: () => void;
 }): JSX.Element {
   const { t } = useTranslation();
-  const [entries, setEntries] = useState<ConnectionLogEntry[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-    void window.lucidSSH.getConnectionLog(sessionId).then((log) => {
-      if (alive) setEntries(log);
-    });
-    const off = window.lucidSSH.onConnectionLog((sid, entry) => {
-      if (sid === sessionId) setEntries((prev) => [...prev, entry]);
-    });
-    return () => {
-      alive = false;
-      off();
-    };
-  }, [sessionId]);
+  const entries = useConnectionLog(sessionId);
 
   const levelColor = {
     info: 'text-text-muted',

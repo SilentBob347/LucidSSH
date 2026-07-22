@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useSessions } from '@/stores/sessions';
 import { TabBar } from './TabBar';
 import { ConnectionLogPanel } from './ConnectionLogPanel';
+import { ConnectionStepper } from './ConnectionStepper';
 import type { DangerousCommandPrompt } from '@shared/guard';
 import {
   XtermView,
@@ -79,6 +80,11 @@ export function TerminalArea(): JSX.Element {
   /** Сессии, где auth-диалог (промпт пароля) уже начался — терминал у них
    *  остаётся смонтированным на всё время подключения, без мигания. */
   const authTouched = useRef<Set<string>>(new Set());
+  /** CLOG-04: sessionId, для которых хоть раз наблюдался статус 'connected' —
+   *  отличает провал первоначального подключения (степпер замирает на ошибке)
+   *  от разрыва уже работавшей сессии (обычный экран disconnected/переподключение,
+   *  степпер не показывается повторно). */
+  const everConnected = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const current = new Set(sessions.map((s) => s.sessionId));
@@ -86,13 +92,20 @@ export function TerminalArea(): JSX.Element {
       if (!current.has(id)) {
         destroyTerminal(id);
         authTouched.current.delete(id);
+        everConnected.current.delete(id);
       }
     }
     knownIds.current = current;
+    for (const s of sessions) {
+      if (s.status === 'connected') everConnected.current.add(s.sessionId);
+    }
   }, [sessions]);
 
   const active = sessions.find((s) => s.sessionId === activeSessionId);
   const activeExtras = active ? sessionExtras[active.sessionId] : undefined;
+  // CLOG-04: степпер — только для первоначального подключения, не для
+  // автопереподключения уже работавшей сессии (см. everConnected выше).
+  const activeNeverConnected = active ? !everConnected.current.has(active.sessionId) : false;
 
   // Мост composerBus → терминал активной сессии: каталог/история/сниппеты/
   // breadcrumb-«cd» по-прежнему зовут insertIntoComposer/getComposerValue, не
@@ -339,20 +352,26 @@ export function TerminalArea(): JSX.Element {
               </div>
             )}
 
-            {/* absolute inset-0, не flex-1: иначе открытие «Детали подключения»
-                (нормальный flex-сиблинг снизу) сжимало эту центрированную
-                область и весь блок «прыгал» вверх (§ баг с прыжком, 10.07.2026).
-                pointer-events-none на обёртке: позиционированные элементы
-                рисуются поверх обычных независимо от порядка в DOM, иначе
-                прозрачная область перекрывала клики по панели деталей ниже —
-                включаем события точечно только там, где реально есть контролы. */}
-            {active.status === 'connecting' && !showAuthTerminal && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[13px] font-medium text-text-body">
-                {t('tabs.status.connecting')}
-              </div>
+            {/* CLOG-04: степпер этапов подключения вместо статичного «Подключение…» —
+                виден на первоначальном подключении, и остаётся (заморожен на
+                упавшем этапе) если попытка провалилась до первого успешного
+                connected (activeNeverConnected). Автопереподключение уже
+                работавшей сессии показывает обычный экран disconnected ниже,
+                не степпер (см. everConnected). */}
+            {((active.status === 'connecting' && !showAuthTerminal) ||
+              (active.status === 'disconnected' && activeNeverConnected)) && (
+              <ConnectionStepper
+                key={active.sessionId}
+                sessionId={active.sessionId}
+                failed={active.status === 'disconnected'}
+                onReconnect={
+                  active.hostId !== 0 ? () => void reconnect(active.hostId, active.sessionId) : undefined
+                }
+                onShowDetails={() => setDetailsOpen(true)}
+              />
             )}
 
-            {active.status === 'disconnected' && (
+            {active.status === 'disconnected' && !activeNeverConnected && (
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
                 <div className="text-[13px] font-medium text-text-body">
                   {t('tabs.status.disconnected')}
