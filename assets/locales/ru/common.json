@@ -398,6 +398,7 @@
     "tabCatalog": "Каталог",
     "tabGlobal": "Глобальные",
     "searchPlaceholder": "Поиск команд",
+    "searchClear": "Очистить поиск",
     "close": "Закрыть панель",
     "dragScroll": "Прокрути с зажатой кнопкой мыши"
   },
@@ -442,6 +443,7 @@
   "history": {
     "title": "История команд",
     "searchPlaceholder": "Поиск по командам и заметкам…",
+    "searchClear": "Очистить поиск",
     "filterAll": "Все",
     "filterSession": "Эта сессия",
     "secretHidden": "СЕКРЕТ СКРЫТ",

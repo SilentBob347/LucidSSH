@@ -33,6 +33,7 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
     const [snippets, setSnippets] = useState<Snippet[]>([]);
     const catStripRef = useRef<HTMLDivElement>(null);
     const tabStripRef = useRef<HTMLDivElement>(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
       void window.lucidSSH.getCommandCatalog().then((d) => {
@@ -174,14 +175,28 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
           />
         ) : (
           <>
-        <div className="px-3 pt-[10px] pb-2">
+        <div className="relative px-3 pt-[10px] pb-2">
           <input
+            ref={searchInputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('catalog.searchPlaceholder')}
-            className="h-7 w-full rounded-[4px] border border-border-default bg-bg-base px-[9px] text-[12px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent"
+            className="h-7 w-full rounded-[4px] border border-border-default bg-bg-base px-[9px] pr-7 text-[12px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent"
           />
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery('');
+                searchInputRef.current?.focus();
+              }}
+              aria-label={t('catalog.searchClear')}
+              className="absolute inset-y-0 right-3 flex w-6 items-center justify-center text-text-dim hover:text-text-strong"
+            >
+              <Icon name="close" size={12} />
+            </button>
+          )}
         </div>
 
         {/* Категории — остаются видимыми и во время поиска (как в макете); */}

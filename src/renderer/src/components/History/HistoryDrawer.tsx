@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HistoryEntry } from '@shared/history';
 import { isSignalExitCode } from '@shared/ssh';
@@ -39,6 +39,7 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
   const [noteText, setNoteText] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const clearAll = async (): Promise<void> => {
     await window.lucidSSH.clearHistory();
@@ -114,12 +115,28 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
               <Icon name="close" size={15} />
             </button>
           </div>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('history.searchPlaceholder')}
-            className="mt-[11px] h-8 w-full rounded-[4px] border border-border-default bg-bg-base px-3 text-[12.5px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent"
-          />
+          <div className="relative mt-[11px]">
+            <input
+              ref={searchInputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('history.searchPlaceholder')}
+              className="h-8 w-full rounded-[4px] border border-border-default bg-bg-base px-3 pr-8 text-[12.5px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery('');
+                  searchInputRef.current?.focus();
+                }}
+                aria-label={t('history.searchClear')}
+                className="absolute inset-y-0 right-2 flex w-6 items-center justify-center text-text-dim hover:text-text-strong"
+              >
+                <Icon name="close" size={12} />
+              </button>
+            )}
+          </div>
           <div className="mt-[10px] flex flex-wrap gap-[6px]">
             <Chip active={hostFilter === 'all'} onClick={() => setHostFilter('all')}>
               {t('history.filterAll')}
