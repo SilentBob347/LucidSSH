@@ -190,6 +190,19 @@ export class ShellIntegrationSession {
     return result;
   }
 
+  /** Команда отправлена через writeCommand, но маркер её завершения (реальный
+   *  cycle.ran, см. handleCommandFinished) ещё не пришёл (WIN-04). */
+  isBusy(): boolean {
+    return this.runningCommand() !== null;
+  }
+
+  /** Текст выполняющейся сейчас команды (WIN-04, для конкретного текста в
+   *  диалоге закрытия — «команда X будет прервана», не безликое «команда»)
+   *  — null, если сессия свободна. */
+  runningCommand(): string | null {
+    return this.lastCommand !== '' ? this.lastCommand : null;
+  }
+
   /** Канал закрылся — накопленный с последнего маркера вывод (если есть) для
    *  сверки с базой паттернов 'ssh-connection' (nologin-shell и т.п.). */
   close(): ShellIntegrationResult {

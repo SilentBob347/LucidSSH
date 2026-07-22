@@ -3,8 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SessionInfo } from '@shared/ssh';
 import { useSessions } from '@/stores/sessions';
+import { useConfig } from '@/stores/config';
+import { usePanels } from '@/stores/panels';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Icon } from '@/components/common/Icon';
+import { TmuxHintLink } from '@/components/Terminal/TmuxHintLink';
 
 /**
  * Таб-бар сессий 38px (Design_Brief §3.3): статус-точка, имя, ×.
@@ -36,6 +39,8 @@ export function TabBar({
   const { t } = useTranslation();
   const { sessions, activeSessionId, select, closeTab, connect, renameTab, reorderTab } =
     useSessions();
+  const { update } = useConfig();
+  const { openCatalogQuery } = usePanels();
   const [closeTarget, setCloseTarget] = useState<SessionInfo | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -63,9 +68,24 @@ export function TabBar({
   const requestClose = (s: SessionInfo): void => {
     if (s.status === 'connected' || s.status === 'connecting' || s.status === 'reconnecting') {
       setCloseTarget(s); // WIN-03
+      // WIN-04: busyCommand в закэшированном списке сессий может быть
+      // устаревшим (команда стартовала/завершилась без пуш-события) —
+      // перечитываем свежее состояние именно в момент запроса закрытия.
+      void window.lucidSSH.listSessions().then((fresh) => {
+        const match = fresh.find((x) => x.sessionId === s.sessionId);
+        if (!match) return;
+        // Диалог мог успеть закрыться (отмена) до того, как пришёл ответ.
+        setCloseTarget((prev) => (prev?.sessionId === s.sessionId ? match : prev));
+      });
     } else {
       void closeTab(s.sessionId);
     }
+  };
+
+  const openTmuxCard = (): void => {
+    void update('ui.catalogPanelOpen', true);
+    openCatalogQuery('tmux');
+    setCloseTarget(null);
   };
 
   const startRename = (s: SessionInfo): void => {
@@ -258,7 +278,15 @@ export function TabBar({
           }}
           onCancel={() => setCloseTarget(null)}
         >
-          {t('tabs.closeConfirm.body', { name: closeTarget.hostName })}
+          <p>{t('tabs.closeConfirm.body', { name: closeTarget.hostName })}</p>
+          {closeTarget.busyCommand !== null && (
+            <>
+              <p className="mt-2">
+                {t('tabs.closeConfirm.commandRunning', { command: closeTarget.busyCommand })}
+              </p>
+              <TmuxHintLink onOpen={openTmuxCard} />
+            </>
+          )}
         </ConfirmDialog>
       )}
     </div>

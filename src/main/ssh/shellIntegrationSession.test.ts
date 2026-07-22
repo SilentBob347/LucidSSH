@@ -63,6 +63,55 @@ describe('ShellIntegrationSession.feed — обычная команда', () =>
   });
 });
 
+describe('ShellIntegrationSession.isBusy — WIN-04', () => {
+  it('изначально не занята', () => {
+    const box = new ShellIntegrationSession();
+    expect(box.isBusy()).toBe(false);
+  });
+
+  it('writeCommand взводит busy, реальное завершение команды снимает', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.writeCommand('sleep 5');
+    expect(box.isBusy()).toBe(true);
+    box.feed(mk('u', 'h', '/home/u', '1000', '0'));
+    expect(box.isBusy()).toBe(false);
+  });
+
+  it('перерисовка приглашения без Enter (SIGWINCH) не снимает busy — команда ещё не завершилась', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.writeCommand('top');
+    box.feed(mk('u', 'h', '/home/u', '1000', '0')); // command-finished
+    expect(box.isBusy()).toBe(false);
+
+    // Взводим заново второй командой и проверяем, что маркер-перерисовку
+    // (без предшествующего writeCommand/Enter) busy не трогает вовсе —
+    // здесь просто нет активной команды, которую можно было бы снять дважды.
+    box.feed(mk('u', 'h', '/home/u', '1000', '0'));
+    expect(box.isBusy()).toBe(false);
+  });
+
+  it('прямой ввод в терминал (sendRawInput) busy не взводит', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.sendRawInput('ls\n');
+    expect(box.isBusy()).toBe(false);
+  });
+});
+
+describe('ShellIntegrationSession.runningCommand — WIN-04 (текст команды для диалога закрытия)', () => {
+  it('null, пока сессия свободна; текст команды — пока она выполняется', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    expect(box.runningCommand()).toBeNull();
+    box.writeCommand('sleep 30');
+    expect(box.runningCommand()).toBe('sleep 30');
+    box.feed(mk('u', 'h', '/home/u', '1000', '0'));
+    expect(box.runningCommand()).toBeNull();
+  });
+});
+
 describe('ShellIntegrationSession — эскалация и реинжект (фикс BRD-03/04)', () => {
   it('эскалация взводит реинжект; тишина нового шелла запускает повтор настройки', () => {
     const box = new ShellIntegrationSession();

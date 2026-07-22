@@ -34,6 +34,8 @@
     "killall": { "summary": "Kill processes by name", "keywords": ["kill", "terminate", "all"], "flags": { "-9": "Force" } },
     "systemctl": { "summary": "Manage services", "keywords": ["service", "daemon"], "flags": {
       "status": "Service status", "restart": "Restart", "start": "Start", "stop": "Stop" } },
+    "tmux": { "summary": "Terminal multiplexer", "keywords": ["multiplexer", "session", "detach", "background"], "flags": {
+      "new -s": "New named session", "a": "Attach to the last session", "ls": "List sessions", "kill-session -t": "Kill a session" } },
 
     "ping": { "summary": "Check host reachability", "keywords": ["ping", "reachability"], "flags": { "-c 4": "Send 4 packets" } },
     "curl": { "summary": "HTTP request from the terminal", "keywords": ["request", "download", "http"], "flags": {

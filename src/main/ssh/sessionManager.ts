@@ -169,13 +169,25 @@ export function listSessions(): Array<{
   hostId: number;
   hostName: string;
   status: SessionStatus;
+  busyCommand: string | null;
 }> {
   return [...sessions.values()].map((s) => ({
     sessionId: s.id,
     hostId: s.hostId,
     hostName: s.hostName,
-    status: s.status
+    status: s.status,
+    busyCommand: s.shellIntegration?.runningCommand() ?? null
   }));
+}
+
+/** Сессии, которые сейчас выполняют команду — хост+команда (WIN-04), для
+ *  расширенного текста в диалоге закрытия окна (несколько вкладок сразу, где
+ *  renderer заранее не имеет списка сессий — только count, см. mainWindow.ts). */
+export function busySessions(): Array<{ hostName: string; command: string }> {
+  return [...sessions.values()].flatMap((s) => {
+    const command = s.shellIntegration?.runningCommand() ?? null;
+    return command === null ? [] : [{ hostName: s.hostName, command }];
+  });
 }
 
 export async function connectHost(hostId: number): Promise<{ sessionId: string }> {

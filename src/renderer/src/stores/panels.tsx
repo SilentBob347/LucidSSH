@@ -43,6 +43,12 @@ interface PanelsStore {
   snippetDialog: SnippetDialogState | null;
   openSnippetDialog: (command: string, editSnippet?: Snippet) => void;
   closeSnippetDialog: () => void;
+  /** WIN-04: поисковый запрос, который CatalogPanel должна подставить при
+   *  открытии по ссылке из диалога закрытия (напр. карточка tmux). Разово —
+   *  CatalogPanel сама сбрасывает после применения. */
+  catalogQuery: string | null;
+  openCatalogQuery: (query: string) => void;
+  clearCatalogQuery: () => void;
   /** Ревизия сниппетов: инкремент после сохранения → HistoryDrawer перечитывает список. */
   snippetsRevision: number;
   bumpSnippets: () => void;
@@ -62,6 +68,7 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpTarget, setHelpTarget] = useState<HelpTarget | null>(null);
   const [snippetDialog, setSnippetDialog] = useState<SnippetDialogState | null>(null);
+  const [catalogQuery, setCatalogQuery] = useState<string | null>(null);
   const [snippetsRevision, setSnippetsRevision] = useState(0);
   const [historyRevision, setHistoryRevision] = useState(0);
 
@@ -97,6 +104,9 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
       snippetDialog,
       openSnippetDialog: (command, editSnippet) => setSnippetDialog({ command, editSnippet }),
       closeSnippetDialog: () => setSnippetDialog(null),
+      catalogQuery,
+      openCatalogQuery: (query) => setCatalogQuery(query),
+      clearCatalogQuery: () => setCatalogQuery(null),
       snippetsRevision,
       bumpSnippets: () => setSnippetsRevision((v) => v + 1),
       historyRevision
@@ -110,6 +120,7 @@ export function PanelsProvider({ children }: { children: ReactNode }): JSX.Eleme
       helpOpen,
       helpTarget,
       snippetDialog,
+      catalogQuery,
       snippetsRevision,
       historyRevision
     ]

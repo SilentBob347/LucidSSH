@@ -10,6 +10,8 @@ export interface SessionInfo {
   hostId: number;
   hostName: string;
   status: SessionStatus;
+  /** Текст выполняющейся сейчас команды (WIN-04) — null, если промпт вернулся. */
+  busyCommand: string | null;
 }
 
 export interface HostKeyPrompt {

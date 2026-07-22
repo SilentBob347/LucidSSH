@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { IPC } from '@shared/ipc';
 import type { WindowState } from '@shared/config';
 import { loadConfig, updateConfig } from '../config/store';
-import { activeSessionCount } from '../ssh/sessionManager';
+import { activeSessionCount, busySessions } from '../ssh/sessionManager';
 
 /**
  * Главное окно: изоляция renderer (SEC-05) + сохранение/восстановление
@@ -107,7 +107,9 @@ export function createMainWindow(): BrowserWindow {
     // WIN-02: при активных сессиях требуется подтверждение перед закрытием.
     if (!forceClose && activeSessionCount() > 0) {
       event.preventDefault();
-      mainWindow?.webContents.send(IPC.evConfirmWindowClose, activeSessionCount());
+      // WIN-04: расширенный текст (список хост+команда) для сессий, которые
+      // сейчас выполняют команду.
+      mainWindow?.webContents.send(IPC.evConfirmWindowClose, activeSessionCount(), busySessions());
       return;
     }
     if (saveTimer) clearTimeout(saveTimer);

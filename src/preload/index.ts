@@ -274,8 +274,14 @@ const api = {
   windowToggleMaximize: (): void => ipcRenderer.send(IPC.windowToggleMaximize),
   windowClose: (): void => ipcRenderer.send(IPC.windowClose),
   windowConfirmClose: (): void => ipcRenderer.send(IPC.windowConfirmClose),
-  onConfirmWindowClose: (cb: (activeCount: number) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, activeCount: number): void => cb(activeCount);
+  onConfirmWindowClose: (
+    cb: (activeCount: number, busySessions: Array<{ hostName: string; command: string }>) => void
+  ): (() => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      activeCount: number,
+      busySessions: Array<{ hostName: string; command: string }>
+    ): void => cb(activeCount, Array.isArray(busySessions) ? busySessions : []);
     ipcRenderer.on(IPC.evConfirmWindowClose, listener);
     return () => ipcRenderer.removeListener(IPC.evConfirmWindowClose, listener);
   },

@@ -20,7 +20,7 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
   function CatalogPanel({ width, onClose }, ref): JSX.Element {
     const { t } = useTranslation();
     const { sessions, activeSessionId } = useSessions();
-    const { openSnippetDialog, snippetsRevision } = usePanels();
+    const { openSnippetDialog, snippetsRevision, catalogQuery, clearCatalogQuery } = usePanels();
     const { config } = useConfig();
     // SET-05(а)/CAT-06: новичковый режим показывает описание флага рядом с
     // ним в чипе; в режиме эксперта чип — только сам флаг, как в макете.
@@ -53,6 +53,15 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
     useEffect(() => {
       if (tab === 'server' && !active) setTab('catalog');
     }, [tab, active]);
+
+    // WIN-04: ссылка «карточка tmux» из диалога закрытия — разово подставляет
+    // поисковый запрос и переключает на вкладку каталога.
+    useEffect(() => {
+      if (catalogQuery === null) return;
+      setQuery(catalogQuery);
+      setTab('catalog');
+      clearCatalogQuery();
+    }, [catalogQuery, clearCatalogQuery]);
 
     const serverSnips = snippets.filter((s) => s.hostId != null && s.hostId === active?.hostId);
     const globalSnips = snippets.filter((s) => s.hostId == null);

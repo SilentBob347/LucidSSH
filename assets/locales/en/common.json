@@ -271,12 +271,15 @@
     "closeConfirm": {
       "title": "Close tab?",
       "body": "The session with “{{name}}” is active. Close the tab and drop the connection?",
-      "confirm": "Close"
+      "confirm": "Close",
+      "commandRunning": "The command “{{command}}” will be interrupted.",
+      "tmuxLink": "Use tmux to keep a command alive across disconnects →"
     },
     "windowCloseConfirm": {
       "title": "Close the app?",
       "body": "Active connections: {{count}}. Close and drop them all?",
-      "confirm": "Close"
+      "confirm": "Close",
+      "commandRunningIntro": "Will be interrupted:"
     },
     "status": {
       "connecting": "Connecting…",

@@ -73,7 +73,13 @@ export function registerSessionIpcHandlers(): void {
     IPC.sessionList,
     (
       event
-    ): Array<{ sessionId: string; hostId: number; hostName: string; status: SessionStatus }> => {
+    ): Array<{
+      sessionId: string;
+      hostId: number;
+      hostName: string;
+      status: SessionStatus;
+      busyCommand: string | null;
+    }> => {
       assertSenderIsMainWindow(event);
       return listSessions();
     }

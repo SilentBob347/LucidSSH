@@ -44,6 +44,9 @@
     { "name": "systemctl", "category": "processes", "dangerous": false, "flags": [
       { "flag": "status" }, { "flag": "restart" }, { "flag": "start" }, { "flag": "stop" }
     ] },
+    { "name": "tmux", "category": "processes", "dangerous": false, "flags": [
+      { "flag": "new -s" }, { "flag": "a" }, { "flag": "ls" }, { "flag": "kill-session -t" }
+    ] },
 
     { "name": "ping", "category": "network", "dangerous": false, "flags": [
       { "flag": "-c 4" }
