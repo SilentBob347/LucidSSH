@@ -14,3 +14,6 @@ Design backup/
 
 # Локальный issue-tracker (docs/agent/issue-tracker.md) — вне репозитория намеренно
 .scratch/
+
+# Внутренняя документация (ТЗ, roadmap, ADR) — не публикуется, вычищена из истории
+private/
