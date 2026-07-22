@@ -51,4 +51,6 @@ export interface ImportPreview {
   toAdd: number;
   toSkip: number;
   conflicts: Array<{ name: string; address: string; username: string }>;
+  /** Хостов с методом «ключ», чей файл ключа не найден на этом ПК (тикет 03). */
+  missingKeyCount: number;
 }

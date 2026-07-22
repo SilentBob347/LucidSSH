@@ -60,6 +60,11 @@ export function ImportDialog({
               {t('hosts.import.conflictHint')}
             </div>
           )}
+          {!result && preview.missingKeyCount > 0 && (
+            <div className="mt-2 text-[11.5px] text-text-dim">
+              {t('hosts.import.missingKeyHint', { count: preview.missingKeyCount })}
+            </div>
+          )}
         </div>
         <div className="flex justify-end gap-2 px-5 pb-4">
           {result ? (

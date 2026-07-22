@@ -493,6 +493,9 @@ function ImportSection(): JSX.Element {
             <Icon name="download" size={14} /> {t('settings.security.importHosts')}
           </button>
         </div>
+        <div className="mt-2 text-[11.5px] text-text-dim">
+          {t('settings.security.hostDataKeyHint')}
+        </div>
         {importError && (
           <div className="mt-2 text-[11.5px] text-danger-text">{t('hosts.import.invalidFile')}</div>
         )}

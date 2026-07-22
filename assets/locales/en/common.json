@@ -73,6 +73,8 @@
       "previewTitle": "Import hosts",
       "previewBody": "To add: {{toAdd}} · conflicts (same address and user): {{toSkip}}",
       "conflictHint": "Conflicting hosts can be skipped or imported under a new name.",
+      "missingKeyHint_one": "{{count}} host will need a new key on this PC.",
+      "missingKeyHint_other": "{{count}} hosts will need a new key on this PC.",
       "applySkip": "Skip duplicates",
       "applyRename": "Rename duplicates",
       "resultTitle": "Import finished",
@@ -515,7 +517,7 @@
       "connection": "Connection",
       "security": "Security",
       "interface": "Interface",
-      "import": "Import",
+      "import": "Import/Export",
       "hotkeys": "Hotkeys",
       "about": "About"
     },
@@ -555,9 +557,10 @@
       "knownEmpty": "No saved server fingerprints yet.",
       "knownDelete": "Delete entry",
       "hostData": "Host data",
-      "hostDataDesc": "Export and import the server list as JSON. Passwords and keys are not exported — only the key file path.",
+      "hostDataDesc": "Export and import the server list as JSON.",
       "exportHosts": "Export",
-      "importHosts": "Import"
+      "importHosts": "Import",
+      "hostDataKeyHint": "Passwords and keys are not transferred — you may need to create a new key on the new device."
     },
     "import": {
       "external": "Import from external sources",

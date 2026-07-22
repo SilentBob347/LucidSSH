@@ -1,5 +1,6 @@
 import type { Host, HostGroup, HostInput, ImportPreview } from '@shared/hosts';
 import { validateHostInput } from './validate';
+import { keyFileExists } from './keyFile';
 import * as repo from './repository';
 
 /**
@@ -131,15 +132,19 @@ export type HostInputWithGroup = HostInput & { groupName?: string };
 export function previewImport(json: string): ImportPreview {
   const { hosts } = parseImportFile(json);
   let toAdd = 0;
+  let missingKeyCount = 0;
   const conflicts: ImportPreview['conflicts'] = [];
   for (const h of hosts) {
     if (repo.hostExists(h.address, h.username)) {
       conflicts.push({ name: h.name, address: h.address, username: h.username });
-    } else {
-      toAdd++;
+      continue; // конфликтующий хост может быть пропущен и не создастся — ключ ему не понадобится
+    }
+    toAdd++;
+    if (h.authMethod === 'key' && !keyFileExists(h.keyPath ?? '')) {
+      missingKeyCount++;
     }
   }
-  return { toAdd, toSkip: conflicts.length, conflicts };
+  return { toAdd, toSkip: conflicts.length, conflicts, missingKeyCount };
 }
 
 /** Импорт: конфликт (address+username совпали) — пропустить или переименовать (EXP-02). */

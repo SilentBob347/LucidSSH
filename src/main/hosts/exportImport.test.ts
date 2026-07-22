@@ -1,6 +1,16 @@
-import { describe, expect, it } from 'vitest';
-import { buildExport, EXPORT_FORMAT, EXPORT_VERSION, parseImportFile } from './exportImport';
+import { describe, expect, it, vi } from 'vitest';
 import type { Host, HostGroup } from '@shared/hosts';
+
+const hostExists = vi.fn<(address: string, username: string) => boolean>(() => false);
+vi.mock('./repository', () => ({
+  hostExists: (address: string, username: string) => hostExists(address, username)
+}));
+vi.mock('./keyFile', () => ({
+  keyFileExists: (path: string) => path === 'C:\\keys\\id_ed25519'
+}));
+
+const { buildExport, EXPORT_FORMAT, EXPORT_VERSION, parseImportFile, previewImport } =
+  await import('./exportImport');
 
 const host: Host = {
   id: 1,
@@ -91,5 +101,37 @@ describe('parseImportFile (EXP-04)', () => {
     });
     const { hosts } = parseImportFile(sneaky);
     expect(hosts[0]?.name).toBe('<script>alert(1)</script>'); // просто строка
+  });
+});
+
+describe('previewImport (тикет 03 — предупреждение про ключи)', () => {
+  it('считает хостов с методом «ключ», чей файл не найден на этом ПК', () => {
+    const missingKeyHost: Host = { ...host, id: 2, keyPath: 'C:\\keys\\missing' };
+    const file = JSON.stringify(buildExport([host, missingKeyHost], [group]));
+    const preview = previewImport(file);
+    expect(preview.missingKeyCount).toBe(1);
+    expect(preview.toAdd).toBe(2);
+  });
+
+  it('не считает хосты с методом «пароль», даже если keyPath не задан', () => {
+    const passwordHost: Host = { ...host, id: 3, authMethod: 'password', keyPath: undefined };
+    const file = JSON.stringify(buildExport([passwordHost], [group]));
+    const preview = previewImport(file);
+    expect(preview.missingKeyCount).toBe(0);
+  });
+
+  it('счётчик равен 0, если у всех key-хостов файл ключа найден', () => {
+    const file = JSON.stringify(buildExport([host], [group]));
+    const preview = previewImport(file);
+    expect(preview.missingKeyCount).toBe(0);
+  });
+
+  it('не считает конфликтующий (toSkip) хост — он может не импортироваться вовсе', () => {
+    hostExists.mockReturnValueOnce(true); // этот хост уйдёт в conflicts, не в toAdd
+    const missingKeyHost: Host = { ...host, id: 2, keyPath: 'C:\\keys\\missing' };
+    const file = JSON.stringify(buildExport([missingKeyHost], [group]));
+    const preview = previewImport(file);
+    expect(preview.toSkip).toBe(1);
+    expect(preview.missingKeyCount).toBe(0);
   });
 });
