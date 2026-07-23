@@ -63,7 +63,11 @@ export function detectError(
   exitCode: number | null,
   command: string
 ): DetectResult {
-  const target = extractTarget(command);
+  // Маскируем ДО извлечения {target} и подстановки {original} — иначе секрет из
+  // команды (`export API_KEY=secret`) утёк бы в подсказки checks[].command,
+  // которые показываются в панели и копируются отдельной кнопкой (ERR-08).
+  const maskedCommand = maskSecrets(command).masked;
+  const target = extractTarget(maskedCommand);
 
   for (const p of patterns) {
     if (p.scope !== scope) continue;
@@ -77,12 +81,10 @@ export function detectError(
           explanation: p.explanation,
           checks: p.checks.map((c) => ({
             text: c.text,
-            command: c.command ? substitute(c.command, command, target) : undefined
+            command: c.command ? substitute(c.command, maskedCommand, target) : undefined
           })),
           source: 'database',
-          // command используется НЕмаскированным выше для {original}/{target} — здесь,
-          // в самом объяснении, маскируем перед показом/копированием (ERR-08).
-          command: maskSecrets(command).masked,
+          command: maskedCommand,
           id: p.id,
           exitCode: exitCode ?? undefined,
           stderr: maskSecrets(excerpt(output)).masked

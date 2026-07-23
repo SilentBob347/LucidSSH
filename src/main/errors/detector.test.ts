@@ -65,6 +65,22 @@ describe('detectError (ERR-01..06)', () => {
     }
   });
 
+  it('секрет не утекает через подстановку {original}/{target} в checks[].command', () => {
+    const r = detectError(
+      patterns,
+      'command',
+      'nano: Permission denied',
+      1,
+      'export API_KEY=secret123 && nano /etc/nginx/nginx.conf'
+    );
+    expect(r.matched).toBe(true);
+    if (r.matched) {
+      const checkCommands = r.explanation.checks.map((c) => c.command).join(' ');
+      expect(checkCommands).not.toContain('secret123');
+      expect(checkCommands).toContain('sudo export API_KEY=••••••••');
+    }
+  });
+
   it('нераспознанная ошибка → fallback doc-search (ERR-06)', () => {
     const r = detectError(patterns, 'command', 'weird custom error blah', 2, 'mycmd --foo');
     expect(r.matched).toBe(false);
