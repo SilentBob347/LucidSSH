@@ -29,6 +29,8 @@
     "ps": { "summary": "List processes", "keywords": ["processes", "running", "programs"], "flags": {
       "aux": "All processes of all users", "-ef": "Full list" } },
     "top": { "summary": "Real-time process monitor", "keywords": ["monitor", "load", "processes"], "flags": {} },
+    "htop": { "summary": "Interactive process monitor", "keywords": ["monitor", "load", "processes"], "flags": {
+      "-d": "Update delay (tenths of a second)", "-u": "Filter by user" } },
     "kill": { "summary": "Send a signal to a process", "keywords": ["kill", "terminate", "stop"], "flags": {
       "-9": "Force (KILL)", "-15": "Graceful (TERM)" } },
     "killall": { "summary": "Kill processes by name", "keywords": ["kill", "terminate", "all"], "flags": { "-9": "Force" } },
@@ -60,6 +62,12 @@
       "-f": "Follow new lines", "-n 100": "Last 100 lines" } },
     "head": { "summary": "First lines of a file", "keywords": ["start", "first"], "flags": { "-n 20": "First 20 lines" } },
     "less": { "summary": "Paged file viewer", "keywords": ["view", "read"], "flags": {} },
+    "nano": { "summary": "Simple terminal text editor", "keywords": ["editor", "text", "edit", "file"], "flags": {
+      "-w": "Disable line wrapping", "-c": "Show cursor position line" } },
+    "vim": { "summary": "Powerful modal text editor", "keywords": ["editor", "text", "edit", "vi"], "flags": {
+      "-R": "Read-only mode", "-d": "Diff mode (compare files)" } },
+    "man": { "summary": "Show a command's manual page", "keywords": ["manual", "docs", "documentation", "help"], "flags": {
+      "-k": "Search by keyword", "-f": "Short command description" } },
     "sed": { "summary": "Stream text editing", "keywords": ["replace", "edit"], "flags": { "-i": "Edit file in place" } }
   }
 }

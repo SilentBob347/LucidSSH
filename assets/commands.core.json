@@ -35,6 +35,9 @@
       { "flag": "aux" }, { "flag": "-ef" }
     ] },
     { "name": "top", "category": "processes", "dangerous": false, "flags": [] },
+    { "name": "htop", "category": "processes", "dangerous": false, "flags": [
+      { "flag": "-d" }, { "flag": "-u" }
+    ] },
     { "name": "kill", "category": "processes", "dangerous": true, "flags": [
       { "flag": "-9" }, { "flag": "-15" }
     ] },
@@ -91,6 +94,15 @@
       { "flag": "-n 20" }
     ] },
     { "name": "less", "category": "text", "dangerous": false, "flags": [] },
+    { "name": "nano", "category": "text", "dangerous": false, "flags": [
+      { "flag": "-w" }, { "flag": "-c" }
+    ] },
+    { "name": "vim", "category": "text", "dangerous": false, "flags": [
+      { "flag": "-R" }, { "flag": "-d" }
+    ] },
+    { "name": "man", "category": "text", "dangerous": false, "flags": [
+      { "flag": "-k" }, { "flag": "-f" }
+    ] },
     { "name": "sed", "category": "text", "dangerous": false, "flags": [
       { "flag": "-i" }
     ] }

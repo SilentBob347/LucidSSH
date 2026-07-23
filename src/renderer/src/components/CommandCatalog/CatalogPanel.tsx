@@ -18,7 +18,7 @@ import { Icon } from '@/components/common/Icon';
  */
 export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: () => void }>(
   function CatalogPanel({ width, onClose }, ref): JSX.Element {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const { sessions, activeSessionId } = useSessions();
     const { openSnippetDialog, snippetsRevision, catalogQuery, clearCatalogQuery } = usePanels();
     const { config } = useConfig();
@@ -35,12 +35,18 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
     const tabStripRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
 
+    // Перезапрашивает базу при смене языка (i18n.language) — main-процесс
+    // мержит контент-базы под активный язык и отдаёт их не через t(), а
+    // отдельным IPC-вызовом, поэтому обычная реактивность react-i18next сюда
+    // не долетает без явной зависимости.
     useEffect(() => {
       void window.lucidSSH.getCommandCatalog().then((d) => {
         setDb(d);
-        setCategory(d.categories[0] ?? null);
+        setCategory((prev) =>
+          prev !== null && (d.categories as string[]).includes(prev) ? prev : (d.categories[0] ?? null)
+        );
       });
-    }, []);
+    }, [i18n.language]);
 
     // Сниппеты для вкладок [хост]/Глобальные; обновляются при сохранении (SNIP-05)
     const refreshSnippets = useCallback(() => {
