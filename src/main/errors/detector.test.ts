@@ -33,6 +33,7 @@ describe('detectError (ERR-01..06)', () => {
     if (r.matched) {
       expect(r.explanation.title).toBe('Недостаточно прав');
       expect(r.explanation.source).toBe('database');
+      expect(r.explanation.id).toBe('permission-denied');
       expect(r.explanation.checks[0]?.command).toBe('sudo nano /etc/nginx/nginx.conf');
       expect(r.explanation.checks[1]?.command).toBe('ls -la /etc/nginx/nginx.conf');
     }

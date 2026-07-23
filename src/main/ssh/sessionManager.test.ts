@@ -20,7 +20,10 @@ vi.mock('./knownHosts', () => ({
   sha256Fingerprint: vi.fn(() => 'sha256:fake')
 }));
 vi.mock('./dashboard', () => ({ startDashboard: vi.fn(), stopDashboard: vi.fn() }));
-vi.mock('../content/loader', () => ({ loadErrorPatterns: vi.fn(() => []) }));
+vi.mock('../content/loader', () => ({
+  loadErrorPatterns: vi.fn(() => []),
+  loadCommandCatalog: vi.fn(() => ({ version: '1', categories: [], categoryLabels: {}, commands: [] }))
+}));
 vi.mock('../errors/detector', () => ({
   detectError: vi.fn(() => ({ matched: false, fallback: 'doc-search' })),
   isEmptyOutput: vi.fn(() => true)

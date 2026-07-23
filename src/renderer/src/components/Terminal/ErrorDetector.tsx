@@ -2,7 +2,9 @@ import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ErrorExplanation } from '@shared/content';
+import { applyCommandSuggestion } from '@shared/fuzzyMatch';
 import { Icon } from '@/components/common/Icon';
+import { insertIntoComposer } from '@/stores/composerBus';
 
 /**
  * Панель детектора ошибок (ERR-03; скриншот 02-Error). Выезжает снизу области
@@ -71,6 +73,24 @@ export function ErrorDetector({
         <p className="mt-[10px] text-[12.5px] leading-[1.55] text-text-body">
           {explanation.explanation}
         </p>
+
+        {explanation.suggestions && explanation.suggestions.length > 0 && (
+          <div className="mt-[10px] flex flex-wrap items-center gap-[7px] text-[12.5px] text-text-body">
+            <span>{t('errDetector.didYouMean')}</span>
+            {explanation.suggestions.map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                title={t('errDetector.insertSuggestion')}
+                onClick={() => insertIntoComposer(applyCommandSuggestion(explanation.command, suggestion))}
+                className="rounded-[4px] border border-border-strong bg-bg-panel px-[8px] py-[3px] font-mono font-semibold text-lavender hover:border-accent hover:underline"
+              >
+                {suggestion}
+              </button>
+            ))}
+            <span>?</span>
+          </div>
+        )}
 
         {explanation.checks.length > 0 && (
           <>

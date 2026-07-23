@@ -25,8 +25,9 @@ import {
 } from './shellIntegrationSession';
 import { startDashboard, stopDashboard } from './dashboard';
 import { deployPendingKey, hasPendingDeployment } from './keygen';
-import { loadErrorPatterns } from '../content/loader';
+import { loadErrorPatterns, loadCommandCatalog } from '../content/loader';
 import { detectError, isEmptyOutput } from '../errors/detector';
+import { extractCommandName, findCommandSuggestions } from '../errors/fuzzyMatch';
 import { t } from '../i18n';
 import type { ErrorExplanation } from '@shared/content';
 import type { GuardStatus } from '@shared/history';
@@ -788,6 +789,16 @@ function handleCommandFinished(
   let explanation: ErrorExplanation;
   if (result.matched) {
     explanation = result.explanation;
+    // ERR-07: для command-not-found ищем похожие имена в каталоге команд
+    // (расстояние Левенштейна ≤ 2). Формулировка «возможно» — это догадка, не факт.
+    if (explanation.id === 'command-not-found') {
+      const catalog = loadCommandCatalog(loadConfig().language);
+      const suggestions = findCommandSuggestions(
+        extractCommandName(command),
+        catalog.commands.map((c) => c.name)
+      );
+      if (suggestions.length > 0) explanation.suggestions = suggestions;
+    }
   } else {
     // Fallback-шаблон (ERR-06): пустой stderr → осмысленный текст
     const explainKey = isEmptyOutput(output) ? 'errDetector.emptyOutput' : 'errDetector.fallbackExplain';

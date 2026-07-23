@@ -41,6 +41,10 @@ export interface ErrorExplanation {
   source: 'database' | 'fallback'; // в 1.2 добавится 'llm'
   /** Упавшая команда — показывается в панели над объяснением (скриншот 02-Error). */
   command: string;
+  /** id сматчившегося паттерна (ERR-07: чтобы отличить command-not-found от прочих). */
+  id?: string;
+  /** ERR-07: имена команд-кандидатов («возможно, вы имели в виду: X?»), расстояние Левенштейна ≤ 2. */
+  suggestions?: string[];
 }
 
 // ---- Каталог команд ----
