@@ -59,6 +59,16 @@ interface ManagedSession {
   shell: ClientChannel | null;
   cols: number;
   rows: number;
+  /** Последний размер, реально применённый к PTY через setWindow (issue 11 /
+   *  ADR-0005) — отдельно от cols/rows, которые обновляются на каждый запрос
+   *  от renderer независимо от того, дошёл ли он до PTY. */
+  ptyCols: number;
+  ptyRows: number;
+  /** Идёт ли сейчас известная fullscreen-интерактивная программа (BRD-05/06) —
+   *  зеркалит то же состояние, что renderer отслеживает в TerminalArea.tsx по
+   *  событиям interactive-program/breadcrumb, нужно main для гейтинга resize
+   *  (ADR-0005). */
+  interactiveProgramActive: boolean;
   status: SessionStatus;
   log: ConnectionLogEntry[];
   userClosed: boolean;
@@ -204,6 +214,9 @@ export async function connectHost(hostId: number): Promise<{ sessionId: string }
     shell: null,
     cols: 80,
     rows: 24,
+    ptyCols: 80,
+    ptyRows: 24,
+    interactiveProgramActive: false,
     status: 'connecting',
     log: [],
     userClosed: false,
@@ -252,6 +265,9 @@ export async function connectQuickHost(
     shell: null,
     cols: 80,
     rows: 24,
+    ptyCols: 80,
+    ptyRows: 24,
+    interactiveProgramActive: false,
     status: 'connecting',
     log: [],
     userClosed: false,
@@ -628,6 +644,12 @@ function openShell(session: ManagedSession, client: Client): void {
         return;
       }
       session.shell = stream;
+      // PTY уже открыт с session.cols/rows (см. client.shell(...) выше) —
+      // синхронизируем ptyCols/ptyRows, чтобы resizeSession/forceResize
+      // сравнивали с фактически применённым размером, а не с 80×24 по
+      // умолчанию (ADR-0005).
+      session.ptyCols = session.cols;
+      session.ptyRows = session.rows;
       session.everConnected = true;
       // Новый shell (в т.ч. после переподключения) — свежий конвейер разбора и
       // пустой реестр таймеров сами по себе заменяют ручной список сброса
@@ -715,6 +737,12 @@ function applyTimerActions(session: ManagedSession, actions: TimerAction[]): voi
 function handleShellIntegrationEvent(session: ManagedSession, event: ShellIntegrationEvent): void {
   switch (event.kind) {
     case 'breadcrumb':
+      // breadcrumb приходит на каждое приглашение, в т.ч. на marker-перерисовку
+      // без Enter (SIGWINCH-эффект, см. shellIntegrationSession.test.ts) — во
+      // время реальной fullscreen-программы (vim/htop/...) этот маркер не
+      // приходит вовсе, так что сброс здесь корректно ловит именно выход из
+      // программы (ADR-0005), а не путает её с обычным промптом.
+      session.interactiveProgramActive = false;
       send(IPC.evBreadcrumb, session.id, event.crumb);
       break;
     case 'command-finished':
@@ -730,6 +758,14 @@ function handleShellIntegrationEvent(session: ManagedSession, event: ShellIntegr
       send(IPC.evIntegrationUnconfirmed, session.id);
       break;
     case 'interactive-program':
+      session.interactiveProgramActive = true;
+      // Досылаем ранее пропущенный (только-rows) resize (ADR-0005): если
+      // ErrorDetector/HintBar были открыты до запуска программы, PTY мог
+      // остаться на устаревшем rows — fullscreen-программе нужен точный
+      // размер сразу при старте, иначе она отрисуется некорректно.
+      if (session.cols !== session.ptyCols || session.rows !== session.ptyRows) {
+        applyRealResize(session, session.cols, session.rows);
+      }
       send(IPC.evInteractiveProgram, session.id, event.program);
       break;
   }
@@ -874,13 +910,35 @@ export function sendCommandLine(sessionId: string, command: string, guardStatus?
   applyResult(session, session.shellIntegration.writeCommand(command, guardStatus));
 }
 
-/** Изменение размера pty под размер xterm. */
+/** Реально применяет размер к PTY-каналу и запоминает его как последний
+ *  применённый (ADR-0005) — единственное место, где вызывается setWindow. */
+function applyRealResize(session: ManagedSession, cols: number, rows: number): void {
+  session.ptyCols = cols;
+  session.ptyRows = rows;
+  session.shell?.setWindow(rows, cols, 0, 0);
+}
+
+/**
+ * Изменение размера pty под размер xterm (TERM-xx). Гейтинг по cols
+ * (issue 11 / ADR-0005): панели вроде ErrorDetector/HintBar меняют только
+ * высоту (rows) контейнера xterm, не ширину — реальный PTY-resize (SIGWINCH-
+ * эффект, приводящий к перерисовке приглашения на удалённой стороне) в этом
+ * случае пропускается, если сейчас не идёт известная fullscreen-программа,
+ * которой точный rows нужен для корректной отрисовки. При изменении cols
+ * resize применяется всегда, как раньше.
+ */
 export function resizeSession(sessionId: string, cols: number, rows: number): void {
   const session = sessions.get(sessionId);
   if (!session) return;
   session.cols = cols;
   session.rows = rows;
-  session.shell?.setWindow(rows, cols, 0, 0);
+
+  const colsChanged = cols !== session.ptyCols;
+  const rowsChanged = rows !== session.ptyRows;
+  if (!colsChanged && !rowsChanged) return;
+  if (!colsChanged && !session.interactiveProgramActive) return;
+
+  applyRealResize(session, cols, rows);
 }
 
 /** Решение пользователя по fingerprint (SSH-03/04). */

@@ -43,6 +43,9 @@ import {
   attemptConnectForTest,
   connectQuickHost,
   confirmHostKey,
+  getSession,
+  resizeSession,
+  sendCommandLine,
   __setClientFactoryForTest,
   type FakeableClient
 } from './sessionManager';
@@ -59,6 +62,10 @@ const fakeConfig = (): AppConfig =>
     language: 'ru',
     connection: { autoreconnect: true, keepaliveIntervalSec: 30, connectTimeoutSec: 10 },
     ui: { hints: { errorPanel: true } },
+    // recordCommand (issue 11 / ADR-0005 тесты гоняют реальный command-finished
+    // через htop-маркер) выходит рано при enabled: false — не нужно мокать
+    // getHost/recordHistory сверх уже замоканного в файле.
+    history: { enabled: false, perHostDisabled: [] },
     // HM-12: deployPendingKey (keygen.ts) читает это через тот же мокнутый
     // loadConfig — без поля падает на .find() при 'ready' с паролем.
     pendingKeyDeployments: []
@@ -91,6 +98,9 @@ const fakeSession = (overrides: Partial<Session> = {}): Session =>
     shell: null,
     cols: 80,
     rows: 24,
+    ptyCols: 80,
+    ptyRows: 24,
+    interactiveProgramActive: false,
     status: 'connecting',
     log: [],
     userClosed: false,
@@ -296,5 +306,148 @@ describe('confirmHostKey — Quick Connect (hostId=0)', () => {
     expect(mockAddKnownKey).toHaveBeenCalledWith('10.0.0.9', 22, expect.any(String), expect.any(Buffer));
 
     emit('ready');
+  });
+});
+
+const US = '\x1f';
+/** Тот же формат маркера shell-интеграции, что и в shellIntegrationSession.test.ts. */
+const mk = (u: string, h: string, p: string, e: string, c = '0', sudoUser = ''): string =>
+  `\x1b_lucidssh${US}${u}${US}${h}${US}${p}${US}${e}${US}${c}${US}${sudoUser}\x1b\\`;
+
+/**
+ * Issue 11 / ADR-0005: панели (ErrorDetector/HintBar), встроенные во flex-
+ * раскладку терминала, меняют высоту его контейнера при появлении/скрытии —
+ * ResizeObserver в XtermView.tsx реагирует на это реальным PTY-resize
+ * (SIGWINCH-эффект), который часть шеллов отвечает перерисовкой приглашения,
+ * задваивающей строку в терминале. Гейтинг в resizeSession() не должен
+ * измениться без обновления этих тестов.
+ */
+describe('resizeSession — гейтинг PTY-resize по cols (issue 11 / ADR-0005)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLoadConfig.mockReturnValue(fakeConfig());
+    mockGetSecretForConnection.mockResolvedValue('pw');
+  });
+
+  afterEach(() => {
+    __setClientFactoryForTest(null);
+  });
+
+  /** Поднимает реальную сессию (connectQuickHost → ready → openShell) с
+   *  фальшивым PTY-каналом, чей setWindow можно проверять напрямую, и
+   *  позволяет скармливать сырые байты через тот же stream.on('data'), что
+   *  использует sessionManager в проде. */
+  async function connectedSession(): Promise<{
+    sessionId: string;
+    setWindow: ReturnType<typeof vi.fn>;
+    feedData: (chunk: string) => void;
+  }> {
+    const setWindow = vi.fn();
+    const dataHandlers: Array<(data: Buffer) => void> = [];
+    const stream = {
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        if (event === 'data') dataHandlers.push(handler as (data: Buffer) => void);
+      }),
+      stderr: { on: vi.fn() },
+      write: vi.fn(),
+      setWindow
+    };
+    const readyHandlers: Array<() => void> = [];
+    const client = {
+      connect: vi.fn(),
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        if (event === 'ready') readyHandlers.push(handler as () => void);
+        return client;
+      }),
+      shell: vi.fn((_opts: unknown, cb: (err: Error | undefined, s: unknown) => void) => cb(undefined, stream)),
+      exec: vi.fn()
+    } as unknown as FakeableClient;
+    __setClientFactoryForTest(() => client);
+
+    const { sessionId } = await connectQuickHost('10.0.0.9', 22, 'nikita');
+    for (const handler of readyHandlers) handler();
+    await vi.waitFor(() => {
+      if ((client.shell as unknown as ReturnType<typeof vi.fn>).mock.calls.length === 0) {
+        throw new Error('shell ещё не открыт');
+      }
+    });
+
+    return {
+      sessionId,
+      setWindow,
+      feedData: (chunk: string) => {
+        for (const handler of dataHandlers) handler(Buffer.from(chunk, 'utf8'));
+      }
+    };
+  }
+
+  /** Доводит сессию до состояния «первый маркер уже виден» (аналог warmUp()
+   *  из shellIntegrationSession.test.ts) — без этого detectInteractiveProgram
+   *  не срабатывает (firstMarkSeen должен быть true). tick() зовётся напрямую
+   *  на боксе, а не через реальный setTimeout — сама коробка не имеет рук. */
+  function warmUp(sessionId: string, feedData: (chunk: string) => void): void {
+    feedData('Welcome to Ubuntu 24.04\r\n');
+    getSession(sessionId)?.shellIntegration?.tick('setup-silence');
+    feedData(mk('u', 'h', '/home/u', '1000', '0'));
+  }
+
+  it('открытие подключения не шлёт лишний setWindow — начальный размер уже применён через client.shell()', async () => {
+    const { setWindow } = await connectedSession();
+    expect(setWindow).not.toHaveBeenCalled();
+  });
+
+  it('изменение только rows (открытие/закрытие ErrorDetector/HintBar) не шлёт реальный PTY-resize', async () => {
+    const { sessionId, setWindow } = await connectedSession();
+
+    resizeSession(sessionId, 80, 20); // cols те же (80), rows 24 → 20
+    expect(setWindow).not.toHaveBeenCalled();
+
+    resizeSession(sessionId, 80, 24); // панель закрылась, rows вернулись к 24
+    expect(setWindow).not.toHaveBeenCalled();
+  });
+
+  it('изменение cols всегда применяется к PTY, даже если rows тоже изменились', async () => {
+    const { sessionId, setWindow } = await connectedSession();
+
+    resizeSession(sessionId, 100, 20);
+    expect(setWindow).toHaveBeenCalledTimes(1);
+    expect(setWindow).toHaveBeenCalledWith(20, 100, 0, 0);
+  });
+
+  it('повторный вызов с тем же размером не шлёт лишний resize', async () => {
+    const { sessionId, setWindow } = await connectedSession();
+
+    resizeSession(sessionId, 100, 24);
+    expect(setWindow).toHaveBeenCalledTimes(1);
+
+    resizeSession(sessionId, 100, 24);
+    expect(setWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('запуск известной интерактивной программы форсирует досылку ранее пропущенного resize', async () => {
+    const { sessionId, setWindow, feedData } = await connectedSession();
+    warmUp(sessionId, feedData);
+    setWindow.mockClear();
+
+    resizeSession(sessionId, 80, 20); // панель открылась — пропущено
+    expect(setWindow).not.toHaveBeenCalled();
+
+    sendCommandLine(sessionId, 'htop');
+    expect(setWindow).toHaveBeenCalledWith(20, 80, 0, 0);
+  });
+
+  it('после выхода из программы (breadcrumb) новое изменение rows снова гасится', async () => {
+    const { sessionId, setWindow, feedData } = await connectedSession();
+    warmUp(sessionId, feedData);
+
+    sendCommandLine(sessionId, 'htop');
+    setWindow.mockClear();
+
+    // Возврат к промпту после выхода из htop — тот же маркер, что и обычный
+    // breadcrumb (BRD-04), снимает interactiveProgramActive.
+    feedData(mk('u', 'h', '/home/u', '1000', '0'));
+
+    resizeSession(sessionId, 80, 18);
+    expect(setWindow).not.toHaveBeenCalled();
   });
 });
