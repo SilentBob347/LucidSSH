@@ -271,6 +271,13 @@
       "command": "COMMAND",
       "cpu": "CPU%",
       "mem": "MEM%"
+    },
+    "healthBanner": {
+      "cpu": "High CPU load: {{value}}%",
+      "ram": "High RAM usage: {{value}}%",
+      "disk": "Disk is {{value}}% full",
+      "rebootRequired": "Server requires a reboot after installing updates",
+      "dismissIssue": "Don't show again"
     }
   },
   "tabs": {

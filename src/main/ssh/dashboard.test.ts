@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { parseMetricsForTest } from './dashboard';
+import { EMPTY_METRICS } from '@shared/dashboard';
+import {
+  applyDismissalsForTest,
+  computeAlertIssuesForTest,
+  METRICS_COMMAND_FOR_TEST,
+  parseMetricsForTest,
+  parseRebootRequiredForTest,
+  REBOOT_CHECK_COMMAND_FOR_TEST
+} from './dashboard';
 
 describe('parseMetrics (DASH-02)', () => {
   it('парсит полный набор метрик', () => {
@@ -81,5 +89,88 @@ describe('parseMetrics (DASH-02)', () => {
     const m2 = parseMetricsForTest('');
     expect(m1.topProcesses).toHaveLength(1);
     expect(m2.topProcesses).toHaveLength(0);
+  });
+});
+
+describe('parseRebootRequired (DASH-09)', () => {
+  it('распознаёт строку REBOOT среди прочего вывода', () => {
+    expect(parseRebootRequiredForTest('CPU 10\nREBOOT 1\nDISK 20\n')).toBe(true);
+  });
+
+  it('без строки REBOOT — false', () => {
+    expect(parseRebootRequiredForTest('CPU 10\nDISK 20\n')).toBe(false);
+  });
+
+  it('пустой вывод — false', () => {
+    expect(parseRebootRequiredForTest('')).toBe(false);
+  });
+});
+
+describe('METRICS_COMMAND + REBOOT_CHECK_COMMAND (регрессия 23.07.2026)', () => {
+  it('стык двух команд — разделитель, а не пробел: иначе `[ -f ... ]` уходит '
+    + 'аргументом в предыдущий `awk` (в частности `-f <файл>` меняет источник '
+    + 'программы awk), reboot-check никогда не выполняется', () => {
+    const boundary = REBOOT_CHECK_COMMAND_FOR_TEST[0];
+    expect(boundary === ';' || boundary === '\n').toBe(true);
+    void METRICS_COMMAND_FOR_TEST; // сам METRICS_COMMAND не обязан оканчиваться на ';' — важен только стык
+  });
+});
+
+describe('computeAlertIssues (DASH-09)', () => {
+  it('здоровый сервер — баннер не показывается вообще', () => {
+    const metrics = { ...EMPTY_METRICS, cpuPercent: 42, ramUsedMb: 1024, ramTotalMb: 4096, diskPercent: 66 };
+    expect(computeAlertIssuesForTest(metrics, false)).toEqual([]);
+  });
+
+  it('CPU на красном пороге (≥90%) — находка cpu', () => {
+    const metrics = { ...EMPTY_METRICS, cpuPercent: 95 };
+    expect(computeAlertIssuesForTest(metrics, false)).toEqual(['cpu']);
+  });
+
+  it('RAM на красном пороге (доля занятой памяти ≥90%) — находка ram', () => {
+    const metrics = { ...EMPTY_METRICS, ramUsedMb: 950, ramTotalMb: 1000 };
+    expect(computeAlertIssuesForTest(metrics, false)).toEqual(['ram']);
+  });
+
+  it('диск заполнен на 93% — находка disk', () => {
+    const metrics = { ...EMPTY_METRICS, diskPercent: 93 };
+    expect(computeAlertIssuesForTest(metrics, false)).toEqual(['disk']);
+  });
+
+  it('reboot-required — находка rebootRequired', () => {
+    expect(computeAlertIssuesForTest(EMPTY_METRICS, true)).toEqual(['rebootRequired']);
+  });
+
+  it('несколько условий одновременно — все находки в одном списке', () => {
+    const metrics = { ...EMPTY_METRICS, cpuPercent: 95, diskPercent: 93 };
+    expect(computeAlertIssuesForTest(metrics, true)).toEqual(['cpu', 'disk', 'rebootRequired']);
+  });
+
+  it('null-метрики (сервер недоступен) не считаются превышением порога', () => {
+    expect(computeAlertIssuesForTest(EMPTY_METRICS, false)).toEqual([]);
+  });
+});
+
+describe('applyDismissals — self-clearing «Больше не показывать» (DASH-09)', () => {
+  it('замьюченная находка, которая всё ещё актуальна, остаётся замьюченной и скрытой', () => {
+    const res = applyDismissalsForTest(['disk'], ['disk']);
+    expect(res).toEqual({ keepDismissed: ['disk'], issuesToShow: [] });
+  });
+
+  it('проблема разрешилась — mute снимается сам собой', () => {
+    const res = applyDismissalsForTest([], ['rebootRequired']);
+    expect(res).toEqual({ keepDismissed: [], issuesToShow: [] });
+  });
+
+  it('после снятия mute то же условие возникает заново — показывается снова', () => {
+    // Шаг 1: rebootRequired разрешился, mute снят (см. предыдущий тест) →
+    // dismissed теперь []. Шаг 2: проблема появилась заново.
+    const res = applyDismissalsForTest(['rebootRequired'], []);
+    expect(res).toEqual({ keepDismissed: [], issuesToShow: ['rebootRequired'] });
+  });
+
+  it('незамьюченные находки показываются, замьюченные — нет, независимо друг от друга', () => {
+    const res = applyDismissalsForTest(['cpu', 'disk', 'rebootRequired'], ['disk']);
+    expect(res).toEqual({ keepDismissed: ['disk'], issuesToShow: ['cpu', 'rebootRequired'] });
   });
 });

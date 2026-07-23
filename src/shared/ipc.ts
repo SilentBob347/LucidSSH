@@ -19,6 +19,7 @@ export const IPC = {
   configUpdate: 'config:update',
   configMarkHint: 'config:mark-hint', // счётчик показов подсказок (§5.1, SNIP-08)
   configResetHints: 'config:reset-hints', // «Сбросить счётчик показов подсказок» (SET-05)
+  configDismissDashboardAlert: 'config:dismiss-dashboard-alert', // DASH-09 «Больше не показывать»
   configReset: 'config:reset', // SET-08 сброс до заводских
   knownHostsList: 'security:known-hosts-list', // SET-04
   knownHostsDelete: 'security:known-hosts-delete',
@@ -128,6 +129,7 @@ export const IPC = {
   evConfirmWindowClose: 'ev:confirm-window-close',
   evBreadcrumb: 'ev:breadcrumb',
   evDashboard: 'ev:dashboard',
+  evDashboardAlert: 'ev:dashboard-alert', // DASH-09 — одноразовый health-баннер
   evError: 'ev:error',
   evUpdateStatus: 'ev:update-status',
   evHistoryRecorded: 'ev:history-recorded', // HistoryDrawer перечитывает список, если открыт

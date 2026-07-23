@@ -2,7 +2,7 @@ import type { JSX, ReactNode } from 'react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthPromptRequest, HostKeyPrompt, SessionInfo, SessionStatus } from '@shared/ssh';
 import type { Breadcrumb } from '@shared/breadcrumb';
-import type { DashboardMetrics } from '@shared/dashboard';
+import type { DashboardAlert, DashboardAlertIssue, DashboardMetrics } from '@shared/dashboard';
 import type { ErrorExplanation } from '@shared/content';
 import { parseQuickConnect } from '@shared/quickConnect';
 
@@ -31,6 +31,8 @@ export interface SessionExtras {
   authPrompt?: AuthPromptRequest;
   breadcrumb?: Breadcrumb;
   dashboard?: DashboardMetrics;
+  /** DASH-09: одноразовый health-баннер — очищается закрытием (×), не приходит повторно. */
+  dashboardAlert?: DashboardAlert;
   error?: ErrorExplanation;
   /** Локальное переименование вкладки (TERM-02); имя не уходит в main. */
   label?: string;
@@ -42,6 +44,10 @@ interface SessionsStore {
   hostKeyPrompt: HostKeyPrompt | null;
   sessionExtras: Record<string, SessionExtras>;
   dismissError: (sessionId: string) => void;
+  dismissDashboardAlert: (sessionId: string) => void;
+  /** DASH-09: «Больше не показывать» для одной находки — убирает её из уже
+   *  открытого баннера (персистентность на диске делает вызывающий код). */
+  dismissDashboardAlertIssue: (sessionId: string, issue: DashboardAlertIssue) => void;
   connect: (hostId: number) => Promise<void>;
   /** HM-11: подключение по `user@host[:port]` без сохранённого хоста. */
   connectQuick: (input: string) => Promise<void>;
@@ -123,6 +129,9 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
     const offDash = window.lucidSSH.onDashboard((sessionId, metrics) => {
       setExtraField(sessionId, 'dashboard', metrics);
     });
+    const offDashAlert = window.lucidSSH.onDashboardAlert((sessionId, alert) => {
+      setExtraField(sessionId, 'dashboardAlert', alert);
+    });
     const offError = window.lucidSSH.onError((sessionId, explanation) => {
       setExtraField(sessionId, 'error', explanation);
     });
@@ -132,6 +141,7 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       offAuthPrompt();
       offCrumb();
       offDash();
+      offDashAlert();
       offError();
     };
   }, [setExtraField, clearExtraField]);
@@ -139,6 +149,26 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
   const dismissError = useCallback(
     (sessionId: string) => clearExtraField(sessionId, 'error'),
     [clearExtraField]
+  );
+
+  const dismissDashboardAlert = useCallback(
+    (sessionId: string) => clearExtraField(sessionId, 'dashboardAlert'),
+    [clearExtraField]
+  );
+
+  const dismissDashboardAlertIssue = useCallback(
+    (sessionId: string, issue: DashboardAlertIssue) => {
+      setSessionExtras((prev) => {
+        const alert = prev[sessionId]?.dashboardAlert;
+        if (!alert) return prev;
+        const issues = alert.issues.filter((i) => i !== issue);
+        const entry = { ...prev[sessionId] };
+        if (issues.length > 0) entry.dashboardAlert = { issues };
+        else delete entry.dashboardAlert;
+        return { ...prev, [sessionId]: entry };
+      });
+    },
+    []
   );
 
   const applyLabels = useCallback(
@@ -253,6 +283,8 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       hostKeyPrompt,
       sessionExtras,
       dismissError,
+      dismissDashboardAlert,
+      dismissDashboardAlertIssue,
       connect,
       connectQuick,
       saveAsHostPrompt,
@@ -271,6 +303,8 @@ export function SessionsProvider({ children }: { children: ReactNode }): JSX.Ele
       hostKeyPrompt,
       sessionExtras,
       dismissError,
+      dismissDashboardAlert,
+      dismissDashboardAlertIssue,
       connect,
       connectQuick,
       saveAsHostPrompt,

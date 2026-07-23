@@ -27,6 +27,7 @@ import { AccessRiskModal } from '@/components/Guard/AccessRiskModal';
 import { BreadcrumbBar } from '@/components/Breadcrumb/BreadcrumbBar';
 import type { InteractiveProgramName } from '@shared/interactivePrograms';
 import { ServerDashboardModal } from './ServerDashboardModal';
+import { DashboardHealthBanner } from './DashboardHealthBanner';
 import { ErrorDetector } from './ErrorDetector';
 import { useConfig, getCurrentConfig } from '@/stores/config';
 import { usePanels } from '@/stores/panels';
@@ -48,6 +49,8 @@ export function TerminalArea(): JSX.Element {
     closeTab,
     sessionExtras,
     dismissError,
+    dismissDashboardAlert,
+    dismissDashboardAlertIssue,
     answerAuthPrompt
   } = useSessions();
   const { config, update, markHint } = useConfig();
@@ -338,6 +341,19 @@ export function TerminalArea(): JSX.Element {
                 : undefined
           }
           interactiveProgram={interactivePrograms[active.sessionId]}
+        />
+      )}
+      {/* DASH-09: health-баннер — независим от видимости мини-дашборда (DASH-04),
+          не блокирует ввод, закрывается только вручную (см. DashboardHealthBanner). */}
+      {showTerminal && active && activeExtras?.dashboardAlert && (
+        <DashboardHealthBanner
+          alert={activeExtras.dashboardAlert}
+          metrics={activeExtras.dashboard}
+          onClose={() => dismissDashboardAlert(active.sessionId)}
+          onDismissIssue={(issue) => {
+            void window.lucidSSH.dismissDashboardAlert(active.hostId, issue);
+            dismissDashboardAlertIssue(active.sessionId, issue);
+          }}
         />
       )}
       {active && dashboardModalOpen && (

@@ -1,7 +1,14 @@
 import type { Client } from 'ssh2';
 import { IPC } from '@shared/ipc';
-import { EMPTY_METRICS, type DashboardMetrics } from '@shared/dashboard';
+import {
+  DASH_RED_THRESHOLD_PERCENT,
+  EMPTY_METRICS,
+  type DashboardAlert,
+  type DashboardAlertIssue,
+  type DashboardMetrics
+} from '@shared/dashboard';
 import { getMainWindow } from '../window/mainWindow';
+import { loadConfig, updateConfig } from '../config/store';
 
 /** Логгер в лог соединения сессии (передаёт sessionManager, чтобы не плодить цикл импортов). */
 export type DashboardLogger = (messageKey: string, params?: Record<string, string | number>) => void;
@@ -53,13 +60,31 @@ const METRICS_COMMAND = [
   'ps -eo pid,user,comm,pcpu,pmem --no-headers 2>/dev/null | sort -k4 -rn | head -n 5 | awk "{print \\"PROC \\"\\$1\\" \\"\\$2\\" \\"\\$3\\" \\"\\$4\\" \\"\\$5}"'
 ].join(' ');
 
+/**
+ * DASH-09: проверка `/var/run/reboot-required` — довесок к METRICS_COMMAND того
+ * же exec-канала, добавляется только пока не случился первый успешный опрос
+ * (DashboardState.firstSuccessDone), дальше не повторяется и не увеличивает
+ * частоту опроса (DASH-07).
+ * Ведущий `;` обязателен: последняя строка METRICS_COMMAND (топ-процессы) не
+ * заканчивается разделителем — без `;` шелл читает `[ -f ... ]` как ЕЩЁ ОДИН
+ * аргумент предыдущего `awk` (в частности `-f <файл>` — awk принимает это за
+ * «прочитать программу из файла»), reboot-check никогда не выполнялся, а awk
+ * переставал читать stdin из pipe (найдено 23.07.2026 при проверке на реальных
+ * серверах — баннер reboot-required никогда не появлялся).
+ */
+const REBOOT_CHECK_COMMAND = '; [ -f /var/run/reboot-required ] && echo "REBOOT 1";';
+
 interface DashboardState {
   timer: NodeJS.Timeout;
   client: Client;
+  hostId: number;
   running: boolean;
   logger: DashboardLogger;
   /** Причина недоступности уже записана в лог соединения — не спамим каждые 10 с. */
   problemLogged: boolean;
+  /** DASH-09: решение о health-баннере уже принято (успех или нет) — после
+   *  этого REBOOT_CHECK_COMMAND больше не добавляется и баннер не повторяется. */
+  firstSuccessDone: boolean;
 }
 
 const dashboards = new Map<string, DashboardState>();
@@ -67,6 +92,46 @@ const dashboards = new Map<string, DashboardState>();
 function send(sessionId: string, metrics: DashboardMetrics): void {
   const win = getMainWindow();
   if (win && !win.isDestroyed()) win.webContents.send(IPC.evDashboard, sessionId, metrics);
+}
+
+function sendAlert(sessionId: string, alert: DashboardAlert): void {
+  if (!dashboards.has(sessionId)) return;
+  const win = getMainWindow();
+  if (win && !win.isDestroyed()) win.webContents.send(IPC.evDashboardAlert, sessionId, alert);
+}
+
+function parseRebootRequired(output: string): boolean {
+  return /^REBOOT\b/m.test(output);
+}
+
+/** DASH-09: красные пороги (DASH-03) + reboot-required → находки для баннера. */
+function computeAlertIssues(metrics: DashboardMetrics, rebootRequired: boolean): DashboardAlertIssue[] {
+  const issues: DashboardAlertIssue[] = [];
+  if (metrics.cpuPercent !== null && metrics.cpuPercent >= DASH_RED_THRESHOLD_PERCENT) issues.push('cpu');
+  const ramPercent =
+    metrics.ramUsedMb !== null && metrics.ramTotalMb ? (metrics.ramUsedMb / metrics.ramTotalMb) * 100 : null;
+  if (ramPercent !== null && ramPercent >= DASH_RED_THRESHOLD_PERCENT) issues.push('ram');
+  if (metrics.diskPercent !== null && metrics.diskPercent >= DASH_RED_THRESHOLD_PERCENT) issues.push('disk');
+  if (rebootRequired) issues.push('rebootRequired');
+  return issues;
+}
+
+/**
+ * DASH-09: «Больше не показывать» снимается сам собой, как только находка
+ * перестаёт проявляться (self-clearing snooze) — иначе разовое нажатие
+ * навсегда глушило бы предупреждение и для будущих, никак не связанных
+ * повторений той же проблемы (диск снова забился спустя месяц, потребовался
+ * новый reboot после следующих обновлений), а отменить mute было бы негде —
+ * в UI нет отдельного экрана для этого (решение разработчика от 23.07.2026).
+ */
+function applyDismissals(
+  rawIssues: DashboardAlertIssue[],
+  dismissed: DashboardAlertIssue[]
+): { keepDismissed: DashboardAlertIssue[]; issuesToShow: DashboardAlertIssue[] } {
+  return {
+    keepDismissed: dismissed.filter((issue) => rawIssues.includes(issue)),
+    issuesToShow: rawIssues.filter((issue) => !dismissed.includes(issue))
+  };
 }
 
 function parseMetrics(output: string): DashboardMetrics {
@@ -123,6 +188,9 @@ function poll(sessionId: string): void {
   const state = dashboards.get(sessionId);
   if (!state || state.running) return;
   state.running = true;
+  // DASH-09: пока баннер ещё не решён (успех/неудача первого опроса), к
+  // команде добавляется reboot-check — тот же канал, тот же интервал (DASH-07).
+  const checkReboot = !state.firstSuccessDone;
 
   let output = '';
   let stderrOut = '';
@@ -150,7 +218,7 @@ function poll(sessionId: string): void {
   // побочный замер уже идущего опроса дашборда, без отдельных запросов к серверу.
   // Не время до stream 'close' — там сидит серверный `sleep 0.4` из METRICS_COMMAND.
   const execStartedAt = Date.now();
-  state.client.exec(METRICS_COMMAND, (err, stream) => {
+  state.client.exec(checkReboot ? METRICS_COMMAND + REBOOT_CHECK_COMMAND : METRICS_COMMAND, (err, stream) => {
     const pingMs = Date.now() - execStartedAt;
     if (err) {
       clearTimeout(timeout);
@@ -178,6 +246,20 @@ function poll(sessionId: string): void {
           stdout: output.trim().slice(0, 200) || '—',
           stderr: stderrOut.trim().slice(0, 200) || '—'
         });
+      } else if (checkReboot && !state.firstSuccessDone) {
+        // DASH-09: первый успешный опрос — одноразовое решение о health-баннере.
+        state.firstSuccessDone = true;
+        const rawIssues = computeAlertIssues(metrics, parseRebootRequired(output));
+        const dismissed = loadConfig().dashboard.dismissedAlerts[state.hostId] ?? [];
+        const { keepDismissed, issuesToShow } = applyDismissals(rawIssues, dismissed);
+        if (keepDismissed.length !== dismissed.length) {
+          // Часть замьюченных находок больше не проявляется — снимаем mute (self-clearing).
+          updateConfig((cfg) => {
+            if (keepDismissed.length > 0) cfg.dashboard.dismissedAlerts[state.hostId] = keepDismissed;
+            else delete cfg.dashboard.dismissedAlerts[state.hostId];
+          });
+        }
+        if (issuesToShow.length > 0) sendAlert(sessionId, { issues: issuesToShow });
       }
       finish(metrics);
     });
@@ -187,10 +269,23 @@ function poll(sessionId: string): void {
   });
 }
 
-export function startDashboard(sessionId: string, client: Client, logger: DashboardLogger): void {
+export function startDashboard(
+  sessionId: string,
+  client: Client,
+  hostId: number,
+  logger: DashboardLogger
+): void {
   stopDashboard(sessionId);
   const timer = setInterval(() => poll(sessionId), INTERVAL_MS);
-  dashboards.set(sessionId, { timer, client, running: false, logger, problemLogged: false });
+  dashboards.set(sessionId, {
+    timer,
+    client,
+    hostId,
+    running: false,
+    logger,
+    problemLogged: false,
+    firstSuccessDone: false
+  });
   poll(sessionId); // первый замер сразу
 }
 
@@ -204,3 +299,10 @@ export function stopDashboard(sessionId: string): void {
 
 /** Экспорт парсера для юнит-тестов (DASH-02). */
 export const parseMetricsForTest = parseMetrics;
+
+/** Экспорт для юнит-тестов (DASH-09). */
+export const parseRebootRequiredForTest = parseRebootRequired;
+export const computeAlertIssuesForTest = computeAlertIssues;
+export const applyDismissalsForTest = applyDismissals;
+export const METRICS_COMMAND_FOR_TEST = METRICS_COMMAND;
+export const REBOOT_CHECK_COMMAND_FOR_TEST = REBOOT_CHECK_COMMAND;

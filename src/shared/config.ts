@@ -1,4 +1,5 @@
 import type { PendingKeyDeployment } from './keygen';
+import type { DashboardAlertIssue } from './dashboard';
 
 /**
  * Формат %APPDATA%\LucidSSH\config.json (Data_Structures.md §6).
@@ -59,6 +60,11 @@ export interface AppConfig {
   history: {
     enabled: boolean; // HIST-07
     perHostDisabled: number[];
+  };
+  dashboard: {
+    /** DASH-09: «Больше не показывать» — issue не всплывает в health-баннере
+     *  для этого хоста впредь (id хоста → список отклонённых находок). */
+    dismissedAlerts: Record<number, DashboardAlertIssue[]>;
   };
   /** id подсказки → сколько раз показана (лимит 3, §5.1 ТЗ). */
   shownCounts: Record<string, number>;

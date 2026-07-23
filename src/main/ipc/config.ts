@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type { AppConfig } from '@shared/config';
+import { DASHBOARD_ALERT_ISSUES, type DashboardAlertIssue } from '@shared/dashboard';
 import { INTERACTIVE_PROGRAMS } from '@shared/interactivePrograms';
 import { loadConfig, updateConfig } from '../config/store';
 import { assertSenderIsMainWindow, IpcValidationError } from './validate';
@@ -97,6 +98,26 @@ export function registerConfigIpcHandlers(): void {
       for (const id of KNOWN_HINTS) cfg.shownCounts[id] = 0;
     });
   });
+
+  // DASH-09: «Больше не показывать» для конкретной находки на конкретном хосте —
+  // health-баннер main-процесса сверяется с этим списком перед отправкой (dashboard.ts).
+  ipcMain.handle(
+    IPC.configDismissDashboardAlert,
+    (event, rawHostId: unknown, rawIssue: unknown): AppConfig => {
+      assertSenderIsMainWindow(event);
+      if (typeof rawHostId !== 'number' || !Number.isInteger(rawHostId)) {
+        throw new IpcValidationError('hostId: integer expected');
+      }
+      if (!(DASHBOARD_ALERT_ISSUES as readonly string[]).includes(rawIssue as string)) {
+        throw new IpcValidationError('issue: unknown');
+      }
+      const issue = rawIssue as DashboardAlertIssue;
+      return updateConfig((cfg) => {
+        const list = cfg.dashboard.dismissedAlerts[rawHostId] ?? [];
+        if (!list.includes(issue)) cfg.dashboard.dismissedAlerts[rawHostId] = [...list, issue];
+      });
+    }
+  );
 }
 
 /** Разрешённые id подсказок (обучающие подсказки с лимитом показов). */

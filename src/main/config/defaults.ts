@@ -51,6 +51,9 @@ export function createDefaultConfig(appVersion: string): AppConfig {
       enabled: true,
       perHostDisabled: []
     },
+    dashboard: {
+      dismissedAlerts: {}
+    },
     shownCounts: {},
     pendingKeyDeployments: [],
     updates: {

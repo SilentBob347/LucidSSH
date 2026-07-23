@@ -662,7 +662,7 @@ function openShell(session: ManagedSession, client: Client): void {
 
       // Мини-дашборд: отдельный exec-канал, интервал 10 с (DASH-02).
       // Логгер — причина недоступности метрик попадает в «Детали подключения» (DASH-05).
-      startDashboard(session.id, client, (messageKey, params) =>
+      startDashboard(session.id, client, session.hostId, (messageKey, params) =>
         log(session, 'warn', messageKey, params, 'session')
       );
     }

@@ -14,7 +14,7 @@ import type {
 import type { AppConfig } from '@shared/config';
 import type { SubmitResult } from '@shared/guard';
 import type { Breadcrumb } from '@shared/breadcrumb';
-import type { DashboardMetrics } from '@shared/dashboard';
+import type { DashboardAlert, DashboardAlertIssue, DashboardMetrics } from '@shared/dashboard';
 import type { CommandsDatabase, ErrorExplanation } from '@shared/content';
 import type { HistoryEntry, HistoryQuery, Snippet } from '@shared/history';
 import type { UpdateStatus } from '@shared/updates';
@@ -44,6 +44,8 @@ const api = {
   resetConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.configReset),
   markHint: (hintId: string): Promise<AppConfig> => ipcRenderer.invoke(IPC.configMarkHint, hintId),
   resetHintCounters: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.configResetHints),
+  dismissDashboardAlert: (hostId: number, issue: DashboardAlertIssue): Promise<AppConfig> =>
+    ipcRenderer.invoke(IPC.configDismissDashboardAlert, hostId, issue),
   listKnownHosts: (): Promise<KnownHostView[]> => ipcRenderer.invoke(IPC.knownHostsList),
   deleteKnownHost: (line: number): Promise<void> => ipcRenderer.invoke(IPC.knownHostsDelete, line),
 
@@ -214,6 +216,15 @@ const api = {
     ): void => cb(sessionId, metrics);
     ipcRenderer.on(IPC.evDashboard, listener);
     return () => ipcRenderer.removeListener(IPC.evDashboard, listener);
+  },
+  onDashboardAlert: (cb: (sessionId: string, alert: DashboardAlert) => void): (() => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      sessionId: string,
+      alert: DashboardAlert
+    ): void => cb(sessionId, alert);
+    ipcRenderer.on(IPC.evDashboardAlert, listener);
+    return () => ipcRenderer.removeListener(IPC.evDashboardAlert, listener);
   },
   onError: (cb: (sessionId: string, explanation: ErrorExplanation) => void): (() => void) => {
     const listener = (

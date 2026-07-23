@@ -273,6 +273,13 @@
       "command": "COMMAND",
       "cpu": "CPU%",
       "mem": "MEM%"
+    },
+    "healthBanner": {
+      "cpu": "Высокая нагрузка CPU: {{value}}%",
+      "ram": "Высокое использование RAM: {{value}}%",
+      "disk": "Диск заполнен на {{value}}%",
+      "rebootRequired": "Сервер требует перезагрузки после установки обновлений",
+      "dismissIssue": "Больше не показывать"
     }
   },
   "tabs": {

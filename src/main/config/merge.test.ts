@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { DashboardAlertIssue } from '@shared/dashboard';
 import { mergeWithDefaults } from './merge';
 
 const defaults = {
@@ -6,6 +7,7 @@ const defaults = {
   language: 'ru',
   window: { width: 1280, height: 800, maximized: false },
   history: { enabled: true, perHostDisabled: [] as number[] },
+  dashboard: { dismissedAlerts: {} as Record<number, DashboardAlertIssue[]> },
   shownCounts: {} as Record<string, number>,
   pendingKeyDeployments: [] as Array<{ keyPath: string; publicKey: string }>
 };
@@ -61,5 +63,26 @@ describe('mergeWithDefaults', () => {
   it('pendingKeyDeployments игнорируется целиком, если сохранённое значение не массив', () => {
     const merged = mergeWithDefaults(defaults, { pendingKeyDeployments: 'garbage' });
     expect(merged.pendingKeyDeployments).toEqual([]);
+  });
+
+  it('dashboard.dismissedAlerts (DASH-09) сохраняет валидные записи по id хоста', () => {
+    const merged = mergeWithDefaults(defaults, {
+      dashboard: { dismissedAlerts: { 3: ['cpu', 'rebootRequired'] } }
+    });
+    expect(merged.dashboard.dismissedAlerts).toEqual({ 3: ['cpu', 'rebootRequired'] });
+  });
+
+  it('dashboard.dismissedAlerts отбрасывает неизвестные issue и нечисловые id хостов', () => {
+    const merged = mergeWithDefaults(defaults, {
+      dashboard: { dismissedAlerts: { 3: ['cpu', 'evil'], notANumber: ['ram'] } }
+    });
+    expect(merged.dashboard.dismissedAlerts).toEqual({ 3: ['cpu'] });
+  });
+
+  it('dashboard отсутствует или повреждён — пустой словарь, приложение не падает', () => {
+    expect(mergeWithDefaults(defaults, { dashboard: 'garbage' }).dashboard).toEqual({
+      dismissedAlerts: {}
+    });
+    expect(mergeWithDefaults(defaults, {}).dashboard).toEqual({ dismissedAlerts: {} });
   });
 });

@@ -42,3 +42,21 @@ export const EMPTY_METRICS: DashboardMetrics = {
   pingMs: null,
   topProcesses: []
 };
+
+/** DASH-09: красный порог тревоги, общий для CPU/RAM/Disk (DASH-03). */
+export const DASH_RED_THRESHOLD_PERCENT = 90;
+
+/** DASH-09: находки одноразового health-баннера после первого успешного опроса. */
+export type DashboardAlertIssue = 'cpu' | 'ram' | 'disk' | 'rebootRequired';
+
+/** Полный список известных находок — используется для валидации входных данных. */
+export const DASHBOARD_ALERT_ISSUES: readonly DashboardAlertIssue[] = [
+  'cpu',
+  'ram',
+  'disk',
+  'rebootRequired'
+];
+
+export interface DashboardAlert {
+  issues: DashboardAlertIssue[];
+}
