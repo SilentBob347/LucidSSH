@@ -335,7 +335,11 @@
     "emptyOutput": "Команда завершилась с кодом {{code}} без сообщения об ошибке. Попробуйте запустить её повторно с флагом -v или проверьте логи сервиса.",
     "docSearch": "Искать в документации",
     "didYouMean": "Возможно, вы имели в виду:",
-    "insertSuggestion": "Вставить в строку ввода"
+    "insertSuggestion": "Вставить в строку ввода",
+    "copyForQuestion": "Скопировать для вопроса"
+  },
+  "questionBlock": {
+    "template": "**Команда:**\n```bash\n{{command}}\n```\n\n**Exit code:** {{exitCode}}\n\n**Вывод:**\n```\n{{output}}\n```\n\n**LucidSSH:** {{version}}"
   },
   "paste": {
     "title": "Вставка нескольких строк",

@@ -1,4 +1,5 @@
 import type { ErrorExplanation, ErrorPattern, ErrorScope, FallbackRef } from '@shared/content';
+import { maskSecrets } from '../secrets/maskers';
 
 /**
  * Детектор ошибок (ERR-01…06). Матчинг по exit code + тексту stderr/вывода
@@ -29,7 +30,7 @@ function substitute(command: string, original: string, target: string): string {
 }
 
 /** Обрезка фрагмента stderr для fallback/логов после маскирования секретов. */
-function excerpt(text: string, max = 500): string {
+export function excerpt(text: string, max = 500): string {
   const trimmed = text.replace(/\s+$/g, '').slice(-max);
   return trimmed;
 }
@@ -79,8 +80,12 @@ export function detectError(
             command: c.command ? substitute(c.command, command, target) : undefined
           })),
           source: 'database',
-          command,
-          id: p.id
+          // command используется НЕмаскированным выше для {original}/{target} — здесь,
+          // в самом объяснении, маскируем перед показом/копированием (ERR-08).
+          command: maskSecrets(command).masked,
+          id: p.id,
+          exitCode: exitCode ?? undefined,
+          stderr: maskSecrets(excerpt(output)).masked
         }
       };
     }

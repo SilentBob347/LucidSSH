@@ -333,7 +333,11 @@
     "emptyOutput": "The command exited with code {{code}} without an error message. Try running it again with -v or check the service logs.",
     "docSearch": "Search the docs",
     "didYouMean": "Did you mean:",
-    "insertSuggestion": "Insert into input"
+    "insertSuggestion": "Insert into input",
+    "copyForQuestion": "Copy for question"
+  },
+  "questionBlock": {
+    "template": "**Command:**\n```bash\n{{command}}\n```\n\n**Exit code:** {{exitCode}}\n\n**Output:**\n```\n{{output}}\n```\n\n**LucidSSH:** {{version}}"
   },
   "paste": {
     "title": "Paste multiple lines",

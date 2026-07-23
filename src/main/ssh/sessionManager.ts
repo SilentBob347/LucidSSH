@@ -26,7 +26,8 @@ import {
 import { startDashboard, stopDashboard } from './dashboard';
 import { deployPendingKey, hasPendingDeployment } from './keygen';
 import { loadErrorPatterns, loadCommandCatalog } from '../content/loader';
-import { detectError, isEmptyOutput } from '../errors/detector';
+import { detectError, excerpt, isEmptyOutput } from '../errors/detector';
+import { maskSecrets } from '../secrets/maskers';
 import { extractCommandName, findCommandSuggestions } from '../errors/fuzzyMatch';
 import { t } from '../i18n';
 import type { ErrorExplanation } from '@shared/content';
@@ -807,7 +808,9 @@ function handleCommandFinished(
       explanation: t(explainKey, { code: exitCode }),
       checks: [],
       source: 'fallback',
-      command
+      command: maskSecrets(command).masked,
+      exitCode,
+      stderr: maskSecrets(excerpt(output)).masked
     };
   }
   send(IPC.evError, session.id, explanation);

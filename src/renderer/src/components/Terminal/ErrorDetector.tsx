@@ -5,6 +5,7 @@ import type { ErrorExplanation } from '@shared/content';
 import { applyCommandSuggestion } from '@shared/fuzzyMatch';
 import { Icon } from '@/components/common/Icon';
 import { insertIntoComposer } from '@/stores/composerBus';
+import { useConfig } from '@/stores/config';
 
 /**
  * Панель детектора ошибок (ERR-03; скриншот 02-Error). Выезжает снизу области
@@ -21,7 +22,9 @@ export function ErrorDetector({
   onClose: () => void;
 }): JSX.Element {
   const { t } = useTranslation();
+  const { config } = useConfig();
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [questionCopied, setQuestionCopied] = useState(false);
 
   void sessionId;
 
@@ -41,6 +44,20 @@ export function ErrorDetector({
     setTimeout(() => setCopiedIdx(null), 1200);
   };
 
+  // ERR-08: command/stderr в explanation уже замаскированы (maskSecrets, см. detector.ts
+  // и sessionManager.ts) — дистрибутив сервера в блок не включается (не реализован в 1.0).
+  const copyForQuestion = (): void => {
+    const text = t('questionBlock.template', {
+      command: explanation.command,
+      exitCode: explanation.exitCode !== undefined ? String(explanation.exitCode) : '—',
+      output: explanation.stderr && explanation.stderr.trim() ? explanation.stderr : '—',
+      version: config?.version ?? '—'
+    });
+    window.lucidSSH.clipboardWrite(text);
+    setQuestionCopied(true);
+    setTimeout(() => setQuestionCopied(false), 1200);
+  };
+
   return (
     <div
       className="animate-[esh-slideup_.2s_ease] flex max-h-[212px] shrink-0 flex-col border-t border-l-[3px] border-t-[rgba(255,255,255,0.1)] border-l-danger bg-bg-elevated"
@@ -54,6 +71,15 @@ export function ErrorDetector({
         <span className="flex-1 text-[13px] font-semibold text-danger-text">
           {explanation.title}
         </span>
+        <button
+          type="button"
+          title={t('errDetector.copyForQuestion')}
+          aria-label={t('errDetector.copyForQuestion')}
+          onClick={copyForQuestion}
+          className="flex size-[22px] shrink-0 items-center justify-center rounded-[4px] text-text-muted hover:bg-[rgba(255,255,255,0.08)] hover:text-text-strong"
+        >
+          <Icon name={questionCopied ? 'check' : 'clipboard'} size={14} />
+        </button>
         <button
           type="button"
           aria-label={t('errDetector.close')}

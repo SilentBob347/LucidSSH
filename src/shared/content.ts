@@ -45,6 +45,10 @@ export interface ErrorExplanation {
   id?: string;
   /** ERR-07: имена команд-кандидатов («возможно, вы имели в виду: X?»), расстояние Левенштейна ≤ 2. */
   suggestions?: string[];
+  /** ERR-08: exit code упавшей команды — для блока «Скопировать для вопроса». Нет для ssh-connection. */
+  exitCode?: number;
+  /** ERR-08: фрагмент stderr/вывода, уже прошедший маскирование секретов (maskSecrets) — для блока «Скопировать для вопроса». */
+  stderr?: string;
 }
 
 // ---- Каталог команд ----

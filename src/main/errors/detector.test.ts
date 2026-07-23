@@ -48,6 +48,23 @@ describe('detectError (ERR-01..06)', () => {
     expect(r2.matched).toBe(false);
   });
 
+  it('ERR-08: command и stderr в explanation замаскированы (секрет не утекает в блок «для вопроса»)', () => {
+    const r = detectError(
+      patterns,
+      'command',
+      'nano: Permission denied',
+      1,
+      'export API_KEY=secret123 && nano /etc/nginx/nginx.conf'
+    );
+    expect(r.matched).toBe(true);
+    if (r.matched) {
+      expect(r.explanation.command).not.toContain('secret123');
+      expect(r.explanation.command).toContain('API_KEY=••••••••');
+      expect(r.explanation.exitCode).toBe(1);
+      expect(r.explanation.stderr).toBe('nano: Permission denied');
+    }
+  });
+
   it('нераспознанная ошибка → fallback doc-search (ERR-06)', () => {
     const r = detectError(patterns, 'command', 'weird custom error blah', 2, 'mycmd --foo');
     expect(r.matched).toBe(false);
