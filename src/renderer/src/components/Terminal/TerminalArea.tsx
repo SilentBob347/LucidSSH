@@ -533,7 +533,12 @@ export function TerminalArea(): JSX.Element {
         <PastePreviewDialog
           text={pastePreview}
           onConfirm={(text) => {
-            pasteText(active.sessionId, text);
+            // Кнопка обещает «Вставить и выполнить» (paste.confirm) — если в
+            // буфере не было хвостового перевода строки (например, копирование
+            // кода из веб-страницы часто обрезает последний \n), последняя
+            // строка просто ляжет в PTY без Enter и «выполнение» не случится.
+            const withTrailingNewline = /[\r\n]$/.test(text) ? text : `${text}\n`;
+            pasteText(active.sessionId, withTrailingNewline);
             setPastePreview(null);
           }}
           onCancel={() => setPastePreview(null)}

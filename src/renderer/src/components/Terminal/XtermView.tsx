@@ -330,9 +330,16 @@ export function copySelection(sessionId: string): void {
 }
 
 /** Сырая отправка текста в сессию, без буфера/Стража — только когда сессия
- *  НЕ на промпте (внутри интерактивной программы), см. insertText ниже. */
+ *  НЕ на промпте (внутри интерактивной программы), см. insertText ниже.
+ *  Line endings нормализуются в LF: буфер обмена Windows кладёт CRLF, а bash
+ *  сравнивает heredoc-терминатор («EOF») побайтово — «EOF\r» не совпадает с
+ *  ожидаемым «EOF», и heredoc зависает в ожидании настоящего терминатора. */
 export function pasteText(sessionId: string, text: string): void {
-  void sendRawChecked(sessionId, text);
+  void sendRawChecked(sessionId, text.replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
+  // Вызывается и из PastePreviewDialog — фокус после клика по кнопке
+  // остаётся на ней, следующий Enter активирует кнопку повторно, а не
+  // уходит в терминал (та же причина, что у insertText ниже).
+  cache.get(sessionId)?.term.focus();
 }
 
 /**
