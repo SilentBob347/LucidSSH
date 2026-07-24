@@ -1,65 +1,65 @@
-# CLAUDE.md — операционные правила для Claude Code
+# CLAUDE.md — operating rules for Claude Code
 
-Этот файл — обязательные правила работы над **LucidSSH for Windows**. Читается перед каждой задачей. При конфликте: ТЗ (`private/TZ.md`) и реализованный UI в `src/renderer/components/` имеют приоритет над этим файлом, этот файл — над общими привычками.
+This file contains the mandatory rules for working on **LucidSSH for Windows**. Read before every task. On conflict: the spec (`private/TZ.md`) and the implemented UI in `src/renderer/components/` take priority over this file; this file takes priority over general habits.
 
-> **Публичный/приватный репозиторий.** Часть документации живёт в `private/` — не публикуется, содержит нереализованные требования, roadmap и внутренний контекст решений. `docs/` — публичная витрина (README, реализованные ✅-требования, архитектура безопасности, схемы данных). Для внутренней работы (включая решение открытых вопросов, планирование фич вне 1.0) всегда используй полные версии из `private/`, не публичные из `docs/`. Подробности разделения — `docs/agent/domain.md` или спроси разработчика.
-
----
-
-## 0. Что это за проект
-
-Настольный SSH-клиент для Windows на Electron + TypeScript. Целевая аудитория — новички, но без помех опытным. Полностью локальный: **нет аккаунта, нет облака, нет телеметрии**.
-
-Четыре фичи, отличающие продукт (их нельзя упрощать без явного согласования):
-- **Страж опасных команд** — перехват `rm -rf` и аналогов до отправки на сервер.
-- **Детектор ошибок** — объяснение stderr/SSH-ошибок по-русски, офлайн, без LLM.
-- **Breadcrumb «где я»** — текущий путь над терминалом, кликабельный.
-- **Каталог команд** — боковая панель с объяснениями (локализованы, по умолчанию русский).
+> **Public/private repository.** Part of the documentation lives in `private/` — not published, contains unimplemented requirements, roadmap, and internal decision context. `docs/` is the public showcase (README, implemented ✅ requirements, security architecture, data schemas) — published in **English**, since the repository audience isn't limited to Russian speakers; `private/` stays in **Russian**, it's the working source for the developer and Claude Code, not meant for outside readers. For internal work (including resolving open questions, planning features beyond 1.0) always use the full versions in `private/`, not the public ones in `docs/`. Split details — `docs/agent/domain.md` or ask the developer.
 
 ---
 
-## 1. Источники истины (в порядке приоритета)
+## 0. What this project is
 
-1. **`private/TZ.md`** — требования, ID, критерии приёмки (полная версия, включая нереализованные требования и открытые вопросы). Если правило здесь и в ТЗ расходятся — прав ТЗ. Публичная витрина (только ✅-требования) — `docs/TZ.md`, не источник истины для внутренней работы.
-2. **Реализованный код в `src/renderer/components/`** — **источник истины по UI**. `doc/screenshots/` удалена (перенесена в git-историю); архивный дизайн-макет лежит в `private/backup/2026-07-05_v1.1/*.dc.html` и годится как справка о намерении, но не как истина. Перед версткой или изменением любого экрана открой соответствующий компонент и сверься с тем, как он уже реализован: расположение, состояния, цвета, тексты. Не выдумывай layout, которого нет ни в коде, ни в `Design_Brief.md`. Если поведение экрана неочевидно и не описано — **остановись и спроси**, не додумывай.
-3. **`private/Design_Brief.md`** — дизайн-намерение, токены, поведение.
-4. **`package.json`** — единственный источник истины для номера версии.
-5. Этот файл — операционные правила.
+A desktop SSH client for Windows built on Electron + TypeScript. Target audience: beginners, without getting in the way of experienced users. Fully local: **no account, no cloud, no telemetry**.
 
-Не уверен в требовании — спроси, а не угадывай. Я (разработчик) предпочитаю понять обоснование до фиксации правила; предлагай trade-offs, а не директивы.
+Four features set the product apart (must not be simplified without explicit agreement):
+- **Dangerous command guard** — intercepts `rm -rf` and similar before they reach the server.
+- **Error detector** — explains stderr/SSH errors offline, without an LLM (localized; Russian by default).
+- **"Where am I" breadcrumb** — current path above the terminal, clickable.
+- **Command catalog** — sidebar with explanations (localized, Russian by default).
 
-### Карта документов проекта (`docs/` — публично, `private/` — не публикуется)
+---
 
-Куда смотреть за чем перед работой над модулем. Для внутренней работы Claude Code всегда использует версию из `private/`, если она существует — там полный контекст (нереализованные требования, roadmap, открытые вопросы); публичная версия в `docs/` — только урезанная витрина для GitHub.
+## 1. Sources of truth (in priority order)
 
-| Документ | Путь | Когда обязательно открыть |
+1. **`private/TZ.md`** — requirements, IDs, acceptance criteria (full version, including unimplemented requirements and open questions). If a rule here conflicts with the spec, the spec wins. The public showcase (✅ requirements only) is `docs/TZ.md`, not a source of truth for internal work.
+2. **Implemented code in `src/renderer/components/`** — **source of truth for the UI**. `doc/screenshots/` has been removed (moved into git history); an archived design mockup lives at `private/backup/2026-07-05_v1.1/*.dc.html` and is useful as a reference for intent, but not as ground truth. Before laying out or changing any screen, open the corresponding component and check how it's already implemented: placement, states, colors, text. Don't invent a layout that exists neither in the code nor in `Design_Brief.md`. If a screen's behavior is unclear and undocumented — **stop and ask**, don't guess.
+3. **`private/Design_Brief.md`** — design intent, tokens, behavior.
+4. **`package.json`** — the single source of truth for the version number.
+5. This file — operating rules.
+
+Unsure about a requirement — ask, don't guess. I (the developer) prefer to understand the rationale before a rule is set; propose trade-offs, not directives.
+
+### Project document map (`docs/` — public, `private/` — not published)
+
+Where to look for what before working on a module. For internal work, Claude Code always uses the `private/` version when one exists — it has the full context (unimplemented requirements, roadmap, open questions); the public version in `docs/` is only a trimmed, English showcase for GitHub.
+
+| Document | Path | When it must be opened |
 |---|---|---|
-| `TZ.md` | `private/TZ.md` (полная), `docs/TZ.md` (публичная, только ✅) | Любая задача: требования, ID, критерии приёмки. Высший приоритет. Работать с `private/TZ.md`. |
-| `src/renderer/components/` | — | Любая работа с UI — источник истины по экранам (screenshots/ удалена, см. §1). |
-| `Design_Brief.md` | `private/Design_Brief.md` | Вёрстка, токены, поведение компонентов. |
-| `Data_Structures.md` | `docs/Data_Structures.md` (публичный) | **`hosts/`, `history/`, `errors/`** — схемы SQLite, форматы контент-баз (`errors.core.json`, `commands.core.json`, переводы в `locales/`), точки расширения LLM. Не писать схему таблицы или парсер JSON, не сверившись. |
-| `Security_Guide.md` | `docs/Security_Guide.md` (публичный) | Любой код, затрагивающий раздел 4 (keytar, ключи, IPC, fingerprint, маскирование). Обоснование требований безопасности. |
-| `Development_Roadmap.md` | `private/Development_Roadmap.md` | Сомнение «это в 1.0 или позже» — сверить со scope (§3). |
-| `Release_and_Update_Strategy.md` | `private/Release_and_Update_Strategy.md` (полная), `docs/Release_and_Update_Strategy.md` (публичная) | Работа с модулем автообновления (`updates/`), бамп версии, стратегия каналов и подписи. Сверять перед любыми правками релизного pipeline — использовать `private/` версию. |
-| `Local_LLM_Spec.md` | `private/Local_LLM_Spec.md` | **Только справочно для будущей версии.** В коде 1.0 не реализовывать. |
-| `Ideas_Backlog.md`, `Design_Readiness_Checklist.md` | `private/` | Нерассортированные идеи и чеклист дизайн-фазы — для написания кода обычно не нужны. |
-| `README.md` | репозиторий, корень | Публичный, для написания кода обычно не нужен. |
+| `TZ.md` | `private/TZ.md` (full, Russian), `docs/TZ.md` (public, ✅ only, English) | Any task: requirements, IDs, acceptance criteria. Highest priority. Work from `private/TZ.md`. |
+| `src/renderer/components/` | — | Any UI work — source of truth for screens (screenshots/ removed, see §1). |
+| `Design_Brief.md` | `private/Design_Brief.md` (Russian) | Layout, tokens, component behavior. |
+| `Data_Structures.md` | `private/Data_Structures.md` (full, Russian), `docs/Data_Structures.md` (public, English) | **`hosts/`, `history/`, `errors/`** — SQLite schemas, content-database formats (`errors.core.json`, `commands.core.json`, translations in `locales/`), LLM extension points. Don't write a table schema or JSON parser without checking first. |
+| `Security_Guide.md` | `private/Security_Guide.md` (full, Russian), `docs/Security_Guide.md` (public, English) | Any code touching section 4 (keytar, keys, IPC, fingerprint, masking). Rationale for security requirements. |
+| `Development_Roadmap.md` | `private/Development_Roadmap.md` (Russian) | Doubt about "is this in 1.0 or later" — check against scope (§3). |
+| `Release_and_Update_Strategy.md` | `private/Release_and_Update_Strategy.md` (full, Russian), `docs/Release_and_Update_Strategy.md` (public, English) | Work on the auto-update module (`updates/`), version bumps, channel/signing strategy. Check before any release-pipeline change — use the `private/` version. |
+| `Local_LLM_Spec.md` | `private/Local_LLM_Spec.md` (Russian) | **Reference only, for a future version.** Do not implement in 1.0 code. |
+| `Ideas_Backlog.md`, `Design_Readiness_Checklist.md` | `private/` (Russian) | Unsorted ideas and a design-phase checklist — usually not needed for writing code. |
+| `README.md` | repository root | Public, usually not needed for writing code. |
 
 ---
 
-## 2. Стек и границы
+## 2. Stack and boundaries
 
-Electron 30+ / Node 20+ · TypeScript (strict) · React + Tailwind · xterm.js · ssh2 · better-sqlite3 · keytar · electron-builder · **i18next + react-i18next + i18next-fs-backend** (мультиязычность).
+Electron 30+ / Node 20+ · TypeScript (strict) · React + Tailwind · xterm.js · ssh2 · better-sqlite3 · keytar · electron-builder · **i18next + react-i18next + i18next-fs-backend** (multi-language support).
 
-- TypeScript строго: без `any` без явной причины в комментарии, без `// @ts-ignore` без объяснения.
-- Не добавляй зависимости, не спросив. Особенно — дублирующие то, что уже в стеке.
-- Целевая платформа только Windows 10/11 x64. Кросс-платформенный код не нужен.
+- Strict TypeScript: no `any` without an explicit reason in a comment, no `// @ts-ignore` without an explanation.
+- Don't add dependencies without asking. Especially ones that duplicate what's already in the stack.
+- Target platform is Windows 10/11 x64 only. No cross-platform code needed.
 
 ---
 
-## 3. Структура репозитория
+## 3. Repository structure
 
-Соблюдай существующее дерево. Новый код кладётся по назначению, не в корень `main/` или `renderer/`.
+Follow the existing tree. New code goes where it belongs, not into the root of `main/` or `renderer/`.
 
 ```
 src/main/      ssh/ guard/ errors/ hosts/ history/ dashboard/ keychain/ i18n/
@@ -68,145 +68,145 @@ src/renderer/  components/{Terminal,HostManager,Breadcrumb,Dashboard,
 assets/        locales/{ru,en}/*.json   errors.core.json   commands.core.json
 ```
 
-- Логика SSH, стража, метрик — **в main process**. Renderer не открывает сокеты и не трогает SSH напрямую.
-- Паттерны стража — в `guard/patterns.ts`, **не inline**.
-- `i18n/` есть и в main, и в renderer: сообщения стража и детектора формируются в main process, поэтому переводы нужны по обе стороны IPC (см. раздел 5a).
+- SSH, guard, and metrics logic — **in the main process**. The renderer never opens sockets or touches SSH directly.
+- Guard patterns — in `guard/patterns.ts`, **not inline**.
+- `i18n/` exists on both main and renderer: guard/detector messages are built in the main process, so translations are needed on both sides of the IPC boundary (see section 5a).
 
 ---
 
-## 4. Безопасность — не подлежит компромиссу
+## 4. Security — non-negotiable
 
-- Пароли — **только** через keytar → Windows Credential Manager. Никогда в файлах, SQLite, логах, истории.
-- Приватные ключи — использовать по оригинальному пути, **не копировать** в директорию приложения.
-- Electron: `contextIsolation: true`, `nodeIntegration: false`. IPC — только через `contextBridge`, никакого прямого доступа к Node из renderer.
-- Fingerprint сервера проверять при **каждом** подключении, хранить в `known_hosts`.
-- Секреты в истории команд маскировать (HIST-07).
+- Passwords — **only** through keytar → Windows Credential Manager. Never in files, SQLite, logs, or history.
+- Private keys — used from their original path, **never copied** into the app directory.
+- Electron: `contextIsolation: true`, `nodeIntegration: false`. IPC — only through `contextBridge`, no direct Node access from the renderer.
+- Verify the server fingerprint on **every** connection, store it in `known_hosts`.
+- Mask secrets in command history (HIST-07).
 
-Любое изменение, ослабляющее перечисленное, — стоп и согласование.
+Any change that weakens the above — stop and get agreement first.
 
 ---
 
-## 5. Правила ключевых модулей
+## 5. Rules for key modules
 
-**Страж опасных команд**
-- Перехват в main process **до** отправки команды через SSH.
-- Модалка требует ввода **имени объекта**, не просто «ок».
-- Лог в историю с маркером «заблокировано» / «подтверждено».
-- Опытный пользователь может отключить глобально или на конкретный хост.
+**Dangerous command guard**
+- Intercepted in the main process **before** the command is sent over SSH.
+- The dialog requires typing the **object's name**, not just clicking "OK".
+- Logged to history with a "blocked" / "confirmed" marker.
+- An experienced user can disable it globally or per host.
 
-**Детектор ошибок**
-- Офлайн, только по `assets/errors.core.json` + активный перевод. **Без LLM** в 1.0.
-- Триггер: exit code ≠ 0 или непустой stderr.
-- Панель выдвигается снизу, **не перекрывает** строку ввода. Закрытие по Esc или ×.
+**Error detector**
+- Offline only, driven by `assets/errors.core.json` + the active translation. **No LLM** in 1.0.
+- Trigger: exit code ≠ 0 or non-empty stderr.
+- The panel slides up from the bottom, **never covers** the input line. Closes via Esc or ×.
 
 **Breadcrumb**
-- Путь через shell integration (PROMPT_COMMAND / precmd), **не** отдельными командами в сессию.
-- Обновляется после каждого `cd`. Root-сессия — красным. Клик вставляет элемент в строку ввода.
+- Path via shell integration (PROMPT_COMMAND / precmd), **not** separate commands sent into the session.
+- Updates after every `cd`. Root session shown in red. Clicking inserts the element into the input line.
 
-**Дашборд сервера**
-- Отдельный SSH exec-канал, **не основная сессия**. Интервал 10 сек.
-- Недоступность → «—», не ошибка. CPU > 80% оранжевый, RAM > 90% красный.
+**Server dashboard**
+- A separate SSH exec channel, **not the main session**. 10-second interval.
+- Unavailable → "—", not an error. CPU > 80% orange, RAM > 90% red.
 
 **UX**
-- Подсказки — максимум 3 показа, затем скрываются.
-- «Режим эксперта» в настройках отключает все подсказки.
-- **Никаких хардкод-строк в UI.** Весь видимый пользователю текст — через i18n (раздел 5a). Язык по умолчанию — русский, fallback — английский.
+- Hints — shown at most 3 times, then hidden.
+- "Expert mode" in settings turns off all hints.
+- **No hardcoded strings in the UI.** All user-visible text goes through i18n (section 5a). Default language is Russian, fallback is English.
 
 ---
 
-## 5a. Мультиязычность (i18n) — закладывается сразу
+## 5a. Multi-language support (i18n) — built in from the start
 
-Архитектура рассчитана на **N языков**. В 1.0 поставляются **ru + en**; добавление языка = новая папка в `assets/locales/<lang>/`, **без правок кода**.
+The architecture is designed for **N languages**. 1.0 ships with **ru + en**; adding a language = a new folder in `assets/locales/<lang>/`, **no code changes**.
 
-**Библиотека:** i18next + react-i18next (renderer) + i18next-fs-backend (main). Выбрана как стандарт для Electron+React: единый механизм по обе стороны IPC, namespaces по модулям, CLDR-плюрализация (важно для русского: 1 файл / 2 файла / 5 файлов).
+**Library:** i18next + react-i18next (renderer) + i18next-fs-backend (main). Chosen as the standard for Electron+React: one mechanism on both sides of the IPC boundary, namespaces per module, CLDR pluralization (important for Russian: 1 file / 2 files / 5 files).
 
-**Правила:**
-- Ни одной строки UI в коде. Только `t('namespace:key')`. Это касается и main process (сообщения стража, заголовки/тексты детектора формируются там).
-- Ключи — смысловые (`guard.confirm.title`), не по тексту (`guard.udalit_fayl`).
-- Плюрализацию и подстановки делать средствами i18next, не конкатенацией строк.
-- Дефолтный язык `ru`, fallback `en`. Выбор языка хранится в `config.json`, переключается в настройках.
-- **Контент-базы (`errors.core.json`, `commands.core.json`) тоже мультиязычны**, но по особой схеме: техническая часть (regex `match`, `id`, `category`, `flag`, имена команд) — **общая, не переводится**; переводится только человекочитаемый текст (`title`, `explanation`, `summary`, `desc`, `checks[].text`, `keywords`) в `locales/{lang}/`. Конкретная схема — в `Data_Structures.md` (разделы 5–6). **Не дублировать regex по языкам.**
-- EN-переводы можно наполнять постепенно: нет ключа → fallback на ru. Но **структура** под перевод должна быть на месте с первого коммита соответствующего модуля.
-
----
-
-## 6. Чего НЕТ в версии 1.0
-
-Список фич вне текущего релиза — см. `private/Development_Roadmap.md` §3 (не публикуется здесь).
-
-Постоянное архитектурное ограничение, не версионная отсрочка (решение закрыто окончательно, не пункт бэклога): **локальный PowerShell/CMD/WSL-терминал не добавляется** — продукт остаётся SSH-клиентом, а не универсальным эмулятором терминала; Страж/Детектор/Breadcrumb/Дашборд жёстко завязаны на удалённый SSH exec-канал и не переносятся на локальный процесс без дублирования архитектуры. Обоснование — `docs/agent/adr/0002-no-local-shell.md`.
-
-В структурах данных уже заложены точки расширения под будущий модуль объяснений (`FallbackRef`, `ErrorExplanation.source`, см. `docs/Data_Structures.md`, публичный) — их **не трогать и не реализовывать**, просто не ломать.
+**Rules:**
+- No UI strings in code. Only `t('namespace:key')`. This applies to the main process too (guard messages, detector titles/text are built there).
+- Keys are semantic (`guard.confirm.title`), not text-derived (`guard.udalit_fayl`).
+- Pluralization and interpolation go through i18next, not string concatenation.
+- Default language `ru`, fallback `en`. The chosen language is stored in `config.json`, switched in settings.
+- **The content databases (`errors.core.json`, `commands.core.json`) are multi-language too**, but under a special scheme: the technical part (regex `match`, `id`, `category`, `flag`, command names) is **shared, not translated**; only the human-readable text (`title`, `explanation`, `summary`, `desc`, `checks[].text`, `keywords`) is translated, in `locales/{lang}/`. The exact schema is in `Data_Structures.md` (sections 5–6). **Don't duplicate regexes per language.**
+- EN translations can be filled in gradually: missing key → falls back to ru. But the **structure** for translation must be in place from the first commit of the corresponding module.
 
 ---
 
-## 7. Открытые вопросы
+## 6. What's NOT in version 1.0
 
-Все вопросы из ТЗ, кроме одного, закрыты сессией `/grill-with-docs` 2026-07-16/17 — формулировки решений см. `private/TZ.md` §11.2 и `private/adr/` (не публикуются).
+For the list of features outside the current release, see `private/Development_Roadmap.md` §3 (not published here).
 
-Один вопрос остаётся открытым — OQ-10, требует технического замера производительности перед решением. Детали — `private/TZ.md` §11.2.
+A permanent architectural constraint, not a version deferral (decision closed for good, not a backlog item): **a local PowerShell/CMD/WSL terminal is not being added** — the product stays an SSH client, not a general-purpose terminal emulator; the guard/detector/breadcrumb/dashboard are hard-wired to the remote SSH exec channel and can't be ported to a local process without duplicating the whole architecture. Rationale — `docs/agent/adr/0002-no-local-shell.md`.
 
-Из трёх ADR, зафиксированных по итогам сессии, публичный только `docs/agent/adr/0002-no-local-shell.md` (архитектурная граница, не бизнес-решение) — остальные два в `private/adr/`.
-
----
-
-## 8. Git и версионирование
-
-**Версии**
-- `package.json` — единственный источник истины номера версии.
-- Semantic Versioning по Release Strategy.
-- Бамп версии — **всегда отдельным коммитом**: `chore: bump version to X.Y.Z`, никогда внутри функционального коммита. Claude Code готовит изменение `package.json` и предлагает сообщение, коммит делает разработчик.
-
-**Кто коммитит:** Claude Code готовит изменения и предлагает текст сообщения коммита. Коммит выполняет Claude Code **только по явной команде на этот конкретный коммит** (решение 2026-07-17) — не по умолчанию и не как разовое разрешение на все последующие коммиты сессии. Без явной команды — только предлагать сообщение, не коммитить. Это касается всех коммитов, не только бампа версии; пуш — отдельное разрешение, даже после коммита.
-
-**Коммиты** — Conventional Commits:
-- `feat:` новая функциональность · `fix:` исправление · `chore:` рутина/бамп · `refactor:` · `docs:` · `test:` · `style:` · `build:`
-- Заголовок ≤ 72 символов, в повелительном наклонении.
-- Один коммит — одно логическое изменение. Не смешивать рефакторинг с фичей.
-
-**CHANGELOG.md** — формат Keep a Changelog, **на английском** (решение от 25.07.2026: репозиторий публичный, аудитория не ограничена русскоязычной — CHANGELOG как технический документ для контрибьюторов ведётся на едином языке без риска рассинхронизации; двуязычным делаем только пользовательское описание GitHub Release). Секции: Added, Changed, Fixed, Removed, Security. Описание GitHub Release зеркалит соответствующий блок CHANGELOG (можно двуязычно, ru+en, как в самом релизе).
-
-**Блокер релиза:** BLK-01 — сертификат подписи кода (закрыт: решение — релиз без подписи, SHA-256 вместо подписи, см. `docs/TZ.md` NFR-06 — публично). Полное обоснование решения — `private/TZ.md` §11.1 и `private/Release_and_Update_Strategy.md` §9 (не публикуются).
+The data structures already include extension points for a future explanations module (`FallbackRef`, `ErrorExplanation.source`, see `docs/Data_Structures.md`, public) — **don't touch or implement** these, just don't break them.
 
 ---
 
-## 9. Сборка, запуск, окружение
+## 7. Open questions
 
-- Менеджер пакетов: **npm** (решение от 02.07.2026). Lock-файл — только `package-lock.json`.
-- Сборка: **electron-vite** (main + preload + renderer), упаковка — electron-builder.
-- Скрипты (`package.json` — источник истины):
-  - `dev` — запуск Electron в режиме разработки (electron-vite dev)
-  - `build` — production-сборка (electron-vite build)
-  - `dist` — сборка + упаковка установщика через electron-builder
-  - `typecheck` — `tsc --noEmit` для node- и web-проектов
+All questions from the spec except one were closed during the `/grill-with-docs` session on 2026-07-16/17 — see the decisions in `private/TZ.md` §11.2 and `private/adr/` (not published).
+
+One question remains open — OQ-10, needs a technical performance measurement before it can be decided. Details — `private/TZ.md` §11.2.
+
+Of the three ADRs recorded from that session, only `docs/agent/adr/0002-no-local-shell.md` is public (an architectural boundary, not a business decision) — the other two are in `private/adr/`.
+
+---
+
+## 8. Git and versioning
+
+**Versions**
+- `package.json` — the single source of truth for the version number.
+- Semantic Versioning per the Release Strategy.
+- Version bumps — **always a separate commit**: `chore: bump version to X.Y.Z`, never inside a feature commit. Claude Code prepares the `package.json` change and proposes the message; the developer makes the commit.
+
+**Who commits:** Claude Code prepares changes and proposes commit-message text. Claude Code makes the commit **only on an explicit command for that specific commit** (decision 2026-07-17) — not by default, and not as a one-time blanket permission for the rest of the session's commits. Without an explicit command — propose the message only, don't commit. This applies to all commits, not just version bumps; pushing is a separate permission, even after a commit.
+
+**Commits** — Conventional Commits:
+- `feat:` new functionality · `fix:` bug fix · `chore:` maintenance/bump · `refactor:` · `docs:` · `test:` · `style:` · `build:`
+- Subject line ≤ 72 characters, imperative mood.
+- One commit = one logical change. Don't mix a refactor with a feature.
+
+**CHANGELOG.md** — Keep a Changelog format, **in English** (decision from 2026-07-25: the repository is public, the audience isn't limited to Russian speakers — as a technical document for contributors, the CHANGELOG is kept in a single language to avoid drift risk; only the user-facing GitHub Release description is bilingual). Sections: Added, Changed, Fixed, Removed, Security. The GitHub Release description mirrors the corresponding CHANGELOG block (can be bilingual, ru+en, like the release itself).
+
+**Release blocker:** BLK-01 — code signing certificate (closed: decision — ship without a signature, SHA-256 instead, see `docs/TZ.md` NFR-06 — public). Full rationale — `private/TZ.md` §11.1 and `private/Release_and_Update_Strategy.md` §9 (not published).
+
+---
+
+## 9. Build, run, environment
+
+- Package manager: **npm** (decision from 2026-07-02). Lockfile — `package-lock.json` only.
+- Build: **electron-vite** (main + preload + renderer), packaging — electron-builder.
+- Scripts (`package.json` is the source of truth):
+  - `dev` — run Electron in development mode (electron-vite dev)
+  - `build` — production build (electron-vite build)
+  - `dist` — build + package the installer via electron-builder
+  - `typecheck` — `tsc --noEmit` for the node and web projects
   - `lint` — ESLint (flat config)
   - `test` / `test:watch` — vitest
-  - `rebuild:test` / `rebuild:app` — см. ниже, ABI-свитч нативных модулей
-- Node 20+ обязателен (`engines`), локально зафиксирован Node 22 (`.nvmrc`).
-- Перед коммитом изменений кода прогонять `typecheck` и `lint`; не предлагать коммит с падающим typecheck.
-- **ABI-свитч нативных модулей (`better-sqlite3`, `keytar`).** `npm run dev`/`dist` требуют сборку под Electron ABI, `vitest` — под системный Node ABI; один и тот же `node_modules` не устраивает обоих одновременно (обнаружено 24.07.2026). Перед прогоном тестов, затрагивающих `better-sqlite3`/`keytar` (например `history/*.test.ts`), — `npm run rebuild:test`; после, перед возвратом к `npm run dev`, — обязательно `npm run rebuild:app`. Рабочее (по умолчанию) состояние репозитория — под Electron ABI.
+  - `rebuild:test` / `rebuild:app` — see below, native-module ABI switch
+- Node 20+ is required (`engines`), locally pinned to Node 22 (`.nvmrc`).
+- Run `typecheck` and `lint` before committing code changes; don't propose a commit with a failing typecheck.
+- **Native module ABI switch (`better-sqlite3`, `keytar`).** `npm run dev`/`dist` need a build against the Electron ABI, `vitest` needs the system Node ABI; the same `node_modules` can't satisfy both at once (discovered 2026-07-24). Before running tests that touch `better-sqlite3`/`keytar` (e.g. `history/*.test.ts`) — `npm run rebuild:test`; afterward, before going back to `npm run dev` — always `npm run rebuild:app`. The repository's working (default) state is the Electron ABI.
 
 ---
 
-## 10. Тестирование
+## 10. Testing
 
-- **Обязательно покрыть тестами** (критично для безопасности и поведения продукта):
-  - паттерны стража (`guard/patterns.ts`) — и срабатывание, и отсутствие ложных срабатываний;
-  - маскирование секретов (`secrets/maskers.ts`) — на реальных примерах утечек (§15 гайда);
-  - слияние ядра контент-баз с переводом (errors/commands) — связь по `id`, fallback при отсутствии ключа;
-  - детектор ошибок — матч паттернов из обязательного покрытия (ERR-04/05).
-- Эти модули **нельзя менять без обновления тестов** в том же изменении.
-- Фреймворк тестов — **vitest** (решение от 02.07.2026). Тестовые файлы — `*.test.ts` рядом с модулем.
-- UI-компоненты в 1.0 покрываются по мере необходимости, без жёсткого требования; приоритет — логика main process.
+- **Must be covered by tests** (critical for security and product behavior):
+  - guard patterns (`guard/patterns.ts`) — both firing correctly and not false-positiving;
+  - secret masking (`secrets/maskers.ts`) — against real-world leak examples (guide §15);
+  - merging content-database cores with translations (errors/commands) — linked by `id`, fallback when a key is missing;
+  - error detector — matching patterns from the required-coverage set (ERR-04/05).
+- These modules **cannot be changed without updating their tests** in the same change.
+- Test framework — **vitest** (decision from 2026-07-02). Test files — `*.test.ts` next to the module.
+- UI components are covered in 1.0 as needed, with no hard requirement; priority is main-process logic.
 
 ---
 
-## 11. Рабочий процесс
+## 11. Workflow
 
-- Перед задачей: прочитать релевантный раздел ТЗ и сверить экран с реализованным компонентом в `src/renderer/components/`.
-- Большие изменения — сначала план, потом код.
-- Не делать молча того, о чём не просили (новые зависимости, смена архитектуры, расширение scope).
-- Когда trade-off честно объяснён, я склонен принять расширение scope, а не отложить фичу — поэтому показывай альтернативы с последствиями по срокам.
+- Before a task: read the relevant spec section and check the screen against the implemented component in `src/renderer/components/`.
+- Big changes — plan first, then code.
+- Don't silently do things that weren't asked for (new dependencies, architecture changes, scope expansion).
+- When a trade-off is honestly explained, I'm inclined to accept scope expansion rather than defer the feature — so show alternatives along with their timeline consequences.
 
 ---
 

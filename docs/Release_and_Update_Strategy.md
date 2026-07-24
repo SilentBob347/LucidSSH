@@ -1,82 +1,82 @@
-# LucidSSH for Windows: сборка, публикация и обновление (публичная версия)
+# LucidSSH for Windows: Build, Release, and Update Strategy (public version)
 
-| Поле | Значение |
+| Field | Value |
 |---|---|
-| Платформа | Windows 10/11 x64 |
-| Стек | Electron, TypeScript, electron-builder, electron-updater |
-| Канал распространения | GitHub Releases |
+| Platform | Windows 10/11 x64 |
+| Stack | Electron, TypeScript, electron-builder, electron-updater |
+| Distribution channel | GitHub Releases |
 
-> Это публичная версия документа. Отдельные пункты, касающиеся юридических и организационных решений издателя, ведутся во внутренней документации проекта.
+> This is the public version of the document. Items covering the publisher's legal and organizational decisions are kept in the project's internal documentation.
 
-## 1. Назначение документа
+## 1. Purpose of this document
 
-Документ определяет:
+This document defines:
 
-- в каком виде пользователь получает LucidSSH;
-- как разработчик собирает и публикует новые версии;
-- как приложение обнаруживает и устанавливает обновления;
-- какие файлы должны находиться в GitHub Releases;
-- как хранятся предыдущие версии и выполняется откат;
-- как подписываются установщик и пакеты обновления;
-- какие требования безопасности и конфиденциальности применяются к обновлениям.
+- what form LucidSSH is delivered to the user in;
+- how the developer builds and publishes new versions;
+- how the app detects and installs updates;
+- what files must be present in a GitHub Release;
+- how previous versions are kept and how rollback works;
+- how the installer and update packages are signed;
+- what security and privacy requirements apply to updates.
 
-## 2. Принятое решение
+## 2. The chosen approach
 
-Для LucidSSH принимается следующая схема:
+LucidSSH follows this scheme:
 
-1. Основной формат распространения — NSIS-установщик `.exe`.
-2. Дополнительный формат — portable ZIP без установки.
-3. Сборка выполняется через `electron-builder`.
-4. Автообновление установленной версии выполняется через `electron-updater`.
-5. Файлы версий размещаются в GitHub Releases.
-6. На первом этапе разработчик собирает, проверяет и публикует релизы вручную со своего Windows-компьютера.
-7. Позже сборка может быть перенесена в GitHub Actions, но публикация стабильного релиза должна требовать ручного подтверждения.
-8. Все публичные стабильные обновления должны быть подписаны одним доверенным издателем.
-9. Предыдущие стабильные версии сохраняются в GitHub Releases и не удаляются без отдельной причины.
+1. Primary distribution format — an NSIS `.exe` installer.
+2. Secondary format — a portable ZIP requiring no installation.
+3. The build runs through `electron-builder`.
+4. The installed version auto-updates via `electron-updater`.
+5. Version files are hosted on GitHub Releases.
+6. At this stage, the developer builds, verifies, and publishes releases manually from their Windows machine.
+7. The build may later move to GitHub Actions, but publishing a stable release must always require manual confirmation.
+8. Every public stable update must be signed by a single trusted publisher.
+9. Previous stable versions are kept on GitHub Releases and never removed without a specific reason.
 
-## 3. Форматы приложения
+## 3. App formats
 
-### 3.1 Основной установщик
+### 3.1 Main installer
 
-Имя файла:
+File name:
 
 ```text
 LucidSSH-Setup-1.0.0.exe
 ```
 
-Установщик должен:
+The installer must:
 
-- устанавливать приложение в профиль текущего пользователя без обязательных прав администратора;
-- создавать ярлык в меню «Пуск»;
-- при выбранной пользователем настройке создавать ярлык на рабочем столе;
-- регистрировать LucidSSH в списке установленных приложений Windows;
-- поддерживать установку новой версии поверх предыдущей;
-- не удалять пользовательские данные при обновлении;
-- корректно удалять программные файлы через стандартный механизм Windows.
+- install into the current user's profile without requiring admin rights;
+- create a Start menu shortcut;
+- create a desktop shortcut if the user opts in;
+- register LucidSSH in the Windows list of installed applications;
+- support installing a new version over a previous one;
+- never delete user data on update;
+- cleanly remove program files via the standard Windows mechanism.
 
-### 3.2 Portable-версия
+### 3.2 Portable version
 
-Имя файла:
+File name:
 
 ```text
 LucidSSH-Portable-1.0.0.zip
 ```
 
-Portable-версия:
+The portable version:
 
-- запускается без установки;
-- не требует прав администратора;
-- обновляется пользователем вручную;
-- не является основным вариантом для начинающего пользователя;
-- не должна автоматически заменять свои исполняемые файлы.
+- runs without installation;
+- requires no admin rights;
+- is updated manually by the user;
+- is not the primary option for a beginner;
+- must never automatically replace its own executable files.
 
-Автоматическое обновление в версии 1.0 поддерживается только для установленной NSIS-версии.
+Automatic updates in version 1.0 are only supported for the installed NSIS version.
 
-## 4. Содержимое GitHub Release
+## 4. GitHub Release contents
 
-Для каждой стабильной версии создаётся отдельный Git-тег и отдельный GitHub Release.
+Every stable version gets its own Git tag and its own GitHub Release.
 
-Пример релиза `v1.0.1`:
+Example release `v1.0.1`:
 
 ```text
 v1.0.1
@@ -86,172 +86,172 @@ v1.0.1
 └── latest.yml
 ```
 
-Назначение файлов:
+File purposes:
 
-| Файл | Назначение |
+| File | Purpose |
 |---|---|
-| `LucidSSH-Setup-1.0.1.exe` | Установка приложения и установка обновления |
-| `.exe.blockmap` | Дифференциальная загрузка обновления, если она поддерживается для конкретной сборки |
-| `LucidSSH-Portable-1.0.1.zip` | Ручной запуск без установки |
-| `latest.yml` | Метаданные последней версии для `electron-updater` |
+| `LucidSSH-Setup-1.0.1.exe` | Installs the app and installs the update |
+| `.exe.blockmap` | Differential update downloads, where supported for a given build |
+| `LucidSSH-Portable-1.0.1.zip` | Manual, install-free use |
+| `latest.yml` | Latest-version metadata for `electron-updater` |
 
-Установщик, `.blockmap` и `latest.yml` должны быть получены из одной сборки. Запрещено вручную редактировать `latest.yml` или смешивать файлы разных сборок.
+The installer, `.blockmap`, and `latest.yml` must all come from the same build. Manually editing `latest.yml` or mixing files from different builds is forbidden.
 
-## 5. Нумерация версий
+## 5. Version numbering
 
-Используется Semantic Versioning:
+Semantic Versioning is used:
 
 ```text
 MAJOR.MINOR.PATCH
 ```
 
-Примеры:
+Examples:
 
-| Изменение | Новая версия |
+| Change | New version |
 |---|---|
-| Исправление ошибки без изменения совместимости | `1.0.0` → `1.0.1` |
-| Новая совместимая функция | `1.0.1` → `1.1.0` |
-| Несовместимое изменение архитектуры или данных | `1.1.0` → `2.0.0` |
+| A bug fix with no compatibility change | `1.0.0` → `1.0.1` |
+| A new backward-compatible feature | `1.0.1` → `1.1.0` |
+| An incompatible architecture or data change | `1.1.0` → `2.0.0` |
 
-Версия в `package.json`, имя установщика, Git-тег и GitHub Release должны совпадать.
+The version in `package.json`, the installer's file name, the Git tag, and the GitHub Release must all match.
 
-Повторная публикация другого файла под уже выпущенной версией запрещена. Для любого исправления создаётся новая версия, например `1.0.1` вместо замены файлов `1.0.0`.
+Re-publishing a different file under an already-released version number is forbidden. Any fix gets a new version — e.g. `1.0.1` instead of replacing `1.0.0`'s files.
 
-## 6. Ручная локальная публикация
+## 6. Manual local publishing
 
-На первом этапе релиз создаётся вручную.
+At this stage, releases are created manually.
 
-### 6.1 Последовательность
+### 6.1 Sequence
 
-1. Обновить номер версии в `package.json`.
-2. Обновить примечания к выпуску.
-3. Выполнить тесты и production-сборку.
-4. Собрать NSIS-установщик и portable ZIP через `electron-builder`.
-5. Подписать исполняемые файлы кодовым сертификатом (если доступен — см. §9).
-6. Проверить цифровую подпись и метку времени (если применимо).
-7. Установить новую версию на чистой тестовой системе.
-8. Проверить обновление с предыдущей стабильной версии.
-9. Проверить сохранность хостов, истории, настроек и ссылок на приватные ключи.
-10. Создать Git-тег вида `v1.0.1`.
-11. Создать GitHub Release с тем же номером версии.
-12. Загрузить все файлы, созданные одной сборкой.
-13. Сначала опубликовать релиз как draft и выполнить итоговую проверку.
-14. Опубликовать стабильный релиз.
-15. Проверить обнаружение обновления установленной предыдущей версией.
+1. Bump the version number in `package.json`.
+2. Update the release notes.
+3. Run tests and a production build.
+4. Build the NSIS installer and the portable ZIP via `electron-builder`.
+5. Sign the executables with a code-signing certificate (if available — see §9).
+6. Verify the digital signature and timestamp (if applicable).
+7. Install the new version on a clean test system.
+8. Verify updating from the previous stable version.
+9. Verify that hosts, history, settings, and private-key references survive.
+10. Create a Git tag like `v1.0.1`.
+11. Create a GitHub Release with the same version number.
+12. Upload every file produced by that one build.
+13. Publish the release as a draft first and do a final review.
+14. Publish the stable release.
+15. Verify that the installed previous version detects the update.
 
-### 6.2 Запрещённые действия
+### 6.2 Forbidden actions
 
-- Нельзя загружать приватный ключ сертификата или пароль от него в GitHub.
-- Нельзя помещать GitHub Personal Access Token в код приложения, `package.json` или установщик.
-- Нельзя заменять опубликованный установщик другим файлом с тем же номером версии.
-- Нельзя публиковать `latest.yml` раньше, чем загружен соответствующий установщик.
-- Нельзя публиковать непроверенную сборку сразу как стабильную.
+- Never upload the certificate's private key or its password to GitHub.
+- Never put a GitHub Personal Access Token in the app's code, `package.json`, or the installer.
+- Never replace a published installer with a different file under the same version number.
+- Never publish `latest.yml` before the corresponding installer has been uploaded.
+- Never publish an unverified build directly as stable.
 
-## 7. Работа автообновления
+## 7. How auto-update works
 
-### 7.1 Проверка новой версии
+### 7.1 Checking for a new version
 
-Установленная версия LucidSSH:
+The installed LucidSSH:
 
-1. проверяет обновление после запуска приложения;
-2. позволяет выполнить ручную проверку через пункт «Проверить обновления»;
-3. запрашивает только данные GitHub Releases, необходимые для обновления;
-4. не передаёт историю команд, список хостов, адреса серверов, содержимое терминала или другие пользовательские данные;
-5. при отсутствии интернета продолжает обычную работу без сообщения об ошибке при каждом запуске.
+1. checks for an update after the app launches;
+2. lets the user trigger a manual check via "Check for updates";
+3. only requests the GitHub Releases data needed for the update;
+4. never sends command history, the host list, server addresses, terminal contents, or any other user data;
+5. keeps working normally with no internet, without an error message on every launch.
 
-Проверка не должна задерживать открытие интерфейса или подключение по SSH.
+The check must never delay opening the interface or connecting over SSH.
 
-### 7.2 Пользовательский сценарий
+### 7.2 User flow
 
-При обнаружении версии приложение показывает:
+When a new version is found, the app shows:
 
-- номер установленной версии;
-- номер новой версии;
-- краткий список изменений;
-- приблизительный размер загрузки;
-- действия «Скачать» и «Позже».
+- the installed version number;
+- the new version number;
+- a short changelog;
+- the approximate download size;
+- "Download" and "Later" actions.
 
-После загрузки приложение показывает:
+After downloading, the app shows:
 
-- сообщение «Обновление готово к установке»;
-- действия «Перезапустить сейчас» и «При следующем выходе».
+- a "Update ready to install" message;
+- "Restart now" and "On next exit" actions.
 
-Обновление не должно принудительно закрывать активную SSH-сессию. Перед перезапуском приложение предупреждает о незавершённых сессиях.
+An update must never force-close an active SSH session. Before restarting, the app warns about any unfinished sessions.
 
-### 7.3 Каналы обновления
+### 7.3 Update channels
 
-В версии 1.0 используется только стабильный канал.
+Version 1.0 uses only the stable channel.
 
-- Draft-релизы не предлагаются пользователям.
-- Prerelease-версии не предлагаются пользователям стабильного канала.
-- Альфа- и бета-каналы не входят в версию 1.0.
+- Draft releases are never offered to users.
+- Prerelease versions are never offered to stable-channel users.
+- Alpha and beta channels are out of scope for version 1.0.
 
-## 8. Безопасность обновления
+## 8. Update security
 
-### 8.1 Обязательные проверки
+### 8.1 Mandatory checks
 
-Перед установкой обновления приложение должно:
+Before installing an update, the app must:
 
-- получить метаданные релиза по HTTPS;
-- скачать пакет обновления и его контрольную сумму SHA-256 из GitHub Release;
-- проверить целостность загруженного файла путём сравнения хеша с опубликованной контрольной суммой;
-- отклонить повреждённый или не совпадающий по контрольной сумме пакет;
-- записать техническую ошибку обновления без сохранения секретов и содержимого SSH-сессий.
+- fetch release metadata over HTTPS;
+- download the update package and its SHA-256 checksum from the GitHub Release;
+- verify the downloaded file's integrity by comparing its hash against the published checksum;
+- reject a package that's corrupted or whose checksum doesn't match;
+- log a technical update error without saving secrets or SSH session contents.
 
-Проверка контрольной суммы должна выполняться в main process. Renderer не получает прямого доступа к файловой системе, токенам публикации или механизмам установки.
+Checksum verification must run in the main process. The renderer gets no direct access to the filesystem, publishing tokens, or the install mechanism.
 
-### 8.2 Постоянство издателя
+### 8.2 Publisher consistency
 
-Имя издателя и сертификат необходимо выбрать до первого стабильного публичного релиза. Смена имени издателя или сертификата должна планироваться отдельно, поскольку она может нарушить проверку обновлений установленными версиями.
+The publisher name and certificate must be chosen before the first stable public release. Changing the publisher name or certificate must be planned separately, since it can break update verification for already-installed versions.
 
-Каждая подпись должна содержать доверенную метку времени. Благодаря метке времени ранее выпущенная версия остаётся корректно подписанной после окончания срока действия сертификата.
+Every signature must carry a trusted timestamp. Thanks to the timestamp, a previously released version stays validly signed even after the certificate expires.
 
-### 8.3 GitHub и приватный репозиторий
+### 8.3 GitHub and a private repository
 
-Для прямого обновления через GitHub Releases рекомендуется публичный репозиторий или отдельный публичный источник релизов.
+For direct updates via GitHub Releases, a public repository or a separate public release source is recommended.
 
-Приложение не должно содержать токен для доступа к приватному GitHub-репозиторию: такой токен можно извлечь из установленного приложения. Если исходный код останется приватным, для обновлений потребуется отдельный публичный сервер или публичный репозиторий только с релизными файлами.
+The app must never contain a token for accessing a private GitHub repository — such a token could be extracted from the installed app. If the source stays private, updates need either a separate public server or a public repository containing only the release files.
 
-## 9. Подпись и целостность пакета
+## 9. Package signing and integrity
 
-### 9.1 Решение для версии 1.0: отсутствие Code Signing Certificate
+### 9.1 Decision for version 1.0: no Code Signing Certificate
 
-На текущий момент принято решение: релиз LucidSSH 1.0 выходит **без подписи доверенным сертификатом Code Signing**.
+As things stand, the decision is: LucidSSH 1.0 ships **without a trusted Code Signing Certificate signature**.
 
-**Замена подписи в 1.0:**
+**What replaces signing in 1.0:**
 
-1. Каждый релиз сопровождается **опубликованной SHA-256 контрольной суммой** в описании GitHub Release и на странице загрузки.
-2. **При первом скачивании** (описание GitHub Release) пользователю **на русском языке объясняется**, что означает предупреждение Windows «Неизвестный издатель» и как проверить файл по контрольной сумме — это единственный момент, когда объяснение имеет смысл: SmartScreen показывается ДО запуска, а не после. Окно первого запуска приложения ничего не объясняет специально — вместо этого в Настройках → О программе есть спокойная информационная строка «почему нет цифровой подписи» со ссылкой на контрольную сумму, для тех, кто решит проверить постфактум.
-3. Перед стабильной публикацией каждый релиз отправляется на проверку **Microsoft Security Intelligence** (портал submit.microsoft.com, best-effort сканирование без гарантий).
-4. При появлении подписанной версии объяснение будет обновлено.
+1. Every release ships with a **published SHA-256 checksum** in the GitHub Release description and on the download page.
+2. **On first download** (the GitHub Release description), the user gets an explanation of what the Windows "Unknown publisher" warning means and how to verify the file via the checksum — this is the only point where the explanation is useful, since SmartScreen fires BEFORE launch, not after. The app's first-launch window doesn't explain anything specifically — instead, Settings → About has a calm informational line about why there's no digital signature, with a link to the checksum, for anyone who checks after the fact.
+3. Before a stable publish, every release is submitted to **Microsoft Security Intelligence** for review (submit.microsoft.com, best-effort scanning, no guarantees).
+4. Once a signed version exists, this explanation will be updated.
 
-### 9.2 Механизм проверки целостности
+### 9.2 Integrity-verification mechanism
 
-Приложение при обновлении сравнивает SHA-256 хеш загруженного пакета с контрольной суммой, опубликованной в `latest.yml` GitHub Release. Повреждённый пакет отклоняется и не устанавливается.
+On update, the app compares the downloaded package's SHA-256 hash against the checksum published in the GitHub Release's `latest.yml`. A corrupted package is rejected and not installed.
 
-### 9.3 Microsoft SmartScreen и репутация
+### 9.3 Microsoft SmartScreen and reputation
 
-SmartScreen показывает предупреждение «Неизвестный издатель» для неподписанных файлов; подпись отменяет только часть предупреждений.
+SmartScreen shows an "Unknown publisher" warning for unsigned files; a signature only clears part of the warnings.
 
-После накопления достаточного количества скачиваний и отсутствия негативных сигналов SmartScreen может снизить уровень предупреждения. Однако это не является контролируемым критерием и не входит в требования к приёмке.
+After enough downloads accumulate with no negative signals, SmartScreen may lower the warning level. However, that isn't a controllable criterion and isn't part of the acceptance requirements.
 
-### 9.4 Будущие версии: возврат к подписи
+### 9.4 Future versions: returning to signing
 
-После определения модели распространения возможен возврат к подписи стабильного установщика в одной из будущих версий. Выбор конкретного пути и реализация — в дорожной карте будущих версий.
+Once the distribution model is settled, returning to signing the stable installer is possible in a future version. The specific path and implementation belong to the roadmap for future versions.
 
 ## 10. SmartScreen
 
-Цифровая подпись подтверждает издателя и целостность файла, но сама по себе не гарантирует отсутствие предупреждения Microsoft Defender SmartScreen.
+A digital signature confirms the publisher and file integrity, but on its own it doesn't guarantee the absence of a Microsoft Defender SmartScreen warning.
 
-Репутация SmartScreen зависит также от истории сертификата, распространённости файла и отсутствия негативных сигналов. Поэтому критерий приёмки нельзя формулировать только как «SmartScreen не показывает предупреждение».
+SmartScreen reputation also depends on the certificate's history, how widely the file is distributed, and the absence of negative signals. So the acceptance criterion can't just be phrased as "SmartScreen shows no warning."
 
-Корректная формулировка требования:
+The correct requirement wording:
 
-> Стабильный установщик подписан действительным доверенным сертификатом Code Signing, содержит доверенную метку времени, отображает ожидаемое имя издателя и успешно проходит проверку цифровой подписи Windows. Команда проекта принимает разумные меры для формирования репутации SmartScreen, однако отсутствие предупреждения на всех устройствах не является полностью контролируемым критерием.
+> The stable installer is signed with a valid, trusted Code Signing Certificate, carries a trusted timestamp, shows the expected publisher name, and passes Windows digital-signature verification. The project team takes reasonable steps to build SmartScreen reputation, but the absence of a warning on every device is not a fully controllable criterion.
 
-## 11. Хранение версий
+## 11. Version retention
 
-GitHub Releases должен хранить все опубликованные стабильные версии:
+GitHub Releases must keep every published stable version:
 
 ```text
 v1.0.0
@@ -259,139 +259,139 @@ v1.0.1
 v1.1.0
 ```
 
-Правила:
+Rules:
 
-- предыдущие стабильные версии остаются доступными для ручного скачивания;
-- автообновление предлагает только последнюю подходящую стабильную версию;
-- draft и prerelease не считаются последней стабильной версией;
-- удаление старой версии допускается только при критической уязвимости, юридической причине или повреждении релизных файлов;
-- при отзыве небезопасной версии на странице релиза размещается заметное предупреждение;
-- удаление Git-тега и релиза выполняется только как отдельное осознанное действие.
+- previous stable versions stay available for manual download;
+- auto-update only ever offers the latest suitable stable version;
+- drafts and prereleases don't count as the latest stable version;
+- removing an old version is only allowed for a critical vulnerability, a legal reason, or corrupted release files;
+- when an unsafe version is pulled, a visible warning is posted on the release page;
+- deleting a Git tag and release is only ever done as a separate, deliberate action.
 
-## 12. Откат
+## 12. Rollback
 
-Автоматическое понижение версии не выполняется.
+Automatic downgrades never happen.
 
-Если новая версия содержит критическую ошибку:
+If a new version has a critical bug:
 
-1. публикация проблемной версии прекращается или помечается предупреждением;
-2. выпускается новая исправленная версия с увеличенным номером, например `1.0.2`;
-3. пользователям предлагается обновление на исправленную версию;
-4. при необходимости пользователь может вручную скачать предыдущий установщик из GitHub Releases.
+1. publishing of the problem version is stopped or it's flagged with a warning;
+2. a new fixed version is released with a higher number, e.g. `1.0.2`;
+3. users are offered the update to the fixed version;
+4. if needed, the user can manually download a previous installer from GitHub Releases.
 
-Миграции локальной базы данных должны быть спроектированы так, чтобы не повреждать данные при неудачном обновлении. Перед необратимой миграцией приложение создаёт локальную резервную копию базы.
+Local database migrations must be designed so a failed update never corrupts data. A local database backup is made before any irreversible migration.
 
-## 13. Сохранность пользовательских данных
+## 13. User data preservation
 
-Обновление или переустановка поверх существующей версии не должны удалять:
+An update or a reinstall over an existing version must never delete:
 
-- сохранённые хосты и группы;
-- историю команд и заметки;
+- saved hosts and groups;
+- command history and notes;
 - `known_hosts`;
-- настройки приложения;
-- ссылки на исходные файлы приватных ключей;
-- записи LucidSSH в Windows Credential Manager.
+- app settings;
+- references to the original private-key files;
+- LucidSSH's entries in Windows Credential Manager.
 
-Приватные ключи не копируются в пакет приложения или каталог обновления. Пароли и passphrase не участвуют в проверке или установке обновления.
+Private keys are never copied into the app package or the update directory. Passwords and passphrases play no role in verifying or installing an update.
 
-Полное удаление пользовательских данных допускается только по отдельному явному выбору пользователя в деинсталляторе.
+Fully deleting user data is only allowed via a separate, explicit user choice in the uninstaller.
 
-## 14. Конфиденциальность и сетевые соединения
+## 14. Privacy and network connections
 
-Автообновление требует отдельного исходящего HTTPS-соединения к GitHub Releases в дополнение к SSH-соединениям пользователя. Формулировка соответствующего требования (`SEC-07`):
+Auto-update requires a separate outbound HTTPS connection to GitHub Releases, on top of the user's SSH connections. The corresponding requirement (`SEC-07`) is worded as:
 
-> Приложение не передаёт внешним сервисам данные о хостах, SSH-сессиях, командах, терминальном выводе, ключах или учётных данных. В версии 1.0 разрешены только SSH-соединения к указанным пользователем серверам и HTTPS-запросы к настроенному источнику обновлений GitHub Releases. Запрос обновления содержит только технические сетевые данные, неизбежные для HTTPS, и сведения, необходимые для определения версии. Телеметрия и аналитика отсутствуют.
+> The app never sends host data, SSH session data, commands, terminal output, keys, or credentials to external services. In version 1.0, only SSH connections to servers the user specifies and HTTPS requests to the configured GitHub Releases update source are allowed. The update request contains only the technical network data inherent to HTTPS, plus what's needed to identify the version. There's no telemetry or analytics.
 
-В настройках должна отображаться ссылка на источник обновлений. Кнопка ручной проверки должна явно сообщать, что выполняется соединение с GitHub.
+Settings must show a link to the update source. The manual-check button must clearly state that it connects to GitHub.
 
-## 15. Обработка ошибок
+## 15. Error handling
 
-| Ситуация | Поведение |
+| Situation | Behavior |
 |---|---|
-| Нет интернета | Приложение продолжает работу; ошибка проверки не мешает SSH |
-| GitHub недоступен | Повторная проверка позже или вручную |
-| Недостаточно места | Загрузка прекращается, показывается понятное сообщение |
-| Повреждённый файл | Файл удаляется, установка не запускается |
-| Неверная подпись | Обновление блокируется как потенциально опасное |
-| Активна SSH-сессия | Перезапуск только после подтверждения пользователя |
-| Установка не удалась | Текущая версия остаётся работоспособной, показывается инструкция повторной попытки |
+| No internet | The app keeps working; the check error doesn't interfere with SSH |
+| GitHub unreachable | Retry later or manually |
+| Not enough disk space | The download stops, a clear message is shown |
+| Corrupted file | The file is deleted, the install never starts |
+| Invalid signature | The update is blocked as potentially unsafe |
+| An SSH session is active | Restart only happens after user confirmation |
+| Install failed | The current version stays functional, retry instructions are shown |
 
-Все сообщения пользователю должны быть на русском языке. Технический журнал обновлений не должен содержать секреты, адреса серверов, команды или терминальный вывод.
+Every message shown to the user must be localized. The technical update log must never contain secrets, server addresses, commands, or terminal output.
 
-## 16. Требования для включения в ТЗ
+## 16. Requirements for the spec
 
-### UPD-01. Проверка обновления
+### UPD-01. Update check
 
-Приложение проверяет GitHub Releases при запуске и по ручной команде, не блокируя интерфейс и SSH-соединения.
+The app checks GitHub Releases on launch and on manual request, without blocking the interface or SSH connections.
 
-**Критерий приёмки:** при наличии новой стабильной версии отображается её номер и список изменений; при отсутствии интернета приложение продолжает работу.
+**Acceptance criteria:** when a new stable version exists, its number and changelog are shown; with no internet, the app keeps working.
 
-### UPD-02. Согласие пользователя
+### UPD-02. User consent
 
-Загрузка и перезапуск выполняются только после понятного действия пользователя.
+Downloading and restarting only happen after a clear user action.
 
-**Критерий приёмки:** приложение не закрывает активную SSH-сессию без подтверждения.
+**Acceptance criteria:** the app never closes an active SSH session without confirmation.
 
-### UPD-03. Проверка целостности
+### UPD-03. Integrity verification
 
-Перед установкой проверяется целостность пакета через сравнение SHA-256 с контрольной суммой, опубликованной в GitHub Release.
+Before installing, package integrity is verified by comparing SHA-256 against the checksum published in the GitHub Release.
 
-**Критерий приёмки:** повреждённый или не совпадающий по контрольной сумме пакет отклоняется и не устанавливается.
+**Acceptance criteria:** a corrupted package, or one whose checksum doesn't match, is rejected and not installed.
 
-### UPD-04. Сохранность данных
+### UPD-04. Data preservation
 
-Обновление не удаляет пользовательские данные и секреты.
+An update never deletes user data or secrets.
 
-**Критерий приёмки:** после обновления с предыдущей стабильной версии доступны прежние хосты, история, настройки и записи Credential Manager.
+**Acceptance criteria:** after updating from a previous stable version, prior hosts, history, settings, and Credential Manager entries are still available.
 
-### UPD-05. Публикация релиза
+### UPD-05. Release publishing
 
-Каждой версии соответствует уникальный номер, Git-тег и GitHub Release. Все файлы обновления происходят из одной сборки.
+Every version has a unique number, a Git tag, and a GitHub Release. All update files come from the same build.
 
-**Критерий приёмки:** установленная предыдущая версия обнаруживает опубликованный релиз и успешно обновляется.
+**Acceptance criteria:** an installed previous version detects the published release and updates successfully.
 
-### UPD-06. Предыдущие версии
+### UPD-06. Previous versions
 
-Предыдущие стабильные версии сохраняются в GitHub Releases.
+Previous stable versions are kept on GitHub Releases.
 
-**Критерий приёмки:** пользователь может вручную скачать предыдущий установщик, если релиз не отозван по причине безопасности.
+**Acceptance criteria:** the user can manually download a previous installer, unless the release was pulled for security reasons.
 
-### SIGN-01. Подпись стабильной версии (N/A для v1.0)
+### SIGN-01. Stable-version signing (N/A for v1.0)
 
-**Не применимо для версии 1.0.** Релиз выходит без Code Signing Certificate.
+**Not applicable to version 1.0.** The release ships without a Code Signing Certificate.
 
-**Принцип на будущее:** стабильный установщик и пакет обновления подписываются доверенным Code Signing Certificate с меткой времени.
+**Principle for the future:** the stable installer and update package are signed with a trusted, timestamped Code Signing Certificate.
 
-**Критерий приёмки (когда станет применимо):** свойства файла Windows показывают действительную подпись и ожидаемого издателя.
+**Acceptance criteria (once applicable):** Windows file properties show a valid signature and the expected publisher.
 
-### SIGN-02. Защита ключа подписи (N/A для v1.0)
+### SIGN-02. Signing-key protection (N/A for v1.0)
 
-**Не применимо для версии 1.0.** Релиз выходит без сертификата.
+**Not applicable to version 1.0.** The release ships with no certificate.
 
-**Принцип на будущее:** закрытый ключ сертификата не хранится в репозитории или исходном коде.
+**Principle for the future:** the certificate's private key is never stored in the repository or the source code.
 
-**Критерий приёмки (когда станет применимо):** аудит репозитория и релизных файлов не обнаруживает сертификат с закрытым ключом, пароль или токен доступа.
+**Acceptance criteria (once applicable):** auditing the repository and release files finds no certificate with a private key, password, or access token.
 
-## 17. Итоговая схема версии 1.0
+## 17. Version 1.0 end-to-end flow
 
 ```text
-Разработчик
-    → изменяет номер версии
-    → собирает LucidSSH локально
-    → вычисляет SHA-256 контрольную сумму файлов
-    → отправляет релиз на сканирование Microsoft Security Intelligence
-    → проверяет чистую установку и обновление
-    → создаёт Git-тег и draft-релиз
-    → загружает EXE, blockmap, ZIP и latest.yml
-    → добавляет SHA-256 в описание Release
-    → публикует стабильный GitHub Release
+Developer
+    → bumps the version number
+    → builds LucidSSH locally
+    → computes the SHA-256 checksum of the files
+    → submits the release to Microsoft Security Intelligence for scanning
+    → verifies a clean install and an update
+    → creates a Git tag and a draft release
+    → uploads the EXE, blockmap, ZIP, and latest.yml
+    → adds the SHA-256 to the Release description
+    → publishes the stable GitHub Release
 
-LucidSSH пользователя
-    → проверяет latest.yml по HTTPS
-    → сообщает о новой версии
-    → загружает обновление с согласия пользователя
-    → проверяет целостность путём сравнения SHA-256
-    → предлагает безопасный перезапуск
-    → устанавливает версию поверх текущей
-    → сохраняет пользовательские данные
+The user's LucidSSH
+    → checks latest.yml over HTTPS
+    → reports the new version
+    → downloads the update with the user's consent
+    → verifies integrity by comparing SHA-256
+    → offers a safe restart
+    → installs the version over the current one
+    → preserves user data
 ```

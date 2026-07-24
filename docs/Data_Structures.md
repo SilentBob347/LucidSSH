@@ -1,71 +1,71 @@
-# LucidSSH for Windows — Спецификация структур данных
+# LucidSSH for Windows — Data Structures Specification
 
-| Поле | Значение |
+| Field | Value |
 |---|---|
-| Версия документа | 1.1 |
-| Дата | 27 июня 2026 |
-| Назначение | Схемы БД, форматы встроенных баз, IPC-контракты и формат настроек для Claude Code |
-| Базовые документы | `LucidSSH_TZ_v1.4.md`, `LucidSSH_Security_Guide.md` |
+| Document version | 1.1 |
+| Date | June 27, 2026 |
+| Purpose | DB schemas, built-in database formats, IPC contracts, and settings format for Claude Code |
+| Base documents | `TZ.md`, `Security_Guide.md` |
 
-> Всё, что касается хранения и обмена данными, описано здесь, чтобы реализация была единообразной. TypeScript-типы — целевая форма; конкретные имена столбцов можно адаптировать, но семантика и ограничения безопасности обязательны. Секреты не хранятся в SQLite/JSON и не передаются в renderer — это сквозное правило (SEC-01, §10 гайда).
+> Everything related to data storage and exchange is described here so the implementation stays consistent. The TypeScript types are the target shape; specific column names can be adapted, but the semantics and security constraints are mandatory. Secrets are never stored in SQLite/JSON and are never passed to the renderer — this is a cross-cutting rule (SEC-01, guide §10).
 
 ---
 
-## 1. Хранилища (обзор)
+## 1. Storage overview
 
-| Данные | Хранилище | Файл | Секреты |
+| Data | Storage | File | Secrets |
 |---|---|---|---|
-| Хосты и группы | SQLite | `%APPDATA%\LucidSSH\hosts.db` | Нет — только ссылка `LucidSSH/{hostId}` |
-| История команд | SQLite | `%APPDATA%\LucidSSH\history.db` | Нет — секреты замаскированы (HIST-07) |
-| Пароли и passphrase | Windows Credential Manager | системное | Да — через keytar |
-| Known hosts | Файл | `%APPDATA%\LucidSSH\known_hosts` | Нет |
-| Настройки | JSON | `%APPDATA%\LucidSSH\config.json` | Нет |
-| База ошибок | Встроена в пакет | `assets/errors.json` | Нет |
-| Каталог команд | Встроена в пакет | `assets/commands.json` | Нет |
+| Hosts and groups | SQLite | `%APPDATA%\LucidSSH\hosts.db` | No — only a reference `LucidSSH/{hostId}` |
+| Command history | SQLite | `%APPDATA%\LucidSSH\history.db` | No — secrets are masked (HIST-07) |
+| Passwords and passphrases | Windows Credential Manager | system | Yes — via keytar |
+| Known hosts | File | `%APPDATA%\LucidSSH\known_hosts` | No |
+| Settings | JSON | `%APPDATA%\LucidSSH\config.json` | No |
+| Error database | Bundled with the package | `assets/errors.json` | No |
+| Command catalog | Bundled with the package | `assets/commands.json` | No |
 
-Файлы создаются с доступом только для текущего пользователя Windows (насколько поддерживает ОС). Все SQL-запросы параметризованы; конкатенация значений в SQL запрещена. История и хосты — в **раздельных** файлах БД, чтобы отключение/очистка истории не затрагивала хосты.
+Files are created with access restricted to the current Windows user (as far as the OS supports it). All SQL queries are parameterized; concatenating values into SQL is forbidden. History and hosts live in **separate** database files, so disabling/clearing history never touches hosts.
 
 ---
 
 ## 2. SQLite — hosts.db
 
-### 2.1 Таблица `groups`
+### 2.1 The `groups` table
 
 ```sql
 CREATE TABLE groups (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   name        TEXT    NOT NULL,
   sort_order  INTEGER NOT NULL DEFAULT 0,
-  collapsed   INTEGER NOT NULL DEFAULT 0,   -- 0/1, состояние дерева (HM-02)
+  collapsed   INTEGER NOT NULL DEFAULT 0,   -- 0/1, tree state (HM-02)
   created_at  TEXT    NOT NULL              -- ISO 8601
 );
 ```
 
-### 2.2 Таблица `hosts`
+### 2.2 The `hosts` table
 
 ```sql
 CREATE TABLE hosts (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  name          TEXT    NOT NULL,            -- отображаемое имя
-  address       TEXT    NOT NULL,            -- IP или домен
+  name          TEXT    NOT NULL,            -- display name
+  address       TEXT    NOT NULL,            -- IP or domain
   port          INTEGER NOT NULL DEFAULT 22,
   username      TEXT    NOT NULL,
   auth_method   TEXT    NOT NULL,            -- 'password' | 'key'
-  key_path      TEXT,                        -- путь к ОРИГИНАЛЬНОМУ файлу ключа, не копия (SEC-02)
+  key_path      TEXT,                        -- path to the ORIGINAL key file, not a copy (SEC-02)
   group_id      INTEGER REFERENCES groups(id) ON DELETE SET NULL,
-  proxy_jump    TEXT,                        -- host id или строка ProxyJump (SSH-05)
+  proxy_jump    TEXT,                        -- host id or ProxyJump string (SSH-05)
   note          TEXT,
-  color_tag     TEXT,                        -- 'red'|'orange'|'green'|'blue'|'gray'|NULL (без метки), HM-08
-  guard_enabled INTEGER NOT NULL DEFAULT 1,  -- отключение стража на хост (GUARD-05)
+  color_tag     TEXT,                        -- 'red'|'orange'|'green'|'blue'|'gray'|NULL (no tag), HM-08
+  guard_enabled INTEGER NOT NULL DEFAULT 1,  -- per-host guard disable (GUARD-05)
   sort_order    INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT    NOT NULL,
   updated_at    TEXT    NOT NULL
-  -- ВАЖНО: ни password, ни passphrase, ни содержимого ключа здесь нет.
-  -- Секрет в Credential Manager под ключом LucidSSH/{id}.
+  -- IMPORTANT: no password, passphrase, or key contents live here.
+  -- The secret is in Credential Manager under the key LucidSSH/{id}.
 );
 ```
 
-### 2.3 TypeScript-типы
+### 2.3 TypeScript types
 
 ```ts
 type AuthMethod = 'password' | 'key';
@@ -86,19 +86,19 @@ interface Host {
   port: number;
   username: string;
   authMethod: AuthMethod;
-  keyPath?: string;        // путь к оригиналу
+  keyPath?: string;        // path to the original
   groupId?: number;
   proxyJump?: string;
   note?: string;
-  colorTag?: HostColorTag;  // HM-08, undefined/null = без метки
+  colorTag?: HostColorTag;  // HM-08, undefined/null = no tag
   guardEnabled: boolean;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
 }
 
-// Форма для создания/редактирования. Секрет передаётся ОТДЕЛЬНО и сразу
-// уходит в keychain, не сохраняясь в объекте хоста и не возвращаясь в renderer.
+// The create/edit form. The secret is passed SEPARATELY and goes straight
+// into the keychain — it's never stored on the host object or returned to the renderer.
 interface HostInput {
   name: string;
   address: string;
@@ -113,37 +113,37 @@ interface HostInput {
 }
 ```
 
-### 2.4 Связь с Credential Manager
+### 2.4 Relation to Credential Manager
 
 ```ts
-// keychain/ — единственное место работы с секретами
+// keychain/ — the only place that touches secrets
 const CRED_SERVICE = 'LucidSSH';
-// account = String(hostId); пароль ИЛИ passphrase ключа
+// account = String(hostId); the password OR the key's passphrase
 keytar.setPassword(CRED_SERVICE, String(hostId), secret);
-keytar.getPassword(CRED_SERVICE, String(hostId)); // только в main, не в IPC-ответ
-keytar.deletePassword(CRED_SERVICE, String(hostId)); // при удалении хоста, после подтверждения
+keytar.getPassword(CRED_SERVICE, String(hostId)); // main only, never in an IPC response
+keytar.deletePassword(CRED_SERVICE, String(hostId)); // on host deletion, after confirmation
 ```
 
-UI пароля никогда не подставляет реальное значение — показывает только состояние «пароль сохранён» (§10 гайда).
+The password UI never fills in the actual value — it only shows a "password saved" state (guide §10).
 
 ---
 
 ## 3. SQLite — history.db
 
-### 3.1 Таблица `history`
+### 3.1 The `history` table
 
 ```sql
 CREATE TABLE history (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  command     TEXT    NOT NULL,             -- УЖЕ замаскированная строка (HIST-07)
-  host_id     INTEGER,                       -- может быть NULL, если хост удалён
-  host_name   TEXT    NOT NULL,             -- денормализовано: остаётся читаемым после удаления хоста
+  command     TEXT    NOT NULL,             -- ALREADY masked (HIST-07)
+  host_id     INTEGER,                       -- can be NULL if the host was deleted
+  host_name   TEXT    NOT NULL,             -- denormalized: stays readable after the host is deleted
   username    TEXT    NOT NULL,
   started_at  TEXT    NOT NULL,             -- ISO 8601
   finished_at TEXT,
-  exit_code   INTEGER,                       -- NULL пока не завершилась
+  exit_code   INTEGER,                       -- NULL until it finishes
   guard_status TEXT,                         -- NULL | 'blocked' | 'confirmed' (HIST-05)
-  has_secret  INTEGER NOT NULL DEFAULT 0,   -- 1 если в команде было замаскировано значение
+  has_secret  INTEGER NOT NULL DEFAULT 0,   -- 1 if a value in the command was masked
   note        TEXT
 );
 
@@ -152,14 +152,14 @@ CREATE INDEX idx_history_host    ON history(host_id);
 CREATE INDEX idx_history_time    ON history(started_at);
 ```
 
-### 3.2 TypeScript-тип
+### 3.2 TypeScript type
 
 ```ts
 type GuardStatus = 'blocked' | 'confirmed';
 
 interface HistoryEntry {
   id: number;
-  command: string;          // маскированная
+  command: string;          // masked
   hostId?: number;
   hostName: string;
   username: string;
@@ -172,47 +172,47 @@ interface HistoryEntry {
 }
 ```
 
-### 3.3 Правила маскирования (HIST-07)
+### 3.3 Masking rules (HIST-07)
 
-Маскирование выполняется в main **до** записи. Замаскированное значение нигде не восстанавливается и не попадает в поиск/экспорт. Минимальный набор детектируемых паттернов:
+Masking happens in main **before** the write. A masked value is never restored anywhere and never surfaces in search/export. The minimum set of detected patterns:
 
 ```ts
-// secrets/maskers.ts — паттерны выносятся отдельно и покрываются тестами,
-// по аналогии с guard/patterns.ts
+// secrets/maskers.ts — patterns live in their own file and are covered by tests,
+// mirroring guard/patterns.ts
 const SECRET_PATTERNS: { re: RegExp; mask: (m: RegExpMatchArray) => string }[] = [
-  // export KEY=value / KEY=value перед командой
+  // export KEY=value / KEY=value before a command
   { re: /\b([A-Z_][A-Z0-9_]*)=(\S+)/g, mask: m => `${m[1]}=••••••••` },
   // --password=value / --pass value
   { re: /(--password=|--pass(word)?[= ])(\S+)/gi, mask: m => `${m[1]}••••••••` },
-  // -p<value> (mysql/curl стиль, без пробела)
+  // -p<value> (mysql/curl style, no space)
   { re: /(\s-p)(\S+)/g, mask: m => `${m[1]}••••••••` },
   // Authorization: Bearer <token>
   { re: /(Authorization:\s*Bearer\s+)(\S+)/gi, mask: m => `${m[1]}••••••••` },
-  // mysql --password=...  (покрывается общим --password= выше)
+  // mysql --password=...  (covered by the general --password= rule above)
 ];
 ```
 
-> Это не исчерпывающий детектор, а защита от типичных утечек. Список расширяется тестами на реальных примерах из §15 гайда. Пользователь дополнительно может не сохранять отдельную команду и отключить историю (HIST-07).
+> This is not an exhaustive detector, just protection against common leaks. The list grows via tests against real-world examples from guide §15. The user can additionally skip saving an individual command or disable history (HIST-07).
 
-### 3.4 FIFO-лимит
+### 3.4 FIFO limit
 
-Лимит 10 000 записей (HIST-06). При превышении удаляется старейшая по `started_at`, **кроме** записей, отмеченных как избранное (`is_favorite = 1`). Terminal output по умолчанию не сохраняется.
+A 10,000-entry limit (HIST-06). Once exceeded, the oldest entry by `started_at` is removed, **except** entries marked as favorites (`is_favorite = 1`). Terminal output is not saved by default.
 
 ---
 
-## 4. SQLite — snippets (в history.db)
+## 4. SQLite — snippets (in history.db)
 
 ```sql
 CREATE TABLE snippets (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  name        TEXT    NOT NULL,             -- короткое имя сниппета
-  command     TEXT    NOT NULL,             -- команда (секреты маскируются так же, как в history)
-  description TEXT,                         -- необязательное описание
-  host_id     INTEGER,                      -- привязка к хосту (NULL = глобальный, SNIP-05)
-                                            -- при удалении хоста: NULL (перевести в глобальные)
-                                            -- или запись удаляется — по выбору пользователя (SNIP-07)
-  danger      INTEGER NOT NULL DEFAULT 0,   -- 1 если команда матчит паттерн опасных команд
-  sort_order  INTEGER NOT NULL DEFAULT 0,   -- ручной порядок в рамках своей группы (host_id или NULL); SNIP-10
+  name        TEXT    NOT NULL,             -- short snippet name
+  command     TEXT    NOT NULL,             -- the command (secrets masked the same way as in history)
+  description TEXT,                         -- optional description
+  host_id     INTEGER,                      -- tied to a host (NULL = global, SNIP-05)
+                                            -- on host deletion: set to NULL (converted to global)
+                                            -- or the row is deleted — the user's choice (SNIP-07)
+  danger      INTEGER NOT NULL DEFAULT 0,   -- 1 if the command matches a dangerous-command pattern
+  sort_order  INTEGER NOT NULL DEFAULT 0,   -- manual order within its group (host_id or NULL); SNIP-10
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );
@@ -221,7 +221,7 @@ CREATE INDEX idx_snippets_host ON snippets(host_id);
 CREATE INDEX idx_snippets_danger ON snippets(danger);
 ```
 
-> **sort_order (SNIP-10):** уникален и последователен в пределах группы (все записи с одинаковым `host_id`, включая NULL для глобальных); при вставке новой записи присваивается `max(sort_order)+1` в своей группе.
+> **sort_order (SNIP-10):** unique and sequential within a group (all rows sharing the same `host_id`, including NULL for globals); a newly inserted row gets `max(sort_order)+1` within its group.
 
 ```ts
 interface Snippet {
@@ -229,24 +229,24 @@ interface Snippet {
   name: string;
   command: string;
   description?: string;
-  hostId?: number;        // undefined / null = глобальный; число = серверный (SNIP-05)
-  danger: boolean;        // true если команда матчит паттерн опасных команд (определяется при сохранении)
-  sortOrder: number;      // ручной порядок в рамках своей группы (SNIP-10)
+  hostId?: number;        // undefined / null = global; a number = server-scoped (SNIP-05)
+  danger: boolean;        // true if the command matches a dangerous-command pattern (determined on save)
+  sortOrder: number;      // manual order within its group (SNIP-10)
   createdAt: string;
   updatedAt: string;
 }
 
-// Используется при отображении: глобальные + серверные текущего хоста (SNIP-06)
+// Used for display: globals + the current host's server-scoped snippets (SNIP-06)
 type SnippetScope = 'global' | 'server';
 ```
 
-> **Правило удаления хоста (SNIP-07):** при удалении хоста main process проверяет наличие сниппетов с `host_id = deletedHostId`. При наличии показывает диалог с двумя вариантами: «Удалить сниппеты» (DELETE WHERE host_id = ?) или «Сделать глобальными» (UPDATE SET host_id = NULL WHERE host_id = ?). Молчаливое удаление или обнуление без диалога запрещено.
+> **Host deletion rule (SNIP-07):** when a host is deleted, the main process checks for snippets with `host_id = deletedHostId`. If any exist, it shows a dialog with two options: "Delete the snippets" (DELETE WHERE host_id = ?) or "Make global" (UPDATE SET host_id = NULL WHERE host_id = ?). Silently deleting or nulling them out without a dialog is forbidden.
 
 ---
 
-## 4. Встроенная база — errors.json
+## 4. Built-in database — errors.json
 
-### 4.1 Формат
+### 4.1 Format
 
 ```json
 {
@@ -256,12 +256,12 @@ type SnippetScope = 'global' | 'server';
       "id": "permission-denied",
       "match": "(?i)permission denied",
       "category": "filesystem",
-      "title": "Недостаточно прав",
-      "explanation": "У текущего пользователя нет прав на это действие. Файл или каталог принадлежит другому пользователю (часто root).",
+      "title": "Permission denied",
+      "explanation": "The current user doesn't have permission for this action. The file or directory belongs to another user (often root).",
       "checks": [
-        { "text": "Запустить с sudo", "command": "sudo {original}" },
-        { "text": "Посмотреть владельца", "command": "ls -la {target}" },
-        { "text": "Проверить текущего пользователя", "command": "whoami" }
+        { "text": "Run with sudo", "command": "sudo {original}" },
+        { "text": "Check the owner", "command": "ls -la {target}" },
+        { "text": "Check the current user", "command": "whoami" }
       ],
       "scope": "command"
     }
@@ -269,54 +269,54 @@ type SnippetScope = 'global' | 'server';
 }
 ```
 
-### 4.2 TypeScript-тип
+### 4.2 TypeScript type
 
 ```ts
 type ErrorScope = 'command' | 'ssh-connection';
 
 interface ErrorCheck {
-  text: string;             // что проверить, по-русски
-  command?: string;         // подсказка-команда; {original}/{target} подставляются БЕЗОПАСНО
+  text: string;             // what to check
+  command?: string;         // a suggested command; {original}/{target} are substituted SAFELY
 }
 
 interface ErrorPattern {
   id: string;
-  match: string;            // регулярное выражение (компилируется при загрузке)
+  match: string;            // a regular expression (compiled on load)
   category: string;
   title: string;
-  explanation: string;      // только русский (NFR-07)
+  explanation: string;      // localized text (NFR-07)
   checks: ErrorCheck[];
   scope: ErrorScope;
 }
 
 interface ErrorsDatabase {
-  version: string;          // semver, сверяется с версией приложения
+  version: string;          // semver, checked against the app version
   patterns: ErrorPattern[];
 }
 ```
 
-### 4.3 Обязательное покрытие (ERR-04, ERR-05)
+### 4.3 Required coverage (ERR-04, ERR-05)
 
 permission denied, no such file or directory, command not found, connection refused, disk full, out of memory, segmentation fault, syntax error; SSH: Connection refused, Permission denied (publickey), Host key verification failed, Connection timed out.
 
-### 4.4 Точка расширения под 1.2
+### 4.4 Extension point for 1.2
 
-Детектор возвращает результат вида `{ matched: ErrorPattern } | { matched: null, fallback: FallbackRef }`. В 1.0 `fallback` ведёт в общий шаблон / поиск документации (ERR-06). В 1.2 этот же `fallback` направляется в локальную LLM (§12.13 ТЗ). Контракт детектора менять при этом не нужно.
+The detector returns a result shaped like `{ matched: ErrorPattern } | { matched: null, fallback: FallbackRef }`. In 1.0, `fallback` leads to the generic template / documentation search (ERR-06). In 1.2, the same `fallback` will route to a local LLM (spec §12.13). The detector's contract doesn't need to change for that.
 
 ```ts
 interface FallbackRef {
-  kind: 'doc-search' | 'llm';   // в 1.0 всегда 'doc-search'
+  kind: 'doc-search' | 'llm';   // always 'doc-search' in 1.0
   command: string;
   exitCode?: number;
-  stderrExcerpt: string;        // минимальный фрагмент, после маскирования секретов
+  stderrExcerpt: string;        // a minimal excerpt, after secret masking
 }
 ```
 
 ---
 
-## 5. Встроенная база — commands.json
+## 5. Built-in database — commands.json
 
-### 5.1 Формат
+### 5.1 Format
 
 ```json
 {
@@ -326,13 +326,13 @@ interface FallbackRef {
     {
       "name": "ls",
       "category": "files",
-      "summary": "Показать содержимое каталога",
-      "keywords": ["список", "файлы", "каталог", "посмотреть"],
+      "summary": "List a directory's contents",
+      "keywords": ["list", "files", "directory", "show"],
       "flags": [
-        { "flag": "-l", "desc": "Подробный список с правами и размером" },
-        { "flag": "-la", "desc": "Подробно и со скрытыми файлами" },
-        { "flag": "-h", "desc": "Размеры в человекочитаемом виде" },
-        { "flag": "-R", "desc": "Рекурсивно по подкаталогам" }
+        { "flag": "-l", "desc": "Detailed listing with permissions and size" },
+        { "flag": "-la", "desc": "Detailed, including hidden files" },
+        { "flag": "-h", "desc": "Human-readable sizes" },
+        { "flag": "-R", "desc": "Recurse into subdirectories" }
       ],
       "dangerous": false
     }
@@ -340,23 +340,23 @@ interface FallbackRef {
 }
 ```
 
-### 5.2 TypeScript-тип
+### 5.2 TypeScript type
 
 ```ts
 type CommandCategory = 'files' | 'processes' | 'network' | 'system' | 'text';
 
 interface CommandFlag {
-  flag: string;             // например "-la"
-  desc: string;             // русское пояснение (NFR-07)
+  flag: string;             // e.g. "-la"
+  desc: string;             // localized explanation (NFR-07)
 }
 
 interface CatalogCommand {
   name: string;
   category: CommandCategory;
-  summary: string;          // однострочное объяснение, русский
-  keywords: string[];       // для русского поиска: «удалить» → rm (CAT-05)
+  summary: string;          // a one-line explanation
+  keywords: string[];       // for localized search: "delete" → rm (CAT-05)
   flags: CommandFlag[];
-  dangerous: boolean;       // подсказка для UI; решение принимает Страж, не это поле
+  dangerous: boolean;       // a UI hint; the guard makes the actual decision, not this field
 }
 
 interface CommandsDatabase {
@@ -366,7 +366,7 @@ interface CommandsDatabase {
 }
 ```
 
-Клик по флагу формирует строку и **отправляет её через Стража** (CAT-04 + GUARD-04), а не напрямую в SSH.
+Clicking a flag builds the string and **sends it through the guard** (CAT-04 + GUARD-04), not straight to SSH.
 
 ---
 
@@ -383,21 +383,21 @@ interface AppConfig {
     maximized: boolean;           // WIN-01
   };
   onboarding: {
-    completed: boolean;           // OB-03: первый запуск пройден
+    completed: boolean;           // OB-03: first run completed
   };
   ui: {
-    expertMode: boolean;          // быстрое отключение ВСЕХ подсказок (SET-05)
-    // гранулярные переключатели (SET-05) — expertMode выставляет все в false
+    expertMode: boolean;          // quick toggle to disable ALL hints (SET-05)
+    // granular toggles (SET-05) — expertMode sets all of these to false
     hints: {
-      commandCatalog: boolean;    // подсказки каталога команд (CAT-06)
-      outputTooltips: boolean;    // тултипы вывода команд
-      errorPanel: boolean;        // панель детектора ошибок (ERR-03)
-      connectionDialog: boolean;  // обучающие подсказки в диалоге подключения
+      commandCatalog: boolean;    // command catalog hints (CAT-06)
+      outputTooltips: boolean;    // command output tooltips
+      errorPanel: boolean;        // error detector panel (ERR-03)
+      connectionDialog: boolean;  // learning hints in the connection dialog
     };
-    theme: 'dark';                // в 1.0 только тёмная; 'light' | string добавятся в 1.1/1.2
+    theme: 'dark';                // dark only in 1.0; 'light' | string to be added in 1.1/1.2
     notifications: {
-      systemToasts: boolean;      // системные уведомления Windows (NOTIF-04)
-      longCommandThresholdSec: number; // 0 = выкл. (NOTIF-02)
+      systemToasts: boolean;      // Windows system notifications (NOTIF-04)
+      longCommandThresholdSec: number; // 0 = off (NOTIF-02)
     };
     dashboardVisible: boolean;    // DASH-04
     catalogPanelOpen: boolean;
@@ -407,7 +407,7 @@ interface AppConfig {
     fontSize: number;
     opacity: number;              // 0..1
     bell: 'off' | 'sound' | 'visual'; // TERM-04
-    brightBold: boolean;          // яркие цвета для bold (TERM-04)
+    brightBold: boolean;          // bright colors for bold text (TERM-04)
     selectToCopy: boolean;        // TERM-04
     rightClickPaste: boolean;     // TERM-04
   };
@@ -420,62 +420,62 @@ interface AppConfig {
     globalEnabled: boolean;       // GUARD-05
   };
   history: {
-    enabled: boolean;             // HIST-07: глобальное отключение
-    perHostDisabled: number[];    // hostId, для которых история выключена
+    enabled: boolean;             // HIST-07: global disable
+    perHostDisabled: number[];    // hostIds for which history is off
   };
-  shownCounts: Record<string, number>; // id подсказки → сколько раз показана (лимит 3)
+  shownCounts: Record<string, number>; // hint id → how many times shown (cap 3)
   updates: {
     autoCheck: boolean;           // OQ-09
-    source: string;               // URL источника обновлений
+    source: string;               // update source URL
   };
 }
 ```
 
-config.json **не содержит секретов** (SEC-01). `hints.shownCounts` реализует «не более 3 показов» из §5.1 ТЗ.
+config.json **contains no secrets** (SEC-01). `hints.shownCounts` implements the "shown at most 3 times" rule from spec §5.1.
 
 ---
 
-## 7. IPC-контракт
+## 7. IPC contract
 
-> Каждый метод — одна операция. Универсальных `invoke(channel, data)` нет. Все аргументы валидируются в main (тип, формат, длина, диапазон). `sessionId`/`hostId` проверяются на существование и принадлежность окну. Секреты в ответах не возвращаются (SEC-05, §4 гайда).
+> Every method is one operation. There's no generic `invoke(channel, data)`. All arguments are validated in main (type, format, length, range). `sessionId`/`hostId` are checked for existence and ownership by the window. Secrets are never returned in responses (SEC-05, guide §4).
 
 ```ts
 interface LucidSSHBridge {
-  // --- Хосты ---
+  // --- Hosts ---
   listHosts(): Promise<Host[]>;
   listGroups(): Promise<HostGroup[]>;
-  createHost(input: HostInput, secret?: string): Promise<{ id: number }>; // secret сразу в keychain
+  createHost(input: HostInput, secret?: string): Promise<{ id: number }>; // secret goes straight to the keychain
   updateHost(id: number, input: HostInput, secret?: string): Promise<void>;
-  deleteHost(id: number): Promise<void>;                 // чистит и Credential Manager
-  hostHasSecret(id: number): Promise<boolean>;           // для UI «пароль сохранён», без значения
+  deleteHost(id: number): Promise<void>;                 // also cleans up Credential Manager
+  hostHasSecret(id: number): Promise<boolean>;           // for the "password saved" UI state, no value
 
-  // --- Сессии ---
+  // --- Sessions ---
   connectHost(hostId: number): Promise<{ sessionId: string; status: SessionStatus }>;
   disconnectSession(sessionId: string): Promise<void>;
   sendTerminalInput(sessionId: string, text: string): Promise<void>;
   confirmHostKey(requestId: string, decision: 'accept' | 'reject'): Promise<void>;
   confirmDangerousCommand(requestId: string, confirmationText: string): Promise<{ allowed: boolean }>;
 
-  // --- Каталог / ошибки (только чтение встроенных баз) ---
+  // --- Catalog / errors (read-only access to the built-in databases) ---
   getCommandCatalog(): Promise<CommandsDatabase>;
-  explainError(ref: FallbackRef): Promise<ErrorExplanation>; // в 1.0 doc-search
+  explainError(ref: FallbackRef): Promise<ErrorExplanation>; // doc-search in 1.0
 
-  // --- Сниппеты ---
-  // listSnippets: без аргументов — только глобальные; с hostId — глобальные + серверные хоста (SNIP-06)
+  // --- Snippets ---
+  // listSnippets: no args — globals only; with hostId — globals + that host's server-scoped ones (SNIP-06)
   listSnippets(hostId?: number): Promise<Snippet[]>;
   createSnippet(input: Omit<Snippet, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ id: number }>;
-  // updateSnippet: hostId включён, чтобы позволить смену области видимости сниппета
+  // updateSnippet: hostId is included to allow changing a snippet's scope
   updateSnippet(id: number, input: Partial<Pick<Snippet, 'name' | 'command' | 'description' | 'hostId'>>): Promise<void>;
   deleteSnippet(id: number): Promise<void>;
-  // Вызывается перед удалением хоста, если у него есть серверные сниппеты (SNIP-07)
+  // Called before deleting a host that has server-scoped snippets (SNIP-07)
   resolveHostSnippets(hostId: number, action: 'delete' | 'make-global'): Promise<void>;
-  reorderSnippets(hostId: number | null, orderedIds: number[]): Promise<void>; // SNIP-10, атомарно переписывает sort_order в пределах группы
+  reorderSnippets(hostId: number | null, orderedIds: number[]): Promise<void>; // SNIP-10, atomically rewrites sort_order within the group
 
-  // --- Лог соединения ---
+  // --- Connection log ---
   getConnectionLog(sessionId: string): Promise<ConnectionLogEntry[]>;
 
-  // --- Экспорт / импорт хостов ---
-  exportHosts(): Promise<string>;                        // возвращает JSON-строку (EXP-01)
+  // --- Host export / import ---
+  exportHosts(): Promise<string>;                        // returns a JSON string (EXP-01)
   previewImportHosts(json: string): Promise<ImportPreview>; // EXP-03
   importHosts(json: string, conflictStrategy: 'skip' | 'rename'): Promise<{ imported: number; skipped: number }>; // EXP-02
   listHistory(query?: HistoryQuery): Promise<HistoryEntry[]>;
@@ -483,16 +483,16 @@ interface LucidSSHBridge {
   deleteHistoryEntry(id: number): Promise<void>;
   clearHistory(): Promise<void>;
 
-  // --- Импорт ---
+  // --- Import ---
   importPuttySessions(): Promise<{ imported: number }>;
   importSshConfig(): Promise<{ imported: number; skippedDirectives: string[] }>;
 
-  // --- Обновления ---
+  // --- Updates ---
   checkForUpdate(): Promise<UpdateInfo | null>;
   startUpdateDownload(): Promise<void>;
-  applyUpdate(): Promise<void>;                           // после подтверждения
+  applyUpdate(): Promise<void>;                           // after confirmation
 
-  // --- События (main → renderer) ---
+  // --- Events (main → renderer) ---
   onTerminalData(cb: (sessionId: string, data: string) => void): void;
   onSessionStatus(cb: (sessionId: string, status: SessionStatus) => void): void;
   onHostKeyPrompt(cb: (req: HostKeyPrompt) => void): void;
@@ -504,7 +504,7 @@ interface LucidSSHBridge {
 }
 ```
 
-### 7.1 Вспомогательные типы
+### 7.1 Supporting types
 
 ```ts
 type SessionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
@@ -513,7 +513,7 @@ interface HostKeyPrompt {
   requestId: string;
   hostId: number;
   fingerprintSha256: string;
-  isChanged: boolean;          // true → изменился, блокировка (SSH-04)
+  isChanged: boolean;          // true → changed, blocked (SSH-04)
   previousFingerprint?: string;
 }
 
@@ -521,29 +521,29 @@ interface DangerousCommandPrompt {
   requestId: string;
   sessionId: string;
   command: string;
-  target: string;              // реальный путь/объект (GUARD-03)
+  target: string;              // the real path/object (GUARD-03)
   scope: 'file' | 'directory' | 'disk' | 'other';
-  explanation: string;         // русский
+  explanation: string;
 }
 
 interface DashboardMetrics {
-  cpuPercent: number | null;   // null → «—» (DASH-05)
+  cpuPercent: number | null;   // null → "—" (DASH-05)
   ramUsedMb: number | null;
   ramTotalMb: number | null;
   diskPercent: number | null;
   uptimeSeconds: number | null;
-  loadAvg1: number | null;     // /proc/loadavg, 1/5/15 мин (только полная модалка дашборда)
+  loadAvg1: number | null;     // /proc/loadavg, 1/5/15 min (full dashboard modal only)
   loadAvg5: number | null;
   loadAvg15: number | null;
-  netUpKbps: number | null;    // дельта /proc/net/dev за то же окно замера, что и CPU
+  netUpKbps: number | null;    // delta over /proc/net/dev, same measurement window as CPU
   netDownKbps: number | null;
-  topProcesses: DashboardProcess[];  // топ-5 по CPU, [] если недоступно
+  topProcesses: DashboardProcess[];  // top 5 by CPU, [] if unavailable
 }
 
 interface DashboardProcess {
   pid: number;
   user: string;
-  cmd: string;          // короткое имя (ps comm, без аргументов)
+  cmd: string;          // short name (ps comm, no arguments)
   cpuPercent: number;
   memPercent: number;
 }
@@ -559,7 +559,7 @@ interface ErrorExplanation {
   title: string;
   explanation: string;
   checks: ErrorCheck[];
-  source: 'database' | 'fallback';        // в 1.2 добавится 'llm'
+  source: 'database' | 'fallback';        // 'llm' will be added in 1.2
 }
 
 interface HistoryQuery {
@@ -580,7 +580,7 @@ type AppNotificationKind = 'fingerprint-changed' | 'update-available';
 interface ConnectionLogEntry {
   timestamp: string;            // ISO 8601
   level: 'info' | 'warn' | 'error';
-  message: string;              // без секретов (CLOG-03)
+  message: string;              // no secrets (CLOG-03)
   step?: 'tcp' | 'handshake' | 'hostkey' | 'auth' | 'session';
 }
 
@@ -591,12 +591,12 @@ interface ImportPreview {
 }
 
 interface AppNotification {
-  id: string;                         // уникальный, для дедупликации
+  id: string;                         // unique, for deduplication
   kind: AppNotificationKind;
   severity: 'info' | 'warning' | 'error';
   title: string;
   body: string;
-  hostId?: number;                    // для fingerprint-changed
+  hostId?: number;                    // for fingerprint-changed
   createdAt: string;                  // ISO 8601
   read: boolean;
 }
@@ -606,17 +606,17 @@ interface AppNotification {
 
 ## 8. known_hosts
 
-Формат OpenSSH (`known_hosts`), управляется в main. При первом подключении запись добавляется после подтверждения (SSH-03). Изменение ключа не перезаписывает запись автоматически — только после явного решения пользователя (SSH-04). Файл — доступ только текущего пользователя.
+OpenSSH format (`known_hosts`), managed in main. On first connection, an entry is added after confirmation (SSH-03). A key change never overwrites an entry automatically — only after an explicit user decision (SSH-04). The file is accessible only to the current user.
 
 ---
 
-## 9. Сквозные правила для всех структур
+## 9. Cross-cutting rules for every structure
 
-1. Секреты (пароли, passphrase, содержимое ключей) — только в Credential Manager, никогда в SQLite/JSON/логах/IPC-ответах (SEC-01, §10, §17 гайда).
-2. Пути к ключам хранятся как ссылка на оригинал; ключ не копируется (SEC-02).
-3. Любая строка от сервера (stderr, breadcrumb, метрики, man/--help) — недоверенный ввод: парсится как данные, не исполняется, маскируется на секреты перед сохранением/логом.
-4. Версии встроенных баз (`errors.json`, `commands.json`) сверяются с версией приложения; стратегия их обновления — OQ-06.
-5. Точки расширения под 1.2 (`FallbackRef.kind`, `ErrorExplanation.source`) заложены, но реализация LLM в 1.0 отсутствует.
-6. Денормализация `host_name`/`username` в истории намеренная: запись остаётся читаемой после удаления хоста.
+1. Secrets (passwords, passphrases, key contents) — Credential Manager only, never in SQLite/JSON/logs/IPC responses (SEC-01, guide §10, §17).
+2. Key paths are stored as a reference to the original; the key is never copied (SEC-02).
+3. Any string coming from the server (stderr, breadcrumb, metrics, man/--help) is untrusted input: parsed as data, never executed, masked for secrets before being saved/logged.
+4. The built-in databases' versions (`errors.json`, `commands.json`) are checked against the app version; their update strategy is OQ-06.
+5. Extension points for 1.2 (`FallbackRef.kind`, `ErrorExplanation.source`) are in place, but the LLM implementation is absent in 1.0.
+6. Denormalizing `host_name`/`username` into history is intentional: the entry stays readable after the host is deleted.
 
-*— конец документа —*
+*— end of document —*
