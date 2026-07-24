@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { usePanels } from '@/stores/panels';
+import { useConfig } from '@/stores/config';
 import { Icon } from '@/components/common/Icon';
 
 /**
@@ -26,6 +27,7 @@ const HOTKEYS: { keys: string; key: string }[] = [
 export function HelpScreen(): JSX.Element {
   const { t } = useTranslation();
   const { closeHelp, helpTarget } = usePanels();
+  const { config } = useConfig();
   const [tab, setTab] = useState<Tab>((helpTarget?.tab as Tab | undefined) ?? 'start');
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -121,7 +123,11 @@ export function HelpScreen(): JSX.Element {
               </p>
               <ul className="mt-[14px] flex flex-col gap-[14px]">
                 {[1, 2, 3, 4].map((n) => {
-                  const item = t(`help.${tab}.item${n}`, { defaultValue: '' });
+                  const key =
+                    tab === 'saved' && n === 1 && config?.terminal.rightClickPaste
+                      ? 'help.saved.item1PasteMode'
+                      : `help.${tab}.item${n}`;
+                  const item = t(key, { defaultValue: '' });
                   return item ? (
                     <li key={n} className="flex items-start gap-[13px]">
                       <span className="mt-[1px] flex size-6 shrink-0 items-center justify-center rounded-full bg-bg-elevated-2 font-mono text-[12px] font-bold text-lavender-light">

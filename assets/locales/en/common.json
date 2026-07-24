@@ -471,8 +471,7 @@
   },
   "statusBar": {
     "local": "All data is stored locally",
-    "version": "v{{version}}",
-    "help": "Help"
+    "version": "v{{version}}"
   },
   "history": {
     "title": "Command history",
@@ -669,7 +668,7 @@
       "changelog": "Changelog",
       "help": "Help",
       "openGuide": "Open guide",
-      "guideDesc": "How the breadcrumb, Guard, error detector and command catalog work.",
+      "guideDesc": "How Guard, the error detector, saved commands and hotkeys work.",
       "licenseLink": "License agreement",
       "openSource": "Open-source components",
       "website": "Project website",
@@ -797,6 +796,7 @@
       "title": "Saved commands",
       "body": "Frequently used commands can be saved as snippets and run in one click.",
       "item1": "Save: 🔖 in history or right-click in the terminal → Save as snippet.",
+      "item1PasteMode": "Save: 🔖 in history. Right-click in the terminal is set to paste from the clipboard (Settings → Terminal).",
       "item2": "Scope: server snippets show only on that connection, global ones everywhere.",
       "item3": "Run: from the catalog [host]/Global tabs (Ctrl+L) — drag to reorder there too.",
       "item4": "Quick-insert: Ctrl+Space next to the cursor opens a floating snippet search right in the terminal."
@@ -805,8 +805,9 @@
       "title": "Dangerous command guard",
       "body": "Before destructive commands (rm -rf, kill -9, mkfs and similar) the Guard shows a confirmation requiring the object name — accidental deletion is prevented.",
       "item1": "Interception happens before the command is sent to the server.",
-      "item2": "You must type the exact affected object name, not just OK.",
-      "item3": "Can be disabled globally in Settings → Security."
+      "item2": "You must type the exact object name or a confirmation word — not just OK.",
+      "item3": "Can be disabled globally in Settings → Security.",
+      "item4": "For risky but non-destructive commands (editing sshd_config, firewall rules and similar) — a softer Continue/Cancel warning, no name required."
     },
     "error": {
       "title": "Error detector",

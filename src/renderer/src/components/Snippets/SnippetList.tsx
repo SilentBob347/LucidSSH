@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Snippet } from '@shared/history';
 import { insertIntoComposer } from '@/stores/composerBus';
+import { useConfig } from '@/stores/config';
 import { Icon } from '@/components/common/Icon';
 import { Segment } from '@/components/Settings/controls';
 
@@ -37,6 +38,7 @@ export function SnippetList({
   onEdit: (s: Snippet) => void;
 }): JSX.Element {
   const { t } = useTranslation();
+  const { config } = useConfig();
   const [query, setQuery] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('manual');
   const [dragId, setDragId] = useState<number | null>(null);
@@ -83,6 +85,13 @@ export function SnippetList({
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-1 px-5 py-[44px] text-center">
         <div className="text-[13px] font-semibold text-text-body">{t('snippet.empty.title')}</div>
+        <div className="text-[12px] text-text-faint">
+          {t(
+            config?.terminal.rightClickPaste
+              ? 'snippet.empty.descriptionPasteMode'
+              : 'snippet.empty.description'
+          )}
+        </div>
       </div>
     );
   }

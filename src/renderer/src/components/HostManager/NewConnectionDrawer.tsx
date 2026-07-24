@@ -1,10 +1,11 @@
 import type { JSX } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AuthMethod, HostInput } from '@shared/hosts';
 import type { TestConnectionResult } from '@shared/ssh';
 import { useHosts } from '@/stores/hosts';
 import { useSessions } from '@/stores/sessions';
+import { useConfig } from '@/stores/config';
 import { Icon } from '@/components/common/Icon';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ToggleRow } from '@/components/Settings/controls';
@@ -34,6 +35,11 @@ export function NewConnectionDrawer(): JSX.Element | null {
   const { t } = useTranslation();
   const { drawer, closeDrawer, groups, refresh } = useHosts();
   const { connect } = useSessions();
+  const { config } = useConfig();
+  // SET-05/GUIDE-06: подсказки под полями скрываются в «Режиме эксперта» —
+  // enableExpert/enableAllUi в SettingsScreen переключают этот же флаг вместе
+  // с ui.expertMode, отдельная проверка expertMode тут не нужна.
+  const showHints = config?.ui.hints.connectionDialog ?? true;
   const [form, setForm] = useState<FormState | null>(null);
   const [hasSavedSecret, setHasSavedSecret] = useState(false);
   const [error, setError] = useState(false);
@@ -43,14 +49,26 @@ export function NewConnectionDrawer(): JSX.Element | null {
   const [deleteSecretConfirmOpen, setDeleteSecretConfirmOpen] = useState(false);
   const [keyFileExists, setKeyFileExists] = useState(true);
   const [keyWizardOpen, setKeyWizardOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   const editHost = drawer.editHost;
 
-  useEffect(() => {
+  // Держим форму смонтированной до конца анимации выезда обратно (esh-slideout)
+  // — иначе drawer пропадает мгновенно и анимация скрытия не проигрывается.
+  // Размонтирование по onAnimationEnd (ниже), не по таймеру: таймер, чуть
+  // разошедшийся с реальной длительностью CSS-анимации, обрезал последний
+  // кадр — рывок/«мелькание» в момент исчезновения.
+  // useLayoutEffect, не useEffect: closing должен выставиться синхронно до
+  // покраски кадра браузером — иначе один кадр рендерится с drawer.open=false
+  // и closing ещё false (условие ниже возвращает null), оверлей на миг
+  // полностью пропадает и тут же «внезапно» появляется заново — то самое мелькание.
+  useLayoutEffect(() => {
     if (!drawer.open) {
-      setForm(null);
+      if (!form) return;
+      setClosing(true);
       return;
     }
+    setClosing(false);
     setError(false);
     setHasSavedSecret(false);
     setTestResult(null);
@@ -115,7 +133,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
   // хуков между «закрыт»/«открыт» и валил бы всё приложение.
   const backdrop = useBackdropClose(closeDrawer);
 
-  if (!drawer.open || !form) return null;
+  if ((!drawer.open && !closing) || !form) return null;
 
   const set = (patch: Partial<FormState>): void => setForm({ ...form, ...patch });
 
@@ -198,12 +216,24 @@ export function NewConnectionDrawer(): JSX.Element | null {
 
   return (
     <div
-      className="animate-[esh-fade_.15s_ease] fixed inset-0 z-40 bg-black/70"
+      className={`fixed inset-0 z-40 bg-black/70 ${
+        closing ? 'animate-[esh-fadeout_.15s_ease_forwards]' : 'animate-[esh-fade_.15s_ease]'
+      }`}
       {...backdrop}
       role="presentation"
     >
       <aside
-        className="animate-[esh-slidein_.22s_cubic-bezier(.2,.7,.3,1)] absolute top-0 right-0 flex h-full w-[360px] flex-col border-l border-border-strong bg-bg-panel"
+        className={`absolute top-0 right-0 flex h-full w-[360px] flex-col border-l border-border-strong bg-bg-panel ${
+          closing
+            ? 'animate-[esh-slideout_.22s_cubic-bezier(.2,.7,.3,1)_forwards]'
+            : 'animate-[esh-slidein_.22s_cubic-bezier(.2,.7,.3,1)]'
+        }`}
+        onAnimationEnd={(e) => {
+          if (closing && e.animationName === 'esh-slideout') {
+            setForm(null);
+            setClosing(false);
+          }
+        }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -236,7 +266,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
               onChange={(e) => set({ name: e.target.value })}
               maxLength={100}
             />
-            <div className={helper}>{t('conn.nameHelper')}</div>
+            {showHints && <div className={helper}>{t('conn.nameHelper')}</div>}
           </div>
 
           <div>
@@ -251,7 +281,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
               onChange={(e) => set({ address: e.target.value })}
               maxLength={255}
             />
-            <div className={helper}>{t('conn.addressHelper')}</div>
+            {showHints && <div className={helper}>{t('conn.addressHelper')}</div>}
           </div>
 
           <div className="flex gap-3">
@@ -282,7 +312,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
               />
             </div>
           </div>
-          <div className={`${helper} -mt-2`}>{t('conn.usernameHelper')}</div>
+          {showHints && <div className={`${helper} -mt-2`}>{t('conn.usernameHelper')}</div>}
 
           <div>
             <span className={label}>{t('conn.auth')}</span>
@@ -323,9 +353,11 @@ export function NewConnectionDrawer(): JSX.Element | null {
                 maxLength={1024}
                 autoComplete="off"
               />
-              <div className={helper}>
-                {hasSavedSecret ? t('conn.passwordSavedHelper') : t('conn.passwordHelper')}
-              </div>
+              {showHints && (
+                <div className={helper}>
+                  {hasSavedSecret ? t('conn.passwordSavedHelper') : t('conn.passwordHelper')}
+                </div>
+              )}
               {hasSavedSecret && (
                 <button
                   type="button"
@@ -362,7 +394,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
                     {t('conn.browse')}
                   </button>
                 </div>
-                <div className={helper}>{t('conn.keyPathHelper')}</div>
+                {showHints && <div className={helper}>{t('conn.keyPathHelper')}</div>}
                 {!keyFileExists && (
                   <button
                     type="button"
@@ -386,9 +418,11 @@ export function NewConnectionDrawer(): JSX.Element | null {
                   maxLength={1024}
                   autoComplete="off"
                 />
-                <div className={helper}>
-                  {hasSavedSecret ? t('conn.passwordSavedHelper') : t('conn.passphraseHelper')}
-                </div>
+                {showHints && (
+                  <div className={helper}>
+                    {hasSavedSecret ? t('conn.passwordSavedHelper') : t('conn.passphraseHelper')}
+                  </div>
+                )}
                 {hasSavedSecret && (
                   <button
                     type="button"

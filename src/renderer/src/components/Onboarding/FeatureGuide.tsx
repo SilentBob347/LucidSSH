@@ -28,7 +28,7 @@ export function FeatureGuide({ onClose }: { onClose: () => void }): JSX.Element 
       role="presentation"
     >
       <div
-        className="animate-[esh-pop_.16s_ease] w-[760px] max-w-[94%] rounded-[10px] border border-border-strong bg-bg-panel shadow-[0_24px_60px_rgba(0,0,0,0.5)]"
+        className="animate-[esh-pop_.16s_ease] w-[920px] max-w-[96%] rounded-[10px] border border-border-strong bg-bg-panel shadow-[0_24px_60px_rgba(0,0,0,0.5)]"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

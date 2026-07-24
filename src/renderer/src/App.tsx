@@ -53,6 +53,7 @@ function AppBody(): JSX.Element {
     openGuide,
     closeGuide,
     helpOpen,
+    openHelp,
     quickConnectOpen,
     openQuickConnect,
     closeQuickConnect
@@ -76,7 +77,7 @@ function AppBody(): JSX.Element {
         openHistory();
       } else if (e.key === 'F1') {
         e.preventDefault();
-        openGuide();
+        openHelp();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         openQuickConnect();
@@ -96,7 +97,7 @@ function AppBody(): JSX.Element {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [openSettings, openHistory, openGuide, openQuickConnect]);
+  }, [openSettings, openHistory, openHelp, openQuickConnect]);
 
   const activeSession = sessions.find((s) => s.sessionId === activeSessionId);
   const leftRef = useRef<HTMLElement>(null);
@@ -168,7 +169,7 @@ function AppBody(): JSX.Element {
       )}
       <WindowCloseGuard />
       {historyOpen && <HistoryDrawer activeHostId={activeSession?.hostId} />}
-      {settingsOpen && <SettingsScreen onOpenGuide={openGuide} />}
+      {settingsOpen && <SettingsScreen onOpenGuide={() => openHelp()} />}
       {snippetDialog && (
         <SnippetSaveDialog
           command={snippetDialog.command}

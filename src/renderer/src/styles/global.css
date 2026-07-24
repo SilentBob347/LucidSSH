@@ -113,6 +113,22 @@ body {
     transform: none;
   }
 }
+@keyframes esh-slideout {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes esh-fadeout {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
 @keyframes esh-slideup {
   from {
     opacity: 0;
