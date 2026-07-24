@@ -15,7 +15,7 @@ export function ConnectionLogPanel({
   sessionId: string;
   onClose: () => void;
 }): JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const entries = useConnectionLog(sessionId);
 
   const levelColor = {
@@ -43,7 +43,7 @@ export function ConnectionLogPanel({
         {entries.map((e, i) => (
           <div key={i} className="flex gap-2 py-[2px]">
             <span className="shrink-0 text-text-faint">
-              {new Date(e.timestamp).toLocaleTimeString()}
+              {new Date(e.timestamp).toLocaleTimeString(i18n.language)}
             </span>
             <span className={levelColor[e.level]}>{t(e.messageKey, e.params)}</span>
           </div>
