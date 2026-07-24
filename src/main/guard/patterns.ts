@@ -238,6 +238,11 @@ export function analyzeCommand(command: string): DangerMatch | null {
 /** sudo/env-префиксы не должны прятать команду. */
 const CMD_PREFIX_RE = /^(?:sudo\s+|env\s+\S+=\S+\s+)+/;
 
+/** Снять sudo/env-префикс — переиспользуется вне Стража (детектор ошибок). */
+export function stripCmdPrefix(command: string): string {
+  return command.replace(CMD_PREFIX_RE, '');
+}
+
 function matchPatterns(part: string): DangerMatch | null {
   const unprefixed = part.replace(CMD_PREFIX_RE, '');
   for (const pattern of PATTERNS) {

@@ -26,7 +26,7 @@ import {
 import { startDashboard, stopDashboard } from './dashboard';
 import { deployPendingKey, hasPendingDeployment } from './keygen';
 import { loadErrorPatterns, loadCommandCatalog } from '../content/loader';
-import { detectError, excerpt, isEmptyOutput } from '../errors/detector';
+import { detectError, excerpt, isEmptyOutput, isNonErrorExitCode } from '../errors/detector';
 import { maskSecrets } from '../secrets/maskers';
 import { extractCommandName, findCommandSuggestions } from '../errors/fuzzyMatch';
 import { t } from '../i18n';
@@ -837,6 +837,10 @@ function handleCommandFinished(
       if (suggestions.length > 0) explanation.suggestions = suggestions;
     }
   } else {
+    // Исключения из ERR-01: ненулевой exit code — штатный результат самой
+    // команды/намеренное действие пользователя, не сбой (найдено при
+    // тестировании 2026-07-24, issue 03-error-detector-fires-on-benign-nonzero-exit).
+    if (isNonErrorExitCode(command, output, exitCode)) return;
     // Fallback-шаблон (ERR-06): пустой stderr → осмысленный текст
     const explainKey = isEmptyOutput(output) ? 'errDetector.emptyOutput' : 'errDetector.fallbackExplain';
     explanation = {

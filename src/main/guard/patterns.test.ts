@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeAccessRisk, analyzeCommand, CONFIRM_WORD } from './patterns';
+import { analyzeAccessRisk, analyzeCommand, CONFIRM_WORD, stripCmdPrefix } from './patterns';
 
 /**
  * Обязательное покрытие guard/patterns.ts (CLAUDE.md §10):
@@ -268,5 +268,16 @@ describe('analyzeAccessRisk — общее поведение', () => {
     // здесь фиксируем, что сама команда распознаётся обычным Стражем.
     expect(analyzeCommand('rm -rf ~/.ssh')?.patternId).toBe('rm-recursive');
     expect(analyzeAccessRisk('rm -rf ~/.ssh')).toBeNull();
+  });
+});
+
+describe('stripCmdPrefix — переиспользуется детектором ошибок', () => {
+  it('снимает sudo и env-префиксы', () => {
+    expect(stripCmdPrefix('sudo systemctl status ssh')).toBe('systemctl status ssh');
+    expect(stripCmdPrefix('env FOO=bar systemctl status ssh')).toBe('systemctl status ssh');
+  });
+
+  it('команду без префикса не меняет', () => {
+    expect(stripCmdPrefix('systemctl status ssh')).toBe('systemctl status ssh');
   });
 });

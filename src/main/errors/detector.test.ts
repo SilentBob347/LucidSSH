@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectError, isEmptyOutput } from './detector';
+import { detectError, isEmptyOutput, isNonErrorExitCode } from './detector';
 import type { ErrorPattern } from '@shared/content';
 
 const patterns: ErrorPattern[] = [
@@ -102,5 +102,61 @@ describe('detectError (ERR-01..06)', () => {
   it('isEmptyOutput распознаёт пустой stderr', () => {
     expect(isEmptyOutput('   \n  \r\n ')).toBe(true);
     expect(isEmptyOutput('error!')).toBe(false);
+  });
+});
+
+describe('isNonErrorExitCode (исключения из ERR-01, найдены при тестировании 2026-07-24)', () => {
+  it('systemctl status с кодом 1/2/3 (unit dead/not running) — не ошибка', () => {
+    const output = 'football-bot.service - Football Predict Bot\n   Active: inactive (dead)';
+    expect(isNonErrorExitCode('sudo systemctl status football-bot', output, 3)).toBe(true);
+    expect(isNonErrorExitCode('systemctl status football-bot', output, 1)).toBe(true);
+    expect(isNonErrorExitCode('systemctl status football-bot', output, 2)).toBe(true);
+  });
+
+  it('systemctl status с кодом 4 (unit не найден/статус неизвестен) — это ошибка', () => {
+    const output = 'Unit football-boot.service could not be found.';
+    expect(isNonErrorExitCode('systemctl status football-boot', output, 4)).toBe(false);
+  });
+
+  it('service <юнит> status с кодом 3 — не ошибка', () => {
+    expect(isNonErrorExitCode('service ssh status', 'ssh is not running', 3)).toBe(true);
+  });
+
+  it('составная команда с явным 2>/dev/null и пустым stderr — не ошибка', () => {
+    const cmd = 'ls -la ~/venv_broken_backup_* 2>/dev/null && rm -rf ~/venv_broken_backup_*';
+    expect(isNonErrorExitCode(cmd, '', 2)).toBe(true);
+  });
+
+  it('та же составная команда без 2>/dev/null — по-прежнему ошибка', () => {
+    const cmd = 'mkdir /root/protected && cd /root/protected';
+    expect(isNonErrorExitCode(cmd, '', 1)).toBe(false);
+  });
+
+  it('составная команда с 2>/dev/null, но непустым stderr — по-прежнему ошибка', () => {
+    const cmd = 'grep foo file.txt 2>/dev/null && rm file.txt';
+    expect(isNonErrorExitCode(cmd, 'rm: cannot remove file.txt: Permission denied', 1)).toBe(false);
+  });
+
+  it('отказ от Y/n-подтверждения (реальный кейс apt --reinstall) — не ошибка', () => {
+    const output = [
+      'Need to get 3173 kB of archives.',
+      'After this operation, 0 B of additional disk space will be used.',
+      'Do you want to continue? [Y/n] n',
+      'Abort.'
+    ].join('\n');
+    expect(isNonErrorExitCode('sudo apt install --reinstall python3.12', output, 1)).toBe(true);
+  });
+
+  it('согласие на Y/n-подтверждение с реальной ошибкой позже — по-прежнему ошибка', () => {
+    const output = [
+      'Do you want to continue? [Y/n] y',
+      'Setting up somepkg ...',
+      'somepkg: E: dependency not satisfiable'
+    ].join('\n');
+    expect(isNonErrorExitCode('apt install somepkg', output, 100)).toBe(false);
+  });
+
+  it('exitCode null — не триггерит ни одно исключение', () => {
+    expect(isNonErrorExitCode('systemctl status foo', 'inactive', null)).toBe(false);
   });
 });
