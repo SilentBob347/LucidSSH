@@ -181,8 +181,10 @@ assets/        locales/{ru,en}/*.json   errors.core.json   commands.core.json
   - `typecheck` — `tsc --noEmit` для node- и web-проектов
   - `lint` — ESLint (flat config)
   - `test` / `test:watch` — vitest
+  - `rebuild:test` / `rebuild:app` — см. ниже, ABI-свитч нативных модулей
 - Node 20+ обязателен (`engines`), локально зафиксирован Node 22 (`.nvmrc`).
 - Перед коммитом изменений кода прогонять `typecheck` и `lint`; не предлагать коммит с падающим typecheck.
+- **ABI-свитч нативных модулей (`better-sqlite3`, `keytar`).** `npm run dev`/`dist` требуют сборку под Electron ABI, `vitest` — под системный Node ABI; один и тот же `node_modules` не устраивает обоих одновременно (обнаружено 24.07.2026). Перед прогоном тестов, затрагивающих `better-sqlite3`/`keytar` (например `history/*.test.ts`), — `npm run rebuild:test`; после, перед возвратом к `npm run dev`, — обязательно `npm run rebuild:app`. Рабочее (по умолчанию) состояние репозитория — под Electron ABI.
 
 ---
 

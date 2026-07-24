@@ -21,6 +21,9 @@ const HOTKEYS: { keys: string; key: string }[] = [
   { keys: 'Ctrl + Space', key: 'snippetPalette' },
   { keys: 'Ctrl + F', key: 'search' },
   { keys: 'Ctrl + W', key: 'closeTab' },
+  { keys: 'Ctrl + Shift + C', key: 'copy' },
+  { keys: 'Ctrl + Shift + V', key: 'paste' },
+  { keys: 'Esc', key: 'closePanel' },
   { keys: 'F1', key: 'guide' }
 ];
 
