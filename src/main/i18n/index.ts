@@ -1,9 +1,9 @@
-import { app } from 'electron';
-import { existsSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import i18next from 'i18next';
 import Backend from 'i18next-fs-backend';
 import { loadConfig } from '../config/store';
+import { DEFAULT_LANGUAGE, FALLBACK_LANGUAGE, isValidLanguage, listLanguages, localesDir } from './languages';
 
 /**
  * i18n main-процесса (CLAUDE.md §5a): сообщения стража/детектора формируются
@@ -11,34 +11,10 @@ import { loadConfig } from '../config/store';
  * assets/locales/<lang>/<ns>.json; новый язык = новая папка, без правок кода.
  */
 
-export const FALLBACK_LANGUAGE = 'en';
-export const DEFAULT_LANGUAGE = 'ru';
+export { DEFAULT_LANGUAGE, FALLBACK_LANGUAGE, isValidLanguage, listLanguages, localesDir };
 
 /** Namespace'ы валидируются по формату, а не по фиксированному списку. */
 const NS_RE = /^[a-z][a-z0-9-]{0,63}$/;
-const LANG_RE = /^[a-z]{2}(-[A-Za-z]{2,8})?$/;
-
-export function localesDir(): string {
-  // dev: <repo>/assets/locales; prod: внутри app.asar (fs-backend читает через asar)
-  return app.isPackaged
-    ? join(app.getAppPath(), 'assets', 'locales')
-    : resolve(app.getAppPath(), 'assets', 'locales');
-}
-
-export function listLanguages(): string[] {
-  try {
-    return readdirSync(localesDir(), { withFileTypes: true })
-      .filter((e) => e.isDirectory() && LANG_RE.test(e.name))
-      .map((e) => e.name)
-      .sort();
-  } catch {
-    return [DEFAULT_LANGUAGE];
-  }
-}
-
-export function isValidLanguage(lng: unknown): lng is string {
-  return typeof lng === 'string' && LANG_RE.test(lng) && listLanguages().includes(lng);
-}
 
 export function isValidNamespace(ns: unknown): ns is string {
   if (typeof ns !== 'string' || !NS_RE.test(ns)) return false;
