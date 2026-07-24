@@ -501,9 +501,16 @@ export function XtermView({
   const onAuthAnswerRef = useRef(onAuthAnswer);
   onAuthAnswerRef.current = onAuthAnswer;
   const [showCopied, setShowCopied] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
-    copyListeners.set(sessionId, () => setShowCopied(true));
+    copyListeners.set(sessionId, () => {
+      setShowCopied(true);
+      // Выделение большого текста с прокруткой шлёт много onSelectionChange —
+      // таймер перезапускаем на каждый, иначе тост гаснет ещё до конца выделения.
+      clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = setTimeout(() => setShowCopied(false), 1100);
+    });
     if (onDanger) dangerListeners.set(sessionId, onDanger);
     if (onAccessRisk) accessRiskListeners.set(sessionId, onAccessRisk);
     if (onCommandSent) commandSentListeners.set(sessionId, onCommandSent);
@@ -514,14 +521,9 @@ export function XtermView({
       accessRiskListeners.delete(sessionId);
       commandSentListeners.delete(sessionId);
       shellStateListeners.delete(sessionId);
+      clearTimeout(copiedTimerRef.current);
     };
   }, [sessionId, onDanger, onAccessRisk, onCommandSent, onShellStateChange]);
-
-  useEffect(() => {
-    if (!showCopied) return;
-    const timer = setTimeout(() => setShowCopied(false), 1100);
-    return () => clearTimeout(timer);
-  }, [showCopied]);
 
   useEffect(() => {
     const el = hostRef.current;
@@ -649,7 +651,7 @@ export function XtermView({
       <div ref={hostRef} className="h-full w-full" />
       {showCopied && (
         <div
-          className="animate-[esh-pop_.16s_ease] pointer-events-none absolute right-3 bottom-3 flex items-center gap-1 rounded-[20px] border border-border-strong bg-bg-elevated px-3 py-[6px] text-[11.5px] text-text-strong shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
+          className="animate-[esh-pop_.16s_ease] pointer-events-none absolute right-3 bottom-3 z-20 flex items-center gap-1 rounded-[20px] border border-border-strong bg-bg-elevated px-3 py-[6px] text-[11.5px] text-text-strong shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
           aria-hidden="true"
         >
           <Icon name="check" size={12} className="text-success-bright" />
