@@ -1,10 +1,12 @@
+<p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo-light.svg">
   <img alt="LucidSSH" src="docs/assets/logo-light.svg" width="360">
 </picture>
+</p>
 
-🇷🇺 Русский | [🇬🇧 English](README.en.md)
+<p align="center">🇷🇺 Русский | <a href="README.en.md">🇬🇧 English</a></p>
 
 SSH-клиент для Windows, который объясняет что происходит и не даёт случайно сломать сервер.
 
@@ -123,4 +125,4 @@ Electron · TypeScript · React · xterm.js · ssh2 · SQLite (better-sqlite3) �
 
 ## Статус
 
-Версия 1.0 выпущена. Дальнейшие планы — в [Releases](https://github.com/Xykyma/LucidSSH/releases) и changelog.
+Версия 1.0 выпущена.

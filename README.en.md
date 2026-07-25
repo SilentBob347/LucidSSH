@@ -1,10 +1,12 @@
+<p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo-light.svg">
   <img alt="LucidSSH" src="docs/assets/logo-light.svg" width="360">
 </picture>
+</p>
 
-[🇷🇺 Русский](README.md) | 🇬🇧 English
+<p align="center"><a href="README.md">🇷🇺 Русский</a> | 🇬🇧 English</p>
 
 An SSH client for Windows that explains what's happening and stops you from breaking your server by accident.
 
@@ -125,4 +127,4 @@ Bug reports and feature requests go through [Issues](https://github.com/Xykyma/L
 
 ## Status
 
-Version 1.0 is released. Future plans are tracked in [Releases](https://github.com/Xykyma/LucidSSH/releases) and the changelog.
+Version 1.0 is released.
