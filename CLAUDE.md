@@ -214,7 +214,11 @@ Of the three ADRs recorded from that session, only `docs/agent/adr/0002-no-local
 
 ### Issue tracker
 
-Issues/specs live as local markdown under `.scratch/<feature-slug>/` — GitHub Issues exists (public remote) but isn't actively used. See `docs/agent/issue-tracker.md`.
+Issues/specs live as local markdown under `.scratch/<feature-slug>/` — GitHub Issues exists (public remote) and is used as raw incoming user reports, triaged via `/triage` before landing in `.scratch/`. See `docs/agent/issue-tracker.md`.
+
+### Triage labels
+
+Default canonical label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`, plus `bug`/`enhancement`), all created on the GitHub repo. See `docs/agent/triage-labels.md`.
 
 ### Domain docs
 
