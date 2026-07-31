@@ -18,8 +18,6 @@ PuTTY is reliable but doesn't explain errors or warn you about dangerous command
 
 LucidSSH fills a different gap: it's for people who manage one or two servers, aren't professional sysadmins, and want to understand what's happening — without extra effort.
 
-*Note: screenshots below show the Russian locale (the default). An English UI is also built in and can be switched in Settings.*
-
 ---
 
 ## Key features
