@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ToggleRow } from '@/components/Settings/controls';
 import { SshKeyWizard } from './SshKeyWizard';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { wrapJumpStep } from '@/components/Terminal/connectionLogText';
 
 /**
  * Drawer «Новое подключение» (скриншот 03-Newconn, Design_Brief §3.5):
@@ -480,7 +481,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
             >
               {testResult.ok
                 ? t('conn.testOk')
-                : t(testResult.errorKey ?? 'clog.error.socket')}
+                : wrapJumpStep(t, testResult.step, t(testResult.errorKey ?? 'clog.error.socket'))}
             </div>
           )}
           <button

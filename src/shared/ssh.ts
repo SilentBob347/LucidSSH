@@ -42,6 +42,9 @@ export interface TestConnectionResult {
   ok: boolean;
   /** Ключ i18n причины при ok=false (без секретов). */
   errorKey?: string;
+  /** 'jump' — ошибка произошла на bastion, до целевого хоста дело не дошло
+   *  (SSH-05); отсутствует — ошибка на целевом хосте (в т.ч. без jump-хоста). */
+  step?: 'jump';
 }
 
 /** Запись known_hosts для показа в Настройки → Безопасность (SET-04). Без сырого ключа. */

@@ -139,15 +139,16 @@ export function registerSessionIpcHandlers(): void {
       assertSenderIsMainWindow(event);
       const input = validateHostInput(rawInput);
       let secret = validateSecret(rawSecret);
-      if (secret === undefined && rawHostId !== undefined && rawHostId !== null) {
-        const hostId = validateId(rawHostId, 'hostId');
+      const hostId =
+        rawHostId !== undefined && rawHostId !== null ? validateId(rawHostId, 'hostId') : undefined;
+      if (secret === undefined && hostId !== undefined) {
         try {
           secret = (await getSecretForConnection(hostId)) ?? undefined;
         } catch {
           secret = undefined;
         }
       }
-      return testConnection(input, secret);
+      return testConnection(input, secret, hostId);
     }
   );
 

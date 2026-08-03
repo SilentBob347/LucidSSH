@@ -2,6 +2,16 @@ import type { TFunction } from 'i18next';
 import type { ConnectionLogEntry } from '@shared/ssh';
 
 /**
+ * Оборачивает уже переведённый текст префиксом bastion (SSH-05), если запись
+ * относится к первому хопу — общий хелпер для «Деталей подключения»,
+ * степпера (CLOG-04) и результата «Проверить соединение», чтобы формат
+ * префикса не разъезжался между местами, где он используется.
+ */
+export function wrapJumpStep(t: TFunction, step: string | undefined, text: string): string {
+  return step === 'jump' ? t('clog.jumpLine', { text }) : text;
+}
+
+/**
  * Текст записи лога соединения (CLOG-01…03) — общий для «Деталей подключения»
  * и строки ошибки в степпере (CLOG-04), чтобы одна и та же запись читалась
  * одинаково в обоих местах.
@@ -12,6 +22,5 @@ import type { ConnectionLogEntry } from '@shared/ssh';
  * то, чего требовалось избежать.
  */
 export function formatLogEntry(t: TFunction, entry: ConnectionLogEntry): string {
-  const text = t(entry.messageKey, entry.params);
-  return entry.step === 'jump' ? t('clog.jumpLine', { text }) : text;
+  return wrapJumpStep(t, entry.step, t(entry.messageKey, entry.params));
 }
