@@ -15,7 +15,7 @@ interface HostRow {
   auth_method: string;
   key_path: string | null;
   group_id: number | null;
-  proxy_jump: string | null;
+  proxy_jump_host_id: number | null;
   note: string | null;
   guard_enabled: number;
   sort_order: number;
@@ -41,7 +41,7 @@ function rowToHost(r: HostRow): Host {
     authMethod: r.auth_method as AuthMethod,
     keyPath: r.key_path ?? undefined,
     groupId: r.group_id ?? undefined,
-    proxyJump: r.proxy_jump ?? undefined,
+    proxyJumpHostId: r.proxy_jump_host_id ?? undefined,
     note: r.note ?? undefined,
     guardEnabled: r.guard_enabled === 1,
     sortOrder: r.sort_order,
@@ -81,9 +81,9 @@ export function createHost(input: HostInput): number {
   const res = openHostsDb()
     .prepare(
       `INSERT INTO hosts (name, address, port, username, auth_method, key_path,
-         group_id, proxy_jump, note, guard_enabled, sort_order, created_at, updated_at)
+         group_id, proxy_jump_host_id, note, guard_enabled, sort_order, created_at, updated_at)
        VALUES (@name, @address, @port, @username, @authMethod, @keyPath,
-         @groupId, @proxyJump, @note, @guardEnabled, @sortOrder, @createdAt, @updatedAt)`
+         @groupId, @proxyJumpHostId, @note, @guardEnabled, @sortOrder, @createdAt, @updatedAt)`
     )
     .run({
       name: input.name,
@@ -93,7 +93,7 @@ export function createHost(input: HostInput): number {
       authMethod: input.authMethod,
       keyPath: input.keyPath ?? null,
       groupId: input.groupId ?? null,
-      proxyJump: input.proxyJump ?? null,
+      proxyJumpHostId: input.proxyJumpHostId ?? null,
       note: input.note ?? null,
       guardEnabled: input.guardEnabled ? 1 : 0,
       sortOrder: 0,
@@ -108,7 +108,7 @@ export function updateHost(id: number, input: HostInput): void {
     .prepare(
       `UPDATE hosts SET name=@name, address=@address, port=@port, username=@username,
          auth_method=@authMethod, key_path=@keyPath, group_id=@groupId,
-         proxy_jump=@proxyJump, note=@note, guard_enabled=@guardEnabled, updated_at=@updatedAt
+         proxy_jump_host_id=@proxyJumpHostId, note=@note, guard_enabled=@guardEnabled, updated_at=@updatedAt
        WHERE id=@id`
     )
     .run({
@@ -120,7 +120,7 @@ export function updateHost(id: number, input: HostInput): void {
       authMethod: input.authMethod,
       keyPath: input.keyPath ?? null,
       groupId: input.groupId ?? null,
-      proxyJump: input.proxyJump ?? null,
+      proxyJumpHostId: input.proxyJumpHostId ?? null,
       note: input.note ?? null,
       guardEnabled: input.guardEnabled ? 1 : 0,
       updatedAt: new Date().toISOString()
@@ -154,6 +154,21 @@ export function hostExists(address: string, username: string): boolean {
     .prepare('SELECT 1 FROM hosts WHERE address = ? AND username = ? LIMIT 1')
     .get(address, username);
   return row !== undefined;
+}
+
+/** Точечное обновление jump-хоста без перезаписи остальных полей (используется импортом). */
+export function setProxyJumpHostId(id: number, proxyJumpHostId: number | null): void {
+  openHostsDb()
+    .prepare('UPDATE hosts SET proxy_jump_host_id = ? WHERE id = ?')
+    .run(proxyJumpHostId, id);
+}
+
+/** Хосты, у которых jump-хостом настроен именно `hostId` (для предупреждения об удалении). */
+export function listHostsReferencingProxyJump(hostId: number): Host[] {
+  const rows = openHostsDb()
+    .prepare('SELECT * FROM hosts WHERE proxy_jump_host_id = ?')
+    .all(hostId) as HostRow[];
+  return rows.map(rowToHost);
 }
 
 export function hostNameExists(name: string): boolean {

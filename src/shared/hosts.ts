@@ -22,7 +22,7 @@ export interface Host {
   authMethod: AuthMethod;
   keyPath?: string; // путь к ОРИГИНАЛЬНОМУ файлу ключа (SEC-02)
   groupId?: number;
-  proxyJump?: string;
+  proxyJumpHostId?: number; // ссылка на id другого хоста-bastion (SSH-05)
   note?: string;
   guardEnabled: boolean;
   sortOrder: number;
@@ -42,7 +42,7 @@ export interface HostInput {
   authMethod: AuthMethod;
   keyPath?: string;
   groupId?: number;
-  proxyJump?: string;
+  proxyJumpHostId?: number;
   note?: string;
   guardEnabled: boolean;
 }

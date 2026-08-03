@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { configDir } from '../config/store';
+import { resolveHostRefByName } from './resolveByName';
 
 /**
  * hosts.db — SQLite-хранилище хостов и групп (Data_Structures.md §2).
@@ -11,8 +12,10 @@ import { configDir } from '../config/store';
 
 let db: Database.Database | null = null;
 
+type MigrationStep = string | ((db: Database.Database) => void);
+
 /** Миграции применяются последовательно по user_version. */
-const MIGRATIONS: string[] = [
+const MIGRATIONS: MigrationStep[] = [
   // v1 — исходная схема
   `
   CREATE TABLE IF NOT EXISTS groups (
@@ -38,7 +41,29 @@ const MIGRATIONS: string[] = [
     created_at    TEXT    NOT NULL,
     updated_at    TEXT    NOT NULL
   );
-  `
+  `,
+  // v2 — proxy_jump становится рабочей ссылкой на другой хост (SSH-05, jump-хост)
+  (db) => {
+    db.exec(
+      'ALTER TABLE hosts ADD COLUMN proxy_jump_host_id INTEGER REFERENCES hosts(id) ON DELETE SET NULL'
+    );
+    // Тихая техническая миграция данных: старое значение proxy_jump (текст)
+    // превращается в ссылку, только если совпадает с именем существующего
+    // хоста; иначе остаётся пустым — без уведомления пользователя.
+    const rows = db
+      .prepare("SELECT id, proxy_jump FROM hosts WHERE proxy_jump IS NOT NULL AND proxy_jump <> ''")
+      .all() as Array<{ id: number; proxy_jump: string }>;
+    if (rows.length === 0) return;
+    const allHosts = db.prepare('SELECT id, name FROM hosts').all() as Array<{
+      id: number;
+      name: string;
+    }>;
+    const setJumpId = db.prepare('UPDATE hosts SET proxy_jump_host_id = ? WHERE id = ?');
+    for (const row of rows) {
+      const jumpId = resolveHostRefByName(allHosts, row.proxy_jump);
+      if (jumpId !== null) setJumpId.run(jumpId, row.id);
+    }
+  }
 ];
 
 export function hostsDbPath(): string {
@@ -61,7 +86,9 @@ export function openHostsDb(): Database.Database {
     }
     const migrate = db.transaction(() => {
       for (let v = current; v < MIGRATIONS.length; v++) {
-        db!.exec(MIGRATIONS[v]!);
+        const step = MIGRATIONS[v]!;
+        if (typeof step === 'string') db!.exec(step);
+        else step(db!);
       }
       db!.pragma(`user_version = ${MIGRATIONS.length}`);
     });

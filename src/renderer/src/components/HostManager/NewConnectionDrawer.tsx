@@ -156,7 +156,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
     keyPath: form.authMethod === 'key' ? form.keyPath.trim() : undefined,
     groupId: form.groupId !== '' ? Number(form.groupId) : undefined,
     guardEnabled: form.guardEnabled,
-    proxyJump: editHost?.proxyJump,
+    proxyJumpHostId: editHost?.proxyJumpHostId,
     note: editHost?.note
   });
 

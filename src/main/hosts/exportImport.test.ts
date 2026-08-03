@@ -1,16 +1,49 @@
-import { describe, expect, it, vi } from 'vitest';
-import type { Host, HostGroup } from '@shared/hosts';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Host, HostGroup, HostInput } from '@shared/hosts';
 
 const hostExists = vi.fn<(address: string, username: string) => boolean>(() => false);
+
+/**
+ * Мини-фейк repository для тестов importHosts (резолв proxyJump по имени,
+ * тикет 01) — держит хосты/группы в памяти этого модуля, без реальной SQLite.
+ */
+let fakeHosts: Array<{ id: number; name: string; proxyJumpHostId?: number }> = [];
+let fakeGroups: Array<{ id: number; name: string }> = [];
+let nextHostId = 1;
+let nextGroupId = 1;
+
 vi.mock('./repository', () => ({
-  hostExists: (address: string, username: string) => hostExists(address, username)
+  hostExists: (address: string, username: string) => hostExists(address, username),
+  hostNameExists: (name: string) => fakeHosts.some((h) => h.name === name),
+  listGroups: () => fakeGroups,
+  createGroup: (name: string) => {
+    const id = nextGroupId++;
+    fakeGroups.push({ id, name });
+    return id;
+  },
+  createHost: (input: HostInput) => {
+    const id = nextHostId++;
+    fakeHosts.push({ id, name: input.name, proxyJumpHostId: input.proxyJumpHostId });
+    return id;
+  },
+  listHosts: () => fakeHosts.map((h) => ({ id: h.id, name: h.name }) as Host),
+  setProxyJumpHostId: (id: number, proxyJumpHostId: number | null) => {
+    const h = fakeHosts.find((x) => x.id === id);
+    if (h) h.proxyJumpHostId = proxyJumpHostId ?? undefined;
+  }
 }));
 vi.mock('./keyFile', () => ({
   keyFileExists: (path: string) => path === 'C:\\keys\\id_ed25519'
 }));
 
-const { buildExport, EXPORT_FORMAT, EXPORT_VERSION, parseImportFile, previewImport } =
-  await import('./exportImport');
+const {
+  buildExport,
+  EXPORT_FORMAT,
+  EXPORT_VERSION,
+  parseImportFile,
+  previewImport,
+  importHosts
+} = await import('./exportImport');
 
 const host: Host = {
   id: 1,
@@ -133,5 +166,81 @@ describe('previewImport (тикет 03 — предупреждение про �
     const preview = previewImport(file);
     expect(preview.toSkip).toBe(1);
     expect(preview.missingKeyCount).toBe(0);
+  });
+});
+
+describe('importHosts — резолв jump-хоста по имени (тикет 01)', () => {
+  beforeEach(() => {
+    fakeHosts = [];
+    fakeGroups = [];
+    nextHostId = 1;
+    nextGroupId = 1;
+    hostExists.mockReturnValue(false);
+  });
+
+  it('связывает proxyJump с id хоста того же батча (bastion идёт первым в файле)', () => {
+    const bastion: Host = { ...host, id: 1, name: 'bastion' };
+    const prodDb: Host = { ...host, id: 2, name: 'prod-db', proxyJumpHostId: 1 };
+    const file = JSON.stringify(buildExport([bastion, prodDb], []));
+
+    importHosts(file, 'skip');
+
+    const created = fakeHosts.find((h) => h.name === 'prod-db')!;
+    const bastionCreated = fakeHosts.find((h) => h.name === 'bastion')!;
+    expect(created.proxyJumpHostId).toBe(bastionCreated.id);
+  });
+
+  it('связывает proxyJump, даже если bastion идёт в файле после зависимого хоста', () => {
+    const bastion: Host = { ...host, id: 1, name: 'bastion' };
+    const prodDb: Host = { ...host, id: 2, name: 'prod-db', proxyJumpHostId: 1 };
+    // Экспортируем в обратном порядке — резолв не должен зависеть от порядка строк.
+    const file = JSON.stringify(buildExport([prodDb, bastion], []));
+
+    importHosts(file, 'skip');
+
+    const created = fakeHosts.find((h) => h.name === 'prod-db')!;
+    const bastionCreated = fakeHosts.find((h) => h.name === 'bastion')!;
+    expect(created.proxyJumpHostId).toBe(bastionCreated.id);
+  });
+
+  it('связывает proxyJump с уже существующим (не импортируемым) хостом', () => {
+    fakeHosts.push({ id: 42, name: 'bastion' });
+    nextHostId = 43;
+    const file = JSON.stringify({
+      format: EXPORT_FORMAT,
+      version: EXPORT_VERSION,
+      exportedAt: new Date().toISOString(),
+      groups: [],
+      hosts: [{ ...host, name: 'prod-db', proxyJump: 'bastion' }]
+    });
+
+    importHosts(file, 'skip');
+
+    const created = fakeHosts.find((h) => h.name === 'prod-db')!;
+    expect(created.proxyJumpHostId).toBe(42);
+  });
+
+  it('bastion отсутствует и не импортируется — связь молча не восстанавливается', () => {
+    const file = JSON.stringify({
+      format: EXPORT_FORMAT,
+      version: EXPORT_VERSION,
+      exportedAt: new Date().toISOString(),
+      groups: [],
+      hosts: [{ ...host, name: 'prod-db', proxyJump: 'unknown-bastion' }]
+    });
+
+    importHosts(file, 'skip');
+
+    const created = fakeHosts.find((h) => h.name === 'prod-db')!;
+    expect(created.proxyJumpHostId).toBeUndefined();
+  });
+
+  it('хост без jump-хоста импортируется без proxyJumpHostId', () => {
+    const solo: Host = { ...host, id: 1, name: 'solo' };
+    const file = JSON.stringify(buildExport([solo], []));
+
+    importHosts(file, 'skip');
+
+    expect(fakeHosts.find((h) => h.name === 'solo')?.proxyJumpHostId).toBeUndefined();
   });
 });
