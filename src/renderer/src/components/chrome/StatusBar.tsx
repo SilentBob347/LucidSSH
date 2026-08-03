@@ -38,8 +38,10 @@ export function StatusBar(): JSX.Element {
       return;
     }
     void window.lucidSSH.getConnectionLog(active.sessionId).then((log) => {
-      const hs = log.find((e) => e.messageKey === 'clog.handshake');
-      const hk = log.find((e) => e.messageKey === 'clog.hostkeyReceived');
+      // step 'jump' — записи первого хопа (SSH-05): статус-бар показывает крипто
+      // целевого хоста, а не bastion, поэтому они пропускаются.
+      const hs = log.find((e) => e.messageKey === 'clog.handshake' && e.step !== 'jump');
+      const hk = log.find((e) => e.messageKey === 'clog.hostkeyReceived' && e.step !== 'jump');
       const cipher = hs?.params?.['cipher'];
       const keyType = hk?.params?.['keyType'];
       if (typeof cipher === 'string' && typeof keyType === 'string') {

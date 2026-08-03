@@ -56,6 +56,11 @@ interface ManagedSession {
   hostId: number;
   hostName: string;
   client: Client | null;
+  /** Соединение с jump-хостом (SSH-05), если хост подключается через bastion —
+   *  держим отдельно от `client`: через него идёт только forwardOut-канал, а
+   *  закрывать/пересоздавать нужно оба хопа. У каждой сессии он свой, пула нет
+   *  (ADR-0007). */
+  jumpClient: Client | null;
   shell: ClientChannel | null;
   cols: number;
   rows: number;
@@ -105,6 +110,9 @@ interface PendingHostKey {
   keyType: string;
   rawKey: Buffer;
   isChanged: boolean;
+  /** Этап лога для решения по этому ключу: 'jump' — отпечаток bastion,
+   *  'hostkey' — целевого хоста (SSH-05, оба диалога идут подряд). */
+  step: ConnectionLogEntry['step'];
   timeout: NodeJS.Timeout;
 }
 
@@ -211,6 +219,7 @@ export async function connectHost(hostId: number): Promise<{ sessionId: string }
     hostId,
     hostName: host.name,
     client: null,
+    jumpClient: null,
     shell: null,
     cols: 80,
     rows: 24,
@@ -262,6 +271,7 @@ export async function connectQuickHost(
     hostId: 0,
     hostName: host.name,
     client: null,
+    jumpClient: null,
     shell: null,
     cols: 80,
     rows: 24,
@@ -286,25 +296,79 @@ export async function connectQuickHost(
 }
 
 /**
+ * Роль хоста в цепочке подключения (SSH-05). 'target' — обычный хост сессии:
+ * после аутентификации открывается shell и дашборд. 'jump' — bastion: тот же
+ * путь до 'ready' (свои креды, свой fingerprint-флоу), но дальше соединение
+ * используется только как транспорт (forwardOut), поэтому ни shell, ни
+ * дашборда, ни автопереподключения по нему нет — это делает целевой хоп.
+ */
+type ConnectRole = 'target' | 'jump';
+
+interface AttemptOptions {
+  role: ConnectRole;
+  /** Открывает канал bastion→target, который ssh2 использует вместо
+   *  собственного TCP-подключения (SSH-05). Именно фабрика, а не готовый
+   *  канал: канал живёт ровно одну попытку входа и закрывается вместе с ней,
+   *  поэтому повтору пароля (passwordLoginLoop) нужен свой. */
+  openSock?: () => Promise<ClientChannel>;
+}
+
+const TARGET: AttemptOptions = { role: 'target' };
+
+/** Шаг лога с учётом роли: весь первый хоп помечается 'jump', чтобы его
+ *  записи не смешивались с одноимёнными записями целевого хоста. */
+function stepFor(opts: AttemptOptions, step: ConnectionLogEntry['step']): ConnectionLogEntry['step'] {
+  return opts.role === 'jump' ? 'jump' : step;
+}
+
+/** Ключ i18n с учётом роли: у bastion свои формулировки ошибок и успеха
+ *  (`clog.jump.*`), чтобы «неверный пароль на bastion» читалось иначе, чем
+ *  «неверный пароль на целевом сервере». */
+function keyFor(opts: AttemptOptions, key: string): string {
+  return opts.role === 'jump' ? `clog.jump.${key}` : `clog.${key}`;
+}
+
+/**
  * Один заход на подключение: создаёт Client, вешает все обработчики, зовёт
- * connect(). Возвращает 'ready' при успехе (openShell уже вызван внутри),
- * 'auth-failed' — сервер отклонил аутентификацию ДО открытия сессии и
- * разрешён повторный запрос пароля (allowAuthRetry), 'other' — прочие случаи
- * (уже залогированы, и session переведена в disconnected через
- * finishDisconnected — вызывающему дальше ничего делать не нужно).
+ * connect(). Возвращает 'ready' при успехе (openShell уже вызван внутри —
+ * кроме роли 'jump', где shell не нужен), 'auth-failed' — сервер отклонил
+ * аутентификацию ДО открытия сессии и разрешён повторный запрос пароля
+ * (allowAuthRetry), 'other' — прочие случаи (уже залогированы, и session
+ * переведена в disconnected через finishDisconnected — вызывающему дальше
+ * ничего делать не нужно).
  *
  * Тестовый рычаг (Часть 2 спеки): реальный `Client` создаётся через
  * подменяемую фабрику `clientFactory` — см. `__setClientFactoryForTest` и
  * `attemptConnectForTest` внизу файла.
  */
-function attemptConnect(
+async function attemptConnect(
   session: ManagedSession,
   host: Host,
   password: string | undefined,
   privateKey: Buffer | undefined,
   keyPassphrase: string | undefined,
-  allowAuthRetry: boolean
+  allowAuthRetry: boolean,
+  opts: AttemptOptions = TARGET
 ): Promise<'ready' | 'auth-failed' | 'other'> {
+  const isJump = opts.role === 'jump';
+
+  // Свой канал через bastion на каждую попытку (SSH-05): предыдущая унесла
+  // свой с собой, когда её Client закрылся. Client целевого хоста ещё не
+  // создаётся — если туннель не открылся, подключать нечего.
+  let sock: ClientChannel | undefined;
+  if (opts.openSock) {
+    try {
+      sock = await opts.openSock();
+      log(session, 'info', 'clog.jump.tunnelOpen', undefined, 'jump');
+    } catch {
+      // Типичная причина — bastion запрещает проброс (AllowTcpForwarding no)
+      // или целевой хост недоступен уже из его сети.
+      log(session, 'error', 'clog.jump.tunnelFailed', undefined, 'jump');
+      finishDisconnected(session);
+      return 'other';
+    }
+  }
+
   return new Promise((resolve) => {
     let settled = false;
     const settle = (v: 'ready' | 'auth-failed' | 'other'): void => {
@@ -319,12 +383,13 @@ function attemptConnect(
     // файла); дальше по функции и в openShell/dashboard.ts используется
     // обычный тип Client, ничего о подмене не зная.
     const client = clientFactory() as unknown as Client;
-    session.client = client;
+    if (isJump) session.jumpClient = client;
+    else session.client = client;
 
     client.on('greeting', (greeting: string) => {
       // Баннер сервера — недоверенный текст; в лог кладём только факт
       void greeting;
-      log(session, 'info', 'clog.greeting', undefined, 'tcp');
+      log(session, 'info', 'clog.greeting', undefined, stepFor(opts, 'tcp'));
     });
 
     client.on('handshake', (negotiated) => {
@@ -338,7 +403,7 @@ function attemptConnect(
           mac: negotiated?.cs?.mac ?? '',
           ms: Date.now() - session.connectStartedAt
         },
-        'handshake'
+        stepFor(opts, 'handshake')
       );
     });
 
@@ -357,12 +422,12 @@ function attemptConnect(
       log(
         session,
         'info',
-        'clog.ready',
+        keyFor(opts, 'ready'),
         {
           method: password !== undefined ? 'password' : host.authMethod,
           ms: Date.now() - session.connectStartedAt
         },
-        'auth'
+        stepFor(opts, 'auth')
       );
       // HM-12 шаг 4: успешный пароль-логин — момент автоматической дозаписи
       // ожидающего публичного ключа в authorized_keys (дедупликация внутри;
@@ -372,11 +437,13 @@ function attemptConnect(
       // пароль), а лог подключения открывают редко.
       if (password !== undefined && host.keyPath) {
         void deployPendingKey(client, host.keyPath, (level, key) => {
-          log(session, level, key, undefined, 'session');
+          log(session, level, key, undefined, stepFor(opts, 'session'));
           send(IPC.evTerminalData, session.id, `\r\n${t(key)}\r\n`);
         });
       }
-      openShell(session, client);
+      // Bastion — только транспорт: shell и дашборд открываются на целевом
+      // хосте, а туннель через этот Client поднимает establishJumpTunnel.
+      if (!isJump) openShell(session, client);
       settle('ready');
     });
 
@@ -393,13 +460,23 @@ function attemptConnect(
       log(
         session,
         'error',
-        `clog.error.${category}`,
+        keyFor(opts, `error.${category}`),
         undefined,
-        category === 'auth' ? 'auth' : 'tcp'
+        stepFor(opts, category === 'auth' ? 'auth' : 'tcp')
       );
     });
 
     client.on('close', () => {
+      if (isJump) {
+        // Bastion закрылся. До 'ready' — это провал всей попытки (ниже общая
+        // ветка); после — целевой Client всё равно потеряет свой forwardOut-
+        // канал и уйдёт в обычное автопереподключение (SSH-06), которое
+        // поднимет оба хопа заново; отдельной логики здесь не нужно.
+        if (settled) {
+          session.jumpClient = null;
+          return;
+        }
+      }
       if (settled) {
         // Сессия уже была открыта раньше — обычное последующее отключение,
         // штатная логика автопереподключения (не связана с retry паролем).
@@ -442,9 +519,14 @@ function attemptConnect(
       keepaliveCountMax: 3,
       tryKeyboard: true,
       hostVerifier: (key: Buffer, verify: (valid: boolean) => void) => {
-        handleHostKey(session, host, key, verify);
+        handleHostKey(session, host, key, verify, opts);
       }
     };
+
+    // Подключение через jump-хост (SSH-05): вместо собственного TCP ssh2 берёт
+    // открытый выше канал bastion→target. host/port остаются адресом целевого
+    // сервера — они нужны для known_hosts и сообщений лога.
+    if (sock) connectConfig.sock = sock;
 
     // Выбор по переданным кредам, а не по host.authMethod: для key-хоста с
     // ожидающим дозаписи ключом (HM-12) первый вход идёт по паролю.
@@ -460,7 +542,7 @@ function attemptConnect(
     try {
       client.connect(connectConfig);
     } catch {
-      log(session, 'error', 'clog.error.socket', undefined, 'tcp');
+      log(session, 'error', keyFor(opts, 'error.socket'), undefined, stepFor(opts, 'tcp'));
       finishDisconnected(session);
       settle('other');
     }
@@ -472,10 +554,129 @@ function attemptConnect(
  *  подключения напрямую, минуя establish()/hosts/repository.ts/keychain. */
 export const attemptConnectForTest = attemptConnect;
 
+/**
+ * Полное подключение сессии к своему хосту, включая первый хоп через bastion,
+ * если он задан (SSH-05). Вызывается и при первом подключении, и при
+ * автопереподключении (SSH-06) — то есть обрыв поднимает оба хопа заново,
+ * специального кода под jump-хост для этого не нужно.
+ */
 async function establish(session: ManagedSession, host: Host): Promise<void> {
   session.connectStartedAt = Date.now();
-  log(session, 'info', 'clog.tcpConnecting', { address: host.address, port: host.port }, 'tcp');
+  // Переподключение (SSH-06) поднимает цепочку с нуля — соединение с bastion
+  // от прошлой попытки закрываем здесь, иначе оно осталось бы висеть на
+  // сервере без единой ссылки на себя.
+  closeJumpClient(session, 'end');
 
+  let bastion: JumpTunnel | null = null;
+  if (host.proxyJumpHostId !== undefined) {
+    bastion = await establishJumpTunnel(session, host, host.proxyJumpHostId);
+    // Провал первого хопа уже залогирован и перевёл сессию в disconnected.
+    if (!bastion) return;
+  }
+
+  if (bastion) {
+    log(
+      session,
+      'info',
+      'clog.tcpConnectingViaJump',
+      { address: host.address, port: host.port, jump: bastion.name },
+      'tcp'
+    );
+  } else {
+    log(session, 'info', 'clog.tcpConnecting', { address: host.address, port: host.port }, 'tcp');
+  }
+
+  await connectWithCredentials(session, host, { role: 'target', openSock: bastion?.openSock });
+}
+
+interface JumpTunnel {
+  name: string;
+  /** Новый канал bastion→target поверх уже установленного первого хопа. */
+  openSock: () => Promise<ClientChannel>;
+}
+
+/**
+ * Первый хоп: соединение с bastion своими кредами и своим подтверждением
+ * fingerprint (SSH-03/04 — диалоги идут строго последовательно, сначала
+ * bastion, потом целевой хост). Возвращает способ открыть канал до целевого
+ * сервера; null — цепочка оборвалась на bastion (причина в логе со
+ * `step: 'jump'`, сессия уже переведена в disconnected).
+ *
+ * Соединение с bastion принадлежит этой сессии и никому больше: несколько
+ * сессий через один и тот же bastion открывают его столько же раз (ADR-0007).
+ */
+async function establishJumpTunnel(
+  session: ManagedSession,
+  host: Host,
+  jumpHostId: number
+): Promise<JumpTunnel | null> {
+  // ADR-0006 оставляет защиту от цепочек фильтру списка в UI, но ссылку на
+  // самого себя может создать и миграция v2 (db.ts): она резолвит старый
+  // текстовый proxy_jump по имени, а оно может совпасть с именем самого хоста.
+  if (jumpHostId === host.id) {
+    log(session, 'error', 'clog.jump.selfReference', undefined, 'jump');
+    finishDisconnected(session);
+    return null;
+  }
+
+  const bastion = getHost(jumpHostId);
+  if (!bastion) {
+    log(session, 'error', 'clog.jump.hostMissing', undefined, 'jump');
+    finishDisconnected(session);
+    return null;
+  }
+
+  log(
+    session,
+    'info',
+    'clog.jump.connecting',
+    { name: bastion.name, address: bastion.address, port: bastion.port },
+    'jump'
+  );
+
+  // Второй прыжок не поддерживается (ADR-0006): собственный proxyJumpHostId
+  // bastion-хоста здесь намеренно не читается.
+  const connected = await connectWithCredentials(session, bastion, { role: 'jump' });
+  if (!connected) return null; // причина уже в логе, сессия закрыта
+  const client = session.jumpClient;
+  if (!client) {
+    // Bastion разорвал соединение сразу после аутентификации — туннель уже
+    // не открыть (jumpClient обнуляется его обработчиком 'close').
+    log(session, 'error', 'clog.jump.tunnelFailed', undefined, 'jump');
+    finishDisconnected(session);
+    return null;
+  }
+
+  return {
+    name: bastion.name,
+    openSock: () => forwardOut(client, host.address, host.port)
+  };
+}
+
+/** Канал bastion→target через уже установленное соединение с bastion.
+ *  Адрес источника ssh2 передаёт серверу лишь как справочный (в OpenSSH это
+ *  локальный конец форварда) — реального сокета за ним нет. */
+function forwardOut(client: Client, address: string, port: number): Promise<ClientChannel> {
+  return new Promise((resolve, reject) => {
+    client.forwardOut('127.0.0.1', 0, address, port, (err, channel) => {
+      if (err || !channel) reject(err ?? new Error('forwardOut: no channel'));
+      else resolve(channel);
+    });
+  });
+}
+
+/**
+ * Достаёт креды хоста и доводит подключение до 'ready' (или до окончательной
+ * неудачи): passphrase/пароль спрашиваются в терминале, если не сохранены.
+ * Одинаково работает для целевого хоста и для bastion — разница только в
+ * `opts` (роль, шаги и ключи лога, готовый sock). true — соединение
+ * установлено.
+ */
+async function connectWithCredentials(
+  session: ManagedSession,
+  host: Host,
+  opts: AttemptOptions
+): Promise<boolean> {
   // Секрет достаётся из Credential Manager непосредственно перед подключением
   // и не сохраняется в объекте сессии (§9.9 гайда).
   let secret: string | null;
@@ -497,7 +698,8 @@ async function establish(session: ManagedSession, host: Host): Promise<void> {
     // пойдут уже по ключу. Если пользователь не ответил на запрос пароля,
     // пробуем обычный вход по ключу (вдруг ключ добавлен вручную).
     if (host.keyPath && hasPendingDeployment(host.keyPath)) {
-      if ((await passwordLoginLoop(session, host)) === 'settled') return;
+      const result = await passwordLoginLoop(session, host, opts);
+      if (result !== 'cancelled') return result === 'ready';
     }
     for (let attempt = 0; ; attempt++) {
       try {
@@ -506,9 +708,9 @@ async function establish(session: ManagedSession, host: Host): Promise<void> {
       } catch (err) {
         const reason = err instanceof PrivateKeyError ? err.reason : 'unparsable';
         if (reason !== 'needs-passphrase' || attempt >= MAX_PASSPHRASE_ATTEMPTS) {
-          log(session, 'error', `clog.keyError.${reason}`, undefined, 'auth');
+          log(session, 'error', keyFor(opts, `keyError.${reason}`), undefined, stepFor(opts, 'auth'));
           finishDisconnected(session);
-          return;
+          return false;
         }
         try {
           const promptKey = attempt === 0 ? 'sshAuth.passphrasePrompt' : 'sshAuth.passphrasePromptRetry';
@@ -519,14 +721,22 @@ async function establish(session: ManagedSession, host: Host): Promise<void> {
           );
           keyPassphrase = answer;
         } catch {
-          log(session, 'error', 'clog.keyError.needs-passphrase', undefined, 'auth');
+          log(
+            session,
+            'error',
+            keyFor(opts, 'keyError.needs-passphrase'),
+            undefined,
+            stepFor(opts, 'auth')
+          );
           finishDisconnected(session);
-          return;
+          return false;
         }
       }
     }
-    await attemptConnect(session, host, undefined, privateKey, keyPassphrase, false);
-    return;
+    return (
+      (await attemptConnect(session, host, undefined, privateKey, keyPassphrase, false, opts)) ===
+      'ready'
+    );
   }
 
   // Пароль не сохранён: спрашиваем ДО подключения (pre-flight, как и
@@ -534,25 +744,32 @@ async function establish(session: ManagedSession, host: Host): Promise<void> {
   // что нужно для серверов, не предлагающих keyboard-interactive (частый
   // случай на дефолтных настройках sshd, SSH-06).
   if (!secret) {
-    if ((await passwordLoginLoop(session, host)) === 'cancelled') finishDisconnected(session);
-    return;
+    const result = await passwordLoginLoop(session, host, opts);
+    if (result === 'cancelled') {
+      finishDisconnected(session);
+      return false;
+    }
+    return result === 'ready';
   }
 
-  await attemptConnect(session, host, secret, privateKey, keyPassphrase, false);
+  return (
+    (await attemptConnect(session, host, secret, privateKey, keyPassphrase, false, opts)) === 'ready'
+  );
 }
 
 /**
  * Интерактивный вход по паролю (SSH-06): запрашивает пароль в терминале и
  * подключается, при отказе сервера пересоздаёт попытку с новым Client и
- * переспрашивает (до MAX_PASSWORD_ATTEMPTS). 'settled' — попытки завершены
- * (успех или окончательная неудача уже обработаны внутри attemptConnect),
- * 'cancelled' — пользователь не ответил на запрос пароля; что делать с
- * сессией дальше, решает вызывающая сторона.
+ * переспрашивает (до MAX_PASSWORD_ATTEMPTS). 'ready'/'failed' — попытки
+ * завершены (успех или окончательная неудача уже обработаны внутри
+ * attemptConnect), 'cancelled' — пользователь не ответил на запрос пароля;
+ * что делать с сессией дальше, решает вызывающая сторона.
  */
 async function passwordLoginLoop(
   session: ManagedSession,
-  host: Host
-): Promise<'settled' | 'cancelled'> {
+  host: Host,
+  opts: AttemptOptions
+): Promise<'ready' | 'failed' | 'cancelled'> {
   for (let attempt = 0; ; attempt++) {
     let password: string;
     try {
@@ -567,8 +784,17 @@ async function passwordLoginLoop(
       return 'cancelled';
     }
     const allowRetry = attempt < MAX_PASSWORD_ATTEMPTS - 1;
-    const result = await attemptConnect(session, host, password, undefined, undefined, allowRetry);
-    if (result !== 'auth-failed') return 'settled'; // 'ready'/'other' — уже обработано внутри
+    const result = await attemptConnect(
+      session,
+      host,
+      password,
+      undefined,
+      undefined,
+      allowRetry,
+      opts
+    );
+    // 'ready'/'other' — уже обработано внутри attemptConnect
+    if (result !== 'auth-failed') return result === 'ready' ? 'ready' : 'failed';
   }
 }
 
@@ -576,16 +802,18 @@ function handleHostKey(
   session: ManagedSession,
   host: Host,
   rawKey: Buffer,
-  verify: (valid: boolean) => void
+  verify: (valid: boolean) => void,
+  opts: AttemptOptions = TARGET
 ): void {
   const keyType = keyTypeFromBlob(rawKey);
   const fingerprint = sha256Fingerprint(rawKey);
-  log(session, 'info', 'clog.hostkeyReceived', { keyType, fingerprint }, 'hostkey');
+  const step = stepFor(opts, 'hostkey');
+  log(session, 'info', 'clog.hostkeyReceived', { keyType, fingerprint }, step);
 
   const known = findKnownKey(host.address, host.port, keyType);
 
   if (known && known.keyBase64 === rawKey.toString('base64')) {
-    log(session, 'info', 'clog.hostkeyKnown', undefined, 'hostkey');
+    log(session, 'info', 'clog.hostkeyKnown', undefined, step);
     verify(true);
     return;
   }
@@ -596,7 +824,7 @@ function handleHostKey(
     const pending = pendingHostKeys.get(requestId);
     if (pending) {
       pendingHostKeys.delete(requestId);
-      log(session, 'warn', 'clog.hostkeyTimeout', undefined, 'hostkey');
+      log(session, 'warn', 'clog.hostkeyTimeout', undefined, step);
       pending.verify(false);
     }
   }, HOSTKEY_DECISION_TIMEOUT_MS);
@@ -609,10 +837,11 @@ function handleHostKey(
     keyType,
     rawKey,
     isChanged,
+    step,
     timeout
   });
 
-  log(session, isChanged ? 'warn' : 'info', isChanged ? 'clog.hostkeyChanged' : 'clog.hostkeyNew', undefined, 'hostkey');
+  log(session, isChanged ? 'warn' : 'info', isChanged ? 'clog.hostkeyChanged' : 'clog.hostkeyNew', undefined, step);
 
   const prompt: HostKeyPrompt = {
     requestId,
@@ -957,14 +1186,14 @@ export function confirmHostKey(requestId: string, decision: 'accept' | 'reject')
   if (decision === 'accept' && session) {
     if (pending.isChanged) {
       replaceKnownKey(pending.address, pending.port, pending.keyType, pending.rawKey);
-      log(session, 'warn', 'clog.hostkeyReplaced', undefined, 'hostkey');
+      log(session, 'warn', 'clog.hostkeyReplaced', undefined, pending.step);
     } else {
       addKnownKey(pending.address, pending.port, pending.keyType, pending.rawKey);
-      log(session, 'info', 'clog.hostkeyAccepted', undefined, 'hostkey');
+      log(session, 'info', 'clog.hostkeyAccepted', undefined, pending.step);
     }
     pending.verify(true);
   } else {
-    if (session) log(session, 'warn', 'clog.hostkeyRejected', undefined, 'hostkey');
+    if (session) log(session, 'warn', 'clog.hostkeyRejected', undefined, pending.step);
     pending.verify(false);
   }
 }
@@ -1042,11 +1271,25 @@ function finishDisconnected(session: ManagedSession): void {
   stopDashboard(session.id);
   cancelAuthPrompts(session.id);
   session.client = null;
+  // Второй хоп ушёл — соединение с bastion больше некому обслуживать
+  // (переподключение поднимет его заново). Обнуляем поле ДО end(), чтобы
+  // ответное 'close' от него ничего не пересоздавало.
+  closeJumpClient(session, 'end');
   // NOTIF-01: уведомить о потере уже установленного соединения (не о неудаче входа
   // и не о закрытии пользователем).
   if (session.everConnected && !session.userClosed) {
     notifyDisconnect(session.hostName);
   }
+}
+
+/** Закрыть соединение с bastion, если оно есть (SSH-05). Поле обнуляется
+ *  первым — обработчик 'close' на самом Client тогда просто ничего не делает. */
+function closeJumpClient(session: ManagedSession, how: 'end' | 'destroy'): void {
+  const client = session.jumpClient;
+  if (!client) return;
+  session.jumpClient = null;
+  if (how === 'end') client.end();
+  else client.destroy();
 }
 
 export function disconnectSession(sessionId: string): void {
@@ -1066,6 +1309,7 @@ export function destroySession(sessionId: string): void {
   stopDashboard(sessionId);
   cancelAuthPrompts(sessionId);
   session.client?.destroy();
+  closeJumpClient(session, 'destroy');
   sessions.delete(sessionId);
 }
 
@@ -1105,6 +1349,10 @@ export interface FakeableClient {
   on<E extends keyof ClientEventMap>(event: E, handler: ClientEventMap[E]): unknown;
   shell: Client['shell'];
   exec: Client['exec'];
+  /** Туннель до целевого хоста, когда этот Client — bastion (SSH-05). */
+  forwardOut: Client['forwardOut'];
+  end(): void;
+  destroy(): void;
 }
 
 let clientFactory: () => FakeableClient = () => new Client();

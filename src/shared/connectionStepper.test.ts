@@ -186,6 +186,46 @@ describe('deriveStepperState (CLOG-04)', () => {
     expect(state.errorEntry?.messageKey).toBe('clog.keyError.needs-passphrase');
   });
 
+  it('записи первого хопа (step jump) не двигают этапы целевого хоста', () => {
+    const entries: ConnectionLogEntry[] = [
+      entry('clog.jump.connecting', 'jump'),
+      entry('clog.greeting', 'jump'),
+      entry('clog.handshake', 'jump'),
+      entry('clog.hostkeyKnown', 'jump'),
+      entry('clog.jump.ready', 'jump'),
+      entry('clog.jump.tunnelOpen', 'jump'),
+      entry('clog.tcpConnectingViaJump', 'tcp')
+    ];
+    const state = deriveStepperState(entries);
+    expect(statusOf(state, 'dns')).toBe('active');
+    expect(statusOf(state, 'handshake')).toBe('pending');
+    expect(state.frozen).toBe(false);
+  });
+
+  it('отказ по отпечатку jump-хоста (уровень warn) тоже останавливает степпер', () => {
+    const entries: ConnectionLogEntry[] = [
+      entry('clog.jump.connecting', 'jump'),
+      entry('clog.hostkeyNew', 'jump'),
+      entry('clog.hostkeyRejected', 'jump', 'warn')
+    ];
+    const state = deriveStepperState(entries);
+    expect(state.frozen).toBe(true);
+    expect(state.errorEntry?.messageKey).toBe('clog.hostkeyRejected');
+  });
+
+  it('ошибка на jump-хосте замораживает степпер с её текстом, не помечая этапы целевого хоста', () => {
+    const entries: ConnectionLogEntry[] = [
+      entry('clog.jump.connecting', 'jump'),
+      entry('clog.jump.error.auth', 'jump', 'error'),
+      entry('clog.tcpConnectingViaJump', 'tcp')
+    ];
+    const state = deriveStepperState(entries);
+    expect(state.frozen).toBe(true);
+    expect(state.errorEntry?.messageKey).toBe('clog.jump.error.auth');
+    expect(statusOf(state, 'dns')).toBe('active');
+    expect(statusOf(state, 'auth')).toBe('pending');
+  });
+
   it('после заморозки на ошибке последующие записи лога игнорируются', () => {
     const entries: ConnectionLogEntry[] = [
       entry('clog.tcpConnecting', 'tcp'),

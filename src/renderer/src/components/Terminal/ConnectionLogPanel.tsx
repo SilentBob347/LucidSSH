@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Icon } from '@/components/common/Icon';
 import { useConnectionLog } from '@/hooks/useConnectionLog';
+import { formatLogEntry } from './connectionLogText';
 
 /**
  * Лог соединения SSH-уровня (CLOG-01…03): шаги tcp/handshake/hostkey/auth,
@@ -45,7 +46,7 @@ export function ConnectionLogPanel({
             <span className="shrink-0 text-text-faint">
               {new Date(e.timestamp).toLocaleTimeString(i18n.language)}
             </span>
-            <span className={levelColor[e.level]}>{t(e.messageKey, e.params)}</span>
+            <span className={levelColor[e.level]}>{formatLogEntry(t, e)}</span>
           </div>
         ))}
       </div>

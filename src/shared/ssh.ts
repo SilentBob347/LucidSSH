@@ -69,5 +69,8 @@ export interface ConnectionLogEntry {
   /** Ключ i18n + параметры: текст собирается на стороне отображения. Без секретов (CLOG-03). */
   messageKey: string;
   params?: Record<string, string | number>;
-  step?: 'tcp' | 'handshake' | 'hostkey' | 'auth' | 'session';
+  /** Этап подключения. 'jump' — весь первый хоп через bastion (SSH-05): и его
+   *  собственные tcp/hostkey/auth-записи, и ошибки — так они отличимы от
+   *  записей целевого хоста, идущих следом с обычными step. */
+  step?: 'tcp' | 'handshake' | 'hostkey' | 'auth' | 'session' | 'jump';
 }
