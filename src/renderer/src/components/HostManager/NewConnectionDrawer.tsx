@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AuthMethod, HostInput } from '@shared/hosts';
+import type { AuthMethod, Host, HostInput } from '@shared/hosts';
 import type { TestConnectionResult } from '@shared/ssh';
 import { useHosts } from '@/stores/hosts';
 import { useSessions } from '@/stores/sessions';
@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ToggleRow } from '@/components/Settings/controls';
 import { SshKeyWizard } from './SshKeyWizard';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { wrapJumpStep } from '@/components/Terminal/connectionLogText';
 
 /**
  * Drawer «Новое подключение» (скриншот 03-Newconn, Design_Brief §3.5):
@@ -27,13 +28,135 @@ interface FormState {
   authMethod: AuthMethod;
   keyPath: string;
   groupId: string; // '' = без группы
+  proxyJumpHostId: number | undefined; // SSH-05 тикет 04: выбирается в форме
   secret: string; // пароль или passphrase; не хранится дольше сабмита
   guardEnabled: boolean; // GUARD-05
 }
 
+/**
+ * Search-комбобокс выбора jump-хоста (SSH-05, тикет 04): переиспользует
+ * паттерн текстового поиска по хостам (HM-05, `HostPanel.tsx`), а не заводит
+ * отдельный библиотечный компонент. Кандидаты — хосты без своего
+ * proxyJumpHostId (single-hop, ADR 0006), минус сам редактируемый хост.
+ *
+ * Инвариант single-hop двусторонний, поэтому одного фильтра кандидатов мало:
+ * если сам редактируемый хост уже служит чьим-то jump-хостом, поле целиком
+ * запирается — иначе через него собиралась бы цепочка A→B→C с другого конца.
+ * Окончательное решение всё равно за main (`repo.checkJumpHost`): здесь оно
+ * лишь объясняется пользователю до отправки формы.
+ */
+function JumpHostField({
+  hosts,
+  excludeHostId,
+  value,
+  onChange
+}: {
+  hosts: Host[];
+  excludeHostId: number | undefined;
+  value: number | undefined;
+  onChange: (id: number | undefined) => void;
+}): JSX.Element {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent): void => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const selected = hosts.find((h) => h.id === value);
+  const usedAsJumpBy = hosts.filter((h) => h.proxyJumpHostId === excludeHostId);
+  const locked = excludeHostId !== undefined && usedAsJumpBy.length > 0;
+  const candidates = hosts.filter(
+    (h) => h.proxyJumpHostId === undefined && h.id !== excludeHostId
+  );
+  const q = query.trim().toLowerCase();
+  const filtered = q === '' ? candidates : candidates.filter((h) => h.name.toLowerCase().includes(q));
+
+  const inputCls =
+    'h-[34px] w-full rounded-[4px] border border-border-default bg-bg-base px-[11px] text-[13px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent';
+
+  if (locked) {
+    return (
+      <div>
+        <label className="mb-1 block text-[12.5px] font-medium text-text-strong" htmlFor="conn-jumphost">
+          {t('conn.jumpHost')}
+        </label>
+        <input
+          id="conn-jumphost"
+          className={`${inputCls} cursor-not-allowed opacity-60`}
+          value={t('conn.jumpHostNone')}
+          readOnly
+          disabled
+        />
+        <div className="mt-1 text-[12px] text-text-dim">
+          {t('conn.jumpHostLocked', { hosts: usedAsJumpBy.map((h) => h.name).join(', ') })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <label className="mb-1 block text-[12.5px] font-medium text-text-strong" htmlFor="conn-jumphost">
+        {t('conn.jumpHost')}
+      </label>
+      <input
+        id="conn-jumphost"
+        className={inputCls}
+        placeholder={t('conn.jumpHostSearchPlaceholder')}
+        value={open ? query : (selected?.name ?? t('conn.jumpHostNone'))}
+        readOnly={!open}
+        onFocus={() => {
+          setQuery('');
+          setOpen(true);
+        }}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {open && (
+        <div className="absolute top-full right-0 left-0 z-10 mt-1 max-h-[180px] overflow-y-auto rounded-[4px] border border-border-default bg-bg-elevated shadow-lg">
+          <button
+            type="button"
+            onClick={() => {
+              onChange(undefined);
+              setOpen(false);
+            }}
+            className="flex h-8 w-full items-center px-[11px] text-left text-[12.5px] text-text-muted hover:bg-bg-elevated-2"
+          >
+            {t('conn.jumpHostNone')}
+          </button>
+          {filtered.length === 0 ? (
+            <div className="px-[11px] py-2 text-[12px] text-text-dim">{t('conn.jumpHostEmpty')}</div>
+          ) : (
+            filtered.map((h) => (
+              <button
+                key={h.id}
+                type="button"
+                onClick={() => {
+                  onChange(h.id);
+                  setOpen(false);
+                }}
+                className="flex h-8 w-full items-center px-[11px] text-left text-[12.5px] text-text-strong hover:bg-bg-elevated-2"
+              >
+                {h.name}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function NewConnectionDrawer(): JSX.Element | null {
   const { t } = useTranslation();
-  const { drawer, closeDrawer, groups, refresh } = useHosts();
+  const { drawer, closeDrawer, hosts, groups, refresh } = useHosts();
   const { connect } = useSessions();
   const { config } = useConfig();
   // SET-05/GUIDE-06: подсказки под полями скрываются в «Режиме эксперта» —
@@ -83,6 +206,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
         authMethod: editHost.authMethod,
         keyPath: editHost.keyPath ?? '',
         groupId: editHost.groupId !== undefined ? String(editHost.groupId) : '',
+        proxyJumpHostId: editHost.proxyJumpHostId,
         secret: '',
         guardEnabled: editHost.guardEnabled
       });
@@ -97,6 +221,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
         authMethod: 'password',
         keyPath: '',
         groupId: drawer.presetGroupId !== undefined ? String(drawer.presetGroupId) : '',
+        proxyJumpHostId: undefined,
         secret: '',
         guardEnabled: true
       });
@@ -156,7 +281,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
     keyPath: form.authMethod === 'key' ? form.keyPath.trim() : undefined,
     groupId: form.groupId !== '' ? Number(form.groupId) : undefined,
     guardEnabled: form.guardEnabled,
-    proxyJump: editHost?.proxyJump,
+    proxyJumpHostId: form.proxyJumpHostId,
     note: editHost?.note
   });
 
@@ -455,6 +580,16 @@ export function NewConnectionDrawer(): JSX.Element | null {
             </select>
           </div>
 
+          <div>
+            <JumpHostField
+              hosts={hosts}
+              excludeHostId={editHost?.id}
+              value={form.proxyJumpHostId}
+              onChange={(id) => set({ proxyJumpHostId: id })}
+            />
+            {showHints && <div className={helper}>{t('conn.jumpHostHelper')}</div>}
+          </div>
+
           <ToggleRow
             title={t('conn.guardEnabled')}
             desc={t('conn.guardEnabledDesc')}
@@ -480,7 +615,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
             >
               {testResult.ok
                 ? t('conn.testOk')
-                : t(testResult.errorKey ?? 'clog.error.socket')}
+                : wrapJumpStep(t, testResult.step, t(testResult.errorKey ?? 'clog.error.socket'))}
             </div>
           )}
           <button

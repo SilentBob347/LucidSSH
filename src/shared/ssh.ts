@@ -42,6 +42,9 @@ export interface TestConnectionResult {
   ok: boolean;
   /** Ключ i18n причины при ok=false (без секретов). */
   errorKey?: string;
+  /** 'jump' — ошибка произошла на bastion, до целевого хоста дело не дошло
+   *  (SSH-05); отсутствует — ошибка на целевом хосте (в т.ч. без jump-хоста). */
+  step?: 'jump';
 }
 
 /** Запись known_hosts для показа в Настройки → Безопасность (SET-04). Без сырого ключа. */
@@ -69,5 +72,8 @@ export interface ConnectionLogEntry {
   /** Ключ i18n + параметры: текст собирается на стороне отображения. Без секретов (CLOG-03). */
   messageKey: string;
   params?: Record<string, string | number>;
-  step?: 'tcp' | 'handshake' | 'hostkey' | 'auth' | 'session';
+  /** Этап подключения. 'jump' — весь первый хоп через bastion (SSH-05): и его
+   *  собственные tcp/hostkey/auth-записи, и ошибки — так они отличимы от
+   *  записей целевого хоста, идущих следом с обычными step. */
+  step?: 'tcp' | 'handshake' | 'hostkey' | 'auth' | 'session' | 'jump';
 }

@@ -11,7 +11,6 @@ const MAX = {
   address: 255,
   username: 64,
   keyPath: 500,
-  proxyJump: 255,
   note: 2000,
   secret: 1024,
   groupName: 60
@@ -67,7 +66,18 @@ export function validateHostInput(raw: unknown): HostInput {
     groupId = r['groupId'];
   }
 
-  const proxyJump = str(r['proxyJump'], 'proxyJump', MAX.proxyJump, false);
+  let proxyJumpHostId: number | undefined;
+  if (r['proxyJumpHostId'] !== undefined && r['proxyJumpHostId'] !== null) {
+    if (
+      typeof r['proxyJumpHostId'] !== 'number' ||
+      !Number.isInteger(r['proxyJumpHostId']) ||
+      r['proxyJumpHostId'] < 1
+    ) {
+      throw new IpcValidationError('proxyJumpHostId: positive integer expected');
+    }
+    proxyJumpHostId = r['proxyJumpHostId'];
+  }
+
   const note = str(r['note'], 'note', MAX.note, false);
 
   const guardEnabled = r['guardEnabled'];
@@ -83,7 +93,7 @@ export function validateHostInput(raw: unknown): HostInput {
     authMethod: authMethod as AuthMethod,
     keyPath,
     groupId,
-    proxyJump,
+    proxyJumpHostId,
     note,
     guardEnabled
   };

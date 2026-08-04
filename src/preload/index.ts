@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC, type AppInfo } from '@shared/ipc';
 import type { Host, HostGroup, HostInput, ImportPreview } from '@shared/hosts';
-import type { ExternalImportResult, ImportedHost } from '@shared/import';
+import type { ExternalImportApplyResult, ExternalImportResult, ImportedHost } from '@shared/import';
 import type {
   AuthPromptRequest,
   ConnectionLogEntry,
@@ -64,7 +64,13 @@ const api = {
     ipcRenderer.invoke(IPC.hostCreate, input, secret),
   updateHost: (id: number, input: HostInput, secret?: string): Promise<void> =>
     ipcRenderer.invoke(IPC.hostUpdate, id, input, secret),
-  deleteHost: (id: number): Promise<void> => ipcRenderer.invoke(IPC.hostDelete, id),
+  // SSH-05 тикет 05: без force удаление хоста, используемого как jump-хост,
+  // не проходит — возвращается { deleted: false, dependents } для предупреждения.
+  deleteHost: (
+    id: number,
+    force?: boolean
+  ): Promise<{ deleted: true } | { deleted: false; dependents: Host[] }> =>
+    ipcRenderer.invoke(IPC.hostDelete, id, force),
   reorderHosts: (orderedIds: number[]): Promise<void> =>
     ipcRenderer.invoke(IPC.hostsReorder, orderedIds),
   hostHasSecret: (id: number): Promise<boolean> => ipcRenderer.invoke(IPC.hostHasSecret, id),
@@ -107,7 +113,7 @@ const api = {
   applyExternalImport: (
     hosts: ImportedHost[],
     strategy: 'skip' | 'rename'
-  ): Promise<{ imported: number; skipped: number }> =>
+  ): Promise<ExternalImportApplyResult> =>
     ipcRenderer.invoke(IPC.importExternalApply, hosts, strategy),
 
   // --- SSH-сессии (SSH-01…07, CLOG) ---

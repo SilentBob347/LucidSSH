@@ -24,7 +24,7 @@ import { importPuttyPreview } from '../hosts/puttyImport';
 import { importSshConfigPreview } from '../hosts/sshConfigImport';
 import { importWinScpRegistryPreview, importWinScpIniPreview } from '../hosts/winscpImport';
 import { applyExternalImport } from '../hosts/externalImport';
-import type { ExternalImportResult, ImportedHost } from '@shared/import';
+import type { ExternalImportApplyResult, ExternalImportResult, ImportedHost } from '@shared/import';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { getMainWindow } from '../window/mainWindow';
@@ -37,6 +37,13 @@ import { t } from '../i18n';
  * Секрет приходит отдельным аргументом, сразу уходит в keychain и
  * не возвращается обратно (SEC-01, §9–10 гайда).
  */
+
+/**
+ * Результат `hosts:delete` (SSH-05 тикет 05). Без `force` удаление хоста,
+ * используемого как jump-хост у других, не проходит — вместо этого
+ * возвращается список задетых хостов для предупреждения в renderer.
+ */
+type HostDeleteResult = { deleted: true } | { deleted: false; dependents: Host[] };
 
 export function registerHostIpcHandlers(): void {
   // --- Хосты ---
@@ -74,6 +81,10 @@ export function registerHostIpcHandlers(): void {
       if (input.groupId !== undefined && !repo.groupExists(input.groupId)) {
         throw new IpcValidationError('groupId: group not found');
       }
+      if (input.proxyJumpHostId !== undefined) {
+        const rejection = repo.checkJumpHost(input.proxyJumpHostId);
+        if (rejection) throw new IpcValidationError(`proxyJumpHostId: ${rejection}`);
+      }
       const id = repo.createHost(input);
       if (secret !== undefined) await keychain.setSecret(id, secret);
       return { id };
@@ -91,24 +102,41 @@ export function registerHostIpcHandlers(): void {
       if (input.groupId !== undefined && !repo.groupExists(input.groupId)) {
         throw new IpcValidationError('groupId: group not found');
       }
+      if (input.proxyJumpHostId !== undefined) {
+        const rejection = repo.checkJumpHost(input.proxyJumpHostId, id);
+        if (rejection) throw new IpcValidationError(`proxyJumpHostId: ${rejection}`);
+      }
       repo.updateHost(id, input);
       if (secret !== undefined) await keychain.setSecret(id, secret);
     }
   );
 
-  ipcMain.handle(IPC.hostDelete, async (event, rawId: unknown): Promise<void> => {
-    assertSenderIsMainWindow(event);
-    const id = validateId(rawId, 'hostId');
-    const host = repo.getHost(id);
-    repo.deleteHost(id);
-    // Секрет удаляется вместе с хостом (§10 гайда)
-    await keychain.deleteSecret(id);
-    updateConfig((cfg) => {
-      cfg.history.perHostDisabled = cfg.history.perHostDisabled.filter((h) => h !== id);
-    });
-    // HM-12: незачем хранить в config.json ожидающий ключ удалённого хоста
-    if (host?.keyPath) clearPendingDeployment(host.keyPath);
-  });
+  ipcMain.handle(
+    IPC.hostDelete,
+    async (event, rawId: unknown, rawForce: unknown): Promise<HostDeleteResult> => {
+      assertSenderIsMainWindow(event);
+      const id = validateId(rawId, 'hostId');
+      const force = rawForce === true;
+      // SSH-05 тикет 05: хост используется как jump-хост у других — без force
+      // удаление не проходит, renderer получает список и показывает предупреждение.
+      // Проверка — в самом хендлере, а не только в renderer, чтобы предупреждение
+      // нельзя было обойти прямым вызовом канала.
+      if (!force) {
+        const dependents = repo.listHostsReferencingProxyJump(id);
+        if (dependents.length > 0) return { deleted: false, dependents };
+      }
+      const host = repo.getHost(id);
+      repo.deleteHost(id);
+      // Секрет удаляется вместе с хостом (§10 гайда)
+      await keychain.deleteSecret(id);
+      updateConfig((cfg) => {
+        cfg.history.perHostDisabled = cfg.history.perHostDisabled.filter((h) => h !== id);
+      });
+      // HM-12: незачем хранить в config.json ожидающий ключ удалённого хоста
+      if (host?.keyPath) clearPendingDeployment(host.keyPath);
+      return { deleted: true };
+    }
+  );
 
   ipcMain.handle(IPC.hostHasSecret, async (event, rawId: unknown): Promise<boolean> => {
     assertSenderIsMainWindow(event);
@@ -323,7 +351,7 @@ export function registerHostIpcHandlers(): void {
 
   ipcMain.handle(
     IPC.importExternalApply,
-    (event, rawHosts: unknown, rawStrategy: unknown): { imported: number; skipped: number } => {
+    (event, rawHosts: unknown, rawStrategy: unknown): ExternalImportApplyResult => {
       assertSenderIsMainWindow(event);
       if (rawStrategy !== 'skip' && rawStrategy !== 'rename') {
         throw new IpcValidationError('strategy: skip|rename expected');

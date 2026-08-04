@@ -34,3 +34,13 @@ export interface ExternalImportResult {
   /** Источник найден (реестр/файл существует), даже если хостов нет. */
   available: boolean;
 }
+
+/** Результат применения импорта (SSH-05, тикет 06 — резолв ProxyJump). */
+export interface ExternalImportApplyResult {
+  imported: number;
+  skipped: number;
+  /** Имена импортированных хостов, чья ProxyJump-директива не резолвится ни
+   *  на существующий, ни на другой импортируемый в этом же батче хост —
+   *  jump-хост у них не выставлен, нужна ручная настройка. */
+  unresolvedProxyJump: string[];
+}

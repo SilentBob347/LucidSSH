@@ -1,6 +1,7 @@
 import type { Host, HostGroup, HostInput, ImportPreview } from '@shared/hosts';
 import { validateHostInput } from './validate';
 import { keyFileExists } from './keyFile';
+import { resolveHostRefByName } from './resolveByName';
 import * as repo from './repository';
 
 /**
@@ -26,6 +27,13 @@ interface ExportedHost {
   authMethod: string;
   keyPath?: string;
   group?: string; // имя группы, не id — переносимо между машинами
+  /**
+   * Имя jump-хоста (не id — id не переносим между машинами, как и group).
+   * На импорте резолвится обратно в proxyJumpHostId по точному совпадению
+   * имени (importHosts, тем же принципом, что и group) — среди уже имеющихся
+   * хостов и хостов, импортированных в этом же батче. Если совпадения нет —
+   * связь молча не восстанавливается (как и при несовпадении group).
+   */
   proxyJump?: string;
   note?: string;
   guardEnabled: boolean;
@@ -41,6 +49,7 @@ export interface HostsExportFile {
 
 export function buildExport(hosts: Host[], groups: HostGroup[]): HostsExportFile {
   const groupById = new Map(groups.map((g) => [g.id, g]));
+  const hostById = new Map(hosts.map((h) => [h.id, h]));
   return {
     format: EXPORT_FORMAT,
     version: EXPORT_VERSION,
@@ -55,7 +64,8 @@ export function buildExport(hosts: Host[], groups: HostGroup[]): HostsExportFile
       // ВАЖНО: никаких паролей/passphrase/содержимого ключей (EXP-01)
       keyPath: h.keyPath,
       group: h.groupId !== undefined ? groupById.get(h.groupId)?.name : undefined,
-      proxyJump: h.proxyJump,
+      proxyJump:
+        h.proxyJumpHostId !== undefined ? hostById.get(h.proxyJumpHostId)?.name : undefined,
       note: h.note,
       guardEnabled: h.guardEnabled
     }))
@@ -92,6 +102,7 @@ export function parseImportFile(json: string): { hosts: HostInput[]; groups: str
   const groupNames = new Set<string>();
   const hosts: HostInput[] = [];
   const hostGroupNames: (string | undefined)[] = [];
+  const hostProxyJumpNames: (string | undefined)[] = [];
 
   for (const rawHost of root['hosts']) {
     if (typeof rawHost !== 'object' || rawHost === null) {
@@ -102,7 +113,16 @@ export function parseImportFile(json: string): { hosts: HostInput[]; groups: str
       typeof rec['group'] === 'string' && rec['group'].length > 0 && rec['group'].length <= 60
         ? rec['group']
         : undefined;
-    // Каждый хост проходит ту же строгую валидацию, что и IPC-ввод (EXP-04)
+    const proxyJumpName =
+      typeof rec['proxyJump'] === 'string' &&
+      rec['proxyJump'].length > 0 &&
+      rec['proxyJump'].length <= 100
+        ? rec['proxyJump']
+        : undefined;
+    // Каждый хост проходит ту же строгую валидацию, что и IPC-ввод (EXP-04).
+    // rec['proxyJump'] (имя bastion-хоста) сюда не передаётся — validateHostInput
+    // ждёт proxyJumpHostId (число); резолв по имени происходит позже, в importHosts,
+    // когда доступен полный список хостов (свежесозданных + уже существующих).
     const input = validateHostInput({
       name: rec['name'],
       address: rec['address'],
@@ -110,24 +130,31 @@ export function parseImportFile(json: string): { hosts: HostInput[]; groups: str
       username: rec['username'],
       authMethod: rec['authMethod'],
       keyPath: rec['keyPath'],
-      proxyJump: rec['proxyJump'],
       note: rec['note'],
       guardEnabled: typeof rec['guardEnabled'] === 'boolean' ? rec['guardEnabled'] : true
     });
     if (groupName) groupNames.add(groupName);
     hostGroupNames.push(groupName);
+    hostProxyJumpNames.push(proxyJumpName);
     hosts.push(input);
   }
 
-  // groupId проставим при импорте; временно храним имя группы в поле note? Нет —
-  // возвращаем группы отдельно, а соответствие восстанавливаем по индексу.
+  // groupId/proxyJumpHostId проставляются при импорте; здесь возвращаем сырые
+  // имена отдельно, соответствие восстанавливается по индексу.
   return {
-    hosts: hosts.map((h, i) => ({ ...h, groupName: hostGroupNames[i] }) as HostInputWithGroup),
+    hosts: hosts.map(
+      (h, i) =>
+        ({
+          ...h,
+          groupName: hostGroupNames[i],
+          proxyJumpName: hostProxyJumpNames[i]
+        }) as HostInputWithGroup
+    ),
     groups: [...groupNames]
   };
 }
 
-export type HostInputWithGroup = HostInput & { groupName?: string };
+export type HostInputWithGroup = HostInput & { groupName?: string; proxyJumpName?: string };
 
 export function previewImport(json: string): ImportPreview {
   const { hosts } = parseImportFile(json);
@@ -162,8 +189,12 @@ export function importHosts(
 
   let imported = 0;
   let skipped = 0;
+  // (id нового хоста, имя его jump-хоста) — резолвится вторым проходом, когда
+  // весь батч уже записан в БД (jump-хост мог идти в файле после зависимого).
+  const pendingProxyJump: Array<{ id: number; proxyJumpName: string }> = [];
+
   for (const h of hosts as HostInputWithGroup[]) {
-    const { groupName, ...input } = h;
+    const { groupName, proxyJumpName, ...input } = h;
     if (repo.hostExists(input.address, input.username)) {
       if (conflictStrategy === 'skip') {
         skipped++;
@@ -177,11 +208,28 @@ export function importHosts(
       }
       input.name = candidate;
     }
-    repo.createHost({
+    const id = repo.createHost({
       ...input,
       groupId: groupName ? groupIdByName.get(groupName) : undefined
     });
+    if (proxyJumpName) pendingProxyJump.push({ id, proxyJumpName });
     imported++;
   }
+
+  // Резолв jump-хоста по имени — среди уже имеющихся хостов и хостов, только что
+  // импортированных в этом же батче (их итоговые, возможно переименованные, имена).
+  if (pendingProxyJump.length > 0) {
+    const allHosts = repo.listHosts();
+    for (const { id, proxyJumpName } of pendingProxyJump) {
+      const jumpId = resolveHostRefByName(allHosts, proxyJumpName);
+      // Как и в externalImport.ts: связь ставится только если не создаёт
+      // второй прыжок (ADR-0006) — импорт не должен собирать конфигурацию,
+      // которую форма подключения собрать не даст.
+      if (jumpId !== null && repo.checkJumpHost(jumpId, id) === null) {
+        repo.setProxyJumpHostId(id, jumpId);
+      }
+    }
+  }
+
   return { imported, skipped };
 }

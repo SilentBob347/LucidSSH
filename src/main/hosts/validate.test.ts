@@ -56,6 +56,14 @@ describe('validateHostInput', () => {
     }
     expect(validateHostInput({ ...valid, groupId: 3 }).groupId).toBe(3);
   });
+
+  it('proxyJumpHostId — только положительное целое, ссылка на хост', () => {
+    for (const proxyJumpHostId of [0, -5, 1.2, 'bastion']) {
+      expect(() => validateHostInput({ ...valid, proxyJumpHostId })).toThrow();
+    }
+    expect(validateHostInput({ ...valid, proxyJumpHostId: 7 }).proxyJumpHostId).toBe(7);
+    expect(validateHostInput(valid).proxyJumpHostId).toBeUndefined();
+  });
 });
 
 describe('validateSecret', () => {

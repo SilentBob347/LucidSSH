@@ -81,10 +81,26 @@ export function deriveStepperState(entries: ConnectionLogEntry[]): StepperState 
     if (frozen) break;
 
     switch (entry.step) {
+      case 'jump':
+        // Первый хоп через bastion (SSH-05) — отдельного визуального этапа у
+        // него нет (это транспорт, а этапы описывают целевой хост), но если
+        // цепочка оборвалась здесь, причину надо показать: до этапов целевого
+        // хоста дело просто не дошло, помечать их ошибкой было бы неверно.
+        // Отказ по fingerprint логируется уровнем 'warn' (как и на целевом
+        // хосте), поэтому одной проверки level здесь недостаточно.
+        if (entry.level === 'error' || FINGERPRINT_FAIL_KEYS.has(entry.messageKey)) {
+          frozen = true;
+          errorEntry = entry;
+        }
+        break;
+
       case 'tcp':
         if (entry.level === 'error') {
           fail(firstNotDone(), entry);
-        } else if (entry.messageKey === 'clog.tcpConnecting') {
+        } else if (
+          entry.messageKey === 'clog.tcpConnecting' ||
+          entry.messageKey === 'clog.tcpConnectingViaJump'
+        ) {
           activate('dns');
         } else {
           // clog.greeting и любой другой info на этапе tcp — сокет соединился.

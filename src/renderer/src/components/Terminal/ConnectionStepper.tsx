@@ -8,6 +8,7 @@ import {
 } from '@shared/connectionStepper';
 import { Icon } from '@/components/common/Icon';
 import { useConnectionLog } from '@/hooks/useConnectionLog';
+import { formatLogEntry } from './connectionLogText';
 
 const STAGE_LABEL_KEY: Record<StepperStageId, string> = {
   dns: 'tabs.stepper.stage.dns',
@@ -98,7 +99,7 @@ export function ConnectionStepper({
 
         {state.errorEntry && (
           <div className="text-center text-[12px] text-danger-text">
-            {t(state.errorEntry.messageKey, state.errorEntry.params)}
+            {formatLogEntry(t, state.errorEntry)}
           </div>
         )}
 
