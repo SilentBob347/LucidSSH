@@ -2,18 +2,32 @@ import type { JSX } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEvents } from '@/stores/events';
+import { usePanels } from '@/stores/panels';
 import { Icon } from '@/components/common/Icon';
 
 /**
  * Иконка событий в шапке (NOTIF-03): цифровой бейдж — красный при изменении
  * отпечатка сервера (требует действия), синий при доступном обновлении. Клик
  * раскрывает компактный список с переходом к источнику.
+ * Update-событие ведёт в Settings → О программе и НЕ удаляется по клику —
+ * обновление остаётся актуальным, пока не установлено (тема: changelog при
+ * обновлении).
  */
 export function EventsMenu(): JSX.Element {
   const { t } = useTranslation();
   const { events, removeEvent, clearEvents } = useEvents();
+  const { openSettings } = usePanels();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  const onEventClick = (id: string, type: (typeof events)[number]['type']): void => {
+    if (type === 'update') {
+      openSettings('about');
+      setOpen(false);
+      return;
+    }
+    removeEvent(id);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -72,9 +86,9 @@ export function EventsMenu(): JSX.Element {
                   className="flex items-start gap-2 px-3 py-2 hover:bg-bg-base"
                   role="button"
                   tabIndex={0}
-                  onClick={() => removeEvent(e.id)}
+                  onClick={() => onEventClick(e.id, e.type)}
                   onKeyDown={(ev) => {
-                    if (ev.key === 'Enter') removeEvent(e.id);
+                    if (ev.key === 'Enter') onEventClick(e.id, e.type);
                   }}
                 >
                   <span

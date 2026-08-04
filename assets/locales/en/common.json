@@ -712,6 +712,7 @@
       "installNow": "Install and restart",
       "installWarn": "The app will restart to install the update.",
       "installWarnSessions": "Active SSH sessions: {{count}}. They will be closed on restart.",
+      "whatsNew": "What's new:",
       "error": "Could not check for updates",
       "idle": "Check for updates",
       "notConfigured": "Update source is not configured",

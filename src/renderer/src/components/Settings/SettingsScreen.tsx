@@ -15,6 +15,7 @@ import { Card, Segment, SectionTitle, ToggleRow } from './controls';
 import { Icon } from '@/components/common/Icon';
 import { LogoMark } from '@/components/common/LogoMark';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { parseReleaseNotes } from './releaseNotes';
 
 /**
  * Страница настроек (SET-01…08; Design_Brief §3.10; скриншот 08). Отдельная
@@ -708,7 +709,7 @@ function HotkeysSection(): JSX.Element {
 }
 
 function AboutSection({ onOpenGuide }: { onOpenGuide: () => void }): JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { config, update } = useConfig();
   const { status, check, download, install } = useUpdates();
   const { sessions } = useSessions();
@@ -750,6 +751,13 @@ function AboutSection({ onOpenGuide }: { onOpenGuide: () => void }): JSX.Element
     else void check();
   };
 
+  // Список изменений — только пока обновление ещё не установлено (available/downloaded),
+  // язык берём из активной локали интерфейса, с фолбэком RU→EN в самом парсере.
+  const changelogItems =
+    updateState === 'available' || updateState === 'downloaded'
+      ? parseReleaseNotes(status?.info?.releaseNotes, i18n.language.startsWith('ru') ? 'ru' : 'en')
+      : [];
+
   return (
     <>
       <SectionTitle>{t('settings.sections.about')}</SectionTitle>
@@ -779,9 +787,19 @@ function AboutSection({ onOpenGuide }: { onOpenGuide: () => void }): JSX.Element
         {(statusLine || confirmInstall) && (
           <div className="border-t border-[rgba(255,255,255,0.06)] px-[18px] py-[12px]">
             {statusLine && <div className="text-[11.5px] text-text-dim">{statusLine}</div>}
+            {changelogItems.length > 0 && (
+              <div className="mt-2">
+                <div className="text-[11.5px] font-medium text-text-muted">{t('settings.updates.whatsNew')}</div>
+                <ul className="mt-1 list-disc space-y-[2px] pl-4 text-[11.5px] text-text-dim">
+                  {changelogItems.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {confirmInstall && (
               <div
-                className={`rounded-[6px] border border-warning/25 bg-warning/10 px-3 py-2 ${statusLine ? 'mt-2' : ''}`}
+                className={`rounded-[6px] border border-warning/25 bg-warning/10 px-3 py-2 ${statusLine || changelogItems.length > 0 ? 'mt-2' : ''}`}
               >
                 <div className="text-[11.5px] text-warning-text">
                   {activeCount > 0
