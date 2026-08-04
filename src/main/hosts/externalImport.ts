@@ -84,7 +84,10 @@ export function applyExternalImport(
     const allHosts = repo.listHosts();
     for (const p of pendingProxyJump) {
       const resolvedId = resolveHostRefByName(allHosts, p.alias);
-      if (resolvedId !== null && resolvedId !== p.id) {
+      // checkJumpHost смотрит текущее состояние БД, а связи проставляются
+      // по очереди — поэтому цепочка внутри одного батча (A→B, B→C) рвётся
+      // на втором звене, а не создаётся молча в обход ADR-0006.
+      if (resolvedId !== null && repo.checkJumpHost(resolvedId, p.id) === null) {
         repo.setProxyJumpHostId(p.id, resolvedId);
       } else {
         unresolvedProxyJump.push(p.name);

@@ -192,7 +192,7 @@ describe('deriveStepperState (CLOG-04)', () => {
       entry('clog.greeting', 'jump'),
       entry('clog.handshake', 'jump'),
       entry('clog.hostkeyKnown', 'jump'),
-      entry('clog.jump.ready', 'jump'),
+      entry('clog.ready', 'jump'),
       entry('clog.jump.tunnelOpen', 'jump'),
       entry('clog.tcpConnectingViaJump', 'tcp')
     ];
@@ -216,12 +216,14 @@ describe('deriveStepperState (CLOG-04)', () => {
   it('ошибка на jump-хосте замораживает степпер с её текстом, не помечая этапы целевого хоста', () => {
     const entries: ConnectionLogEntry[] = [
       entry('clog.jump.connecting', 'jump'),
-      entry('clog.jump.error.auth', 'jump', 'error'),
+      // Общий ключ с целевым хостом (clog.error.*) — различение по `step`,
+      // не по отдельному переводу (упрощение после code-review).
+      entry('clog.error.auth', 'jump', 'error'),
       entry('clog.tcpConnectingViaJump', 'tcp')
     ];
     const state = deriveStepperState(entries);
     expect(state.frozen).toBe(true);
-    expect(state.errorEntry?.messageKey).toBe('clog.jump.error.auth');
+    expect(state.errorEntry?.messageKey).toBe('clog.error.auth');
     expect(statusOf(state, 'dns')).toBe('active');
     expect(statusOf(state, 'auth')).toBe('pending');
   });

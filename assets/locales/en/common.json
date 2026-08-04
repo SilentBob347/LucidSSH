@@ -162,6 +162,7 @@
     "groupNone": "No group",
     "jumpHost": "Jump host",
     "jumpHostHelper": "The connection will go through the selected host as an intermediate server (bastion)",
+    "jumpHostLocked": "Unavailable: this host is already used as a jump host ({{hosts}}). Connecting through a chain of several jump hosts is not supported.",
     "jumpHostNone": "No jump host",
     "jumpHostSearchPlaceholder": "Find a host…",
     "jumpHostEmpty": "No matching hosts",
@@ -421,23 +422,12 @@
     },
     "jump": {
       "connecting": "Connecting to \"{{name}}\" ({{address}}:{{port}})…",
-      "ready": "Authentication succeeded ({{method}}) · {{ms}} ms",
       "tunnelOpen": "Tunnel to the target server is open",
       "tunnelFailed": "Could not open the tunnel to the target server — check that forwarding is allowed on the jump host (AllowTcpForwarding) and that the server is reachable from its network",
       "hostMissing": "Not found among the saved hosts — pick the jump host again in the connection settings",
+      "hostSecretMissing": "No saved password for the jump host — connect to it directly once and save the password, or set it in that host's connection settings",
       "selfReference": "The host is set as its own jump host — pick a different jump host in the connection settings",
-      "error": {
-        "auth": "Authentication error — the server rejected the password or key",
-        "timeout": "Connection timeout — the server did not respond in time",
-        "socket": "Network error — server unreachable or port closed"
-      },
-      "keyError": {
-        "not-found": "Private key file not found",
-        "not-a-file": "The key path is not a file",
-        "too-large": "Key file is too large — this is not a private key",
-        "unparsable": "Could not parse the key — unsupported format or corrupted file",
-        "needs-passphrase": "The key is encrypted — set a passphrase in its connection settings"
-      }
+      "hostkeyUnknown": "The jump host fingerprint is not confirmed — connect to it directly once to check and save its key, or verify whether the key has changed"
     },
     "jumpLine": "Jump host · {{text}}"
   },

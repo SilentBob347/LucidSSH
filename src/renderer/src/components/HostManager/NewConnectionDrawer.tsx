@@ -38,6 +38,12 @@ interface FormState {
  * паттерн текстового поиска по хостам (HM-05, `HostPanel.tsx`), а не заводит
  * отдельный библиотечный компонент. Кандидаты — хосты без своего
  * proxyJumpHostId (single-hop, ADR 0006), минус сам редактируемый хост.
+ *
+ * Инвариант single-hop двусторонний, поэтому одного фильтра кандидатов мало:
+ * если сам редактируемый хост уже служит чьим-то jump-хостом, поле целиком
+ * запирается — иначе через него собиралась бы цепочка A→B→C с другого конца.
+ * Окончательное решение всё равно за main (`repo.checkJumpHost`): здесь оно
+ * лишь объясняется пользователю до отправки формы.
  */
 function JumpHostField({
   hosts,
@@ -65,6 +71,8 @@ function JumpHostField({
   }, [open]);
 
   const selected = hosts.find((h) => h.id === value);
+  const usedAsJumpBy = hosts.filter((h) => h.proxyJumpHostId === excludeHostId);
+  const locked = excludeHostId !== undefined && usedAsJumpBy.length > 0;
   const candidates = hosts.filter(
     (h) => h.proxyJumpHostId === undefined && h.id !== excludeHostId
   );
@@ -73,6 +81,26 @@ function JumpHostField({
 
   const inputCls =
     'h-[34px] w-full rounded-[4px] border border-border-default bg-bg-base px-[11px] text-[13px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent';
+
+  if (locked) {
+    return (
+      <div>
+        <label className="mb-1 block text-[12.5px] font-medium text-text-strong" htmlFor="conn-jumphost">
+          {t('conn.jumpHost')}
+        </label>
+        <input
+          id="conn-jumphost"
+          className={`${inputCls} cursor-not-allowed opacity-60`}
+          value={t('conn.jumpHostNone')}
+          readOnly
+          disabled
+        />
+        <div className="mt-1 text-[12px] text-text-dim">
+          {t('conn.jumpHostLocked', { hosts: usedAsJumpBy.map((h) => h.name).join(', ') })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={rootRef} className="relative">

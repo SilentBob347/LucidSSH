@@ -94,6 +94,49 @@ describe('listHostsReferencingProxyJump', () => {
   });
 });
 
+describe('checkJumpHost — инвариант single-hop (ADR-0006)', () => {
+  it('обычный хост без своего jump-хоста подходит', async () => {
+    const repo = await freshRepo();
+    const bastionId = repo.createHost({ ...base, name: 'bastion' });
+    const targetId = repo.createHost({ ...base, name: 'prod-db' });
+
+    expect(repo.checkJumpHost(bastionId, targetId)).toBeNull();
+    // Создание нового хоста — зависимых ещё нет, hostId не передаётся.
+    expect(repo.checkJumpHost(bastionId)).toBeNull();
+  });
+
+  it('сам себе jump-хост — self', async () => {
+    const repo = await freshRepo();
+    const id = repo.createHost({ ...base, name: 'solo' });
+    expect(repo.checkJumpHost(id, id)).toBe('self');
+  });
+
+  it('несуществующий хост — not-found', async () => {
+    const repo = await freshRepo();
+    expect(repo.checkJumpHost(4242)).toBe('not-found');
+  });
+
+  it('у выбранного bastion есть свой jump-хост — chain', async () => {
+    const repo = await freshRepo();
+    const rootId = repo.createHost({ ...base, name: 'root-bastion' });
+    const midId = repo.createHost({ ...base, name: 'mid', proxyJumpHostId: rootId });
+    const targetId = repo.createHost({ ...base, name: 'prod-db' });
+
+    expect(repo.checkJumpHost(midId, targetId)).toBe('chain');
+  });
+
+  it('редактируемый хост сам служит чьим-то jump-хостом — chain (обратная сторона)', async () => {
+    const repo = await freshRepo();
+    const midId = repo.createHost({ ...base, name: 'mid' });
+    repo.createHost({ ...base, name: 'prod-db', proxyJumpHostId: midId });
+    const otherId = repo.createHost({ ...base, name: 'other' });
+
+    // Именно этот случай фильтр кандидатов в форме не ловил: mid — валидный
+    // кандидат сам по себе, но назначать ему jump уже нельзя.
+    expect(repo.checkJumpHost(otherId, midId)).toBe('chain');
+  });
+});
+
 describe('миграция v2 — бэкфилл proxy_jump_host_id из старого текстового proxy_jump', () => {
   it('связывает proxy_jump с id хоста при точном совпадении имени', async () => {
     // Готовим "старую" БД по схеме v1 напрямую, до подключения db.ts/openHostsDb.
@@ -143,6 +186,75 @@ describe('миграция v2 — бэкфилл proxy_jump_host_id из ста�
 
     expect(prodDb.proxyJumpHostId).toBe(bastion.id);
     expect(orphanDb.proxyJumpHostId).toBeUndefined();
+  });
+
+  it('цепочка A→B→C из старых данных не переезжает целиком (ADR-0006)', async () => {
+    const path = join(dir, 'hosts.db');
+    const raw = new Database(path);
+    raw.exec(`
+      CREATE TABLE groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0, collapsed INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE hosts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, address TEXT NOT NULL,
+        port INTEGER NOT NULL DEFAULT 22, username TEXT NOT NULL, auth_method TEXT NOT NULL,
+        key_path TEXT, group_id INTEGER, proxy_jump TEXT, note TEXT,
+        guard_enabled INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+    `);
+    const now = new Date().toISOString();
+    const insert = raw.prepare(
+      `INSERT INTO hosts (name, address, port, username, auth_method, proxy_jump, guard_enabled, created_at, updated_at)
+       VALUES (?, ?, 22, 'root', 'password', ?, 1, ?, ?)`
+    );
+    insert.run('a', '203.0.113.1', 'b', now, now);
+    insert.run('b', '203.0.113.2', 'c', now, now);
+    insert.run('c', '203.0.113.3', null, now, now);
+    raw.pragma('user_version = 1');
+    raw.close();
+
+    const repo = await freshRepo();
+    const a = repo.listHosts().find((h) => h.name === 'a')!;
+    const b = repo.listHosts().find((h) => h.name === 'b')!;
+    const c = repo.listHosts().find((h) => h.name === 'c')!;
+
+    // Выживает только ребро, чья цель никуда не ходит: b→c.
+    expect(b.proxyJumpHostId).toBe(c.id);
+    expect(a.proxyJumpHostId).toBeUndefined();
+  });
+
+  it('взаимные ссылки A↔B отбрасываются целиком', async () => {
+    const path = join(dir, 'hosts.db');
+    const raw = new Database(path);
+    raw.exec(`
+      CREATE TABLE groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0, collapsed INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE hosts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, address TEXT NOT NULL,
+        port INTEGER NOT NULL DEFAULT 22, username TEXT NOT NULL, auth_method TEXT NOT NULL,
+        key_path TEXT, group_id INTEGER, proxy_jump TEXT, note TEXT,
+        guard_enabled INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+    `);
+    const now = new Date().toISOString();
+    const insert = raw.prepare(
+      `INSERT INTO hosts (name, address, port, username, auth_method, proxy_jump, guard_enabled, created_at, updated_at)
+       VALUES (?, ?, 22, 'root', 'password', ?, 1, ?, ?)`
+    );
+    insert.run('a', '203.0.113.1', 'b', now, now);
+    insert.run('b', '203.0.113.2', 'a', now, now);
+    raw.pragma('user_version = 1');
+    raw.close();
+
+    const repo = await freshRepo();
+    for (const h of repo.listHosts()) expect(h.proxyJumpHostId).toBeUndefined();
   });
 
   it('пустой/отсутствующий proxy_jump не создаёт ссылку и не падает', async () => {

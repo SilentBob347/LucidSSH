@@ -8,15 +8,32 @@ import type { Host, HostInput } from '@shared/hosts';
 vi.mock('../hosts/repository', () => ({ getHost: vi.fn() }));
 vi.mock('../keychain', () => ({ getSecretForConnection: vi.fn() }));
 vi.mock('../config/store', () => ({ loadConfig: vi.fn() }));
+// known_hosts читается с диска через configDir — тестам нужен только ответ
+// «совпал / не совпал» для отпечатка bastion.
+vi.mock('./knownHosts', () => ({ matchesKnownKey: vi.fn(() => true) }));
+// Реального файла ключа в тестовом окружении нет — только один тест
+// (authMethod: 'key' для bastion) задаёт непустой возврат.
+vi.mock('./keys', () => ({
+  loadPrivateKey: vi.fn(),
+  PrivateKeyError: class PrivateKeyError extends Error {
+    constructor(public readonly reason: string) {
+      super(`private key error: ${reason}`);
+    }
+  }
+}));
 
 import { loadConfig } from '../config/store';
 import { getSecretForConnection } from '../keychain';
 import { getHost } from '../hosts/repository';
+import { matchesKnownKey } from './knownHosts';
+import { loadPrivateKey } from './keys';
 import { testConnection, __setClientFactoryForTest, type FakeableTestClient } from './testConnection';
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockGetSecretForConnection = vi.mocked(getSecretForConnection);
 const mockGetHost = vi.mocked(getHost);
+const mockMatchesKnownKey = vi.mocked(matchesKnownKey);
+const mockLoadPrivateKey = vi.mocked(loadPrivateKey);
 
 const fakeConfig = (): AppConfig =>
   ({
@@ -96,6 +113,7 @@ describe('testConnection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadConfig.mockReturnValue(fakeConfig());
+    mockMatchesKnownKey.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -125,6 +143,40 @@ describe('testConnection', () => {
     const result = await promise;
 
     expect(result).toEqual({ ok: false, errorKey: 'clog.error.auth' });
+  });
+
+  it('у bastion (пароль) нет сохранённого секрета — отказ без попытки подключения', async () => {
+    mockGetHost.mockReturnValue(fakeBastion({ authMethod: 'password' }));
+    mockGetSecretForConnection.mockResolvedValue(null);
+    const factory = vi.fn();
+    __setClientFactoryForTest(factory as unknown as () => FakeableTestClient);
+
+    const result = await testConnection(fakeInput({ proxyJumpHostId: 7 }), 'target-secret');
+
+    expect(result).toEqual({ ok: false, errorKey: 'clog.jump.hostSecretMissing', step: 'jump' });
+    // Пустой пароль на реальный сервер не уходит — до сети дело не доходит.
+    expect(factory).not.toHaveBeenCalled();
+  });
+
+  it('у bastion (ключ) нет сохранённого passphrase — легитимно, попытка идёт (незашифрованный ключ)', async () => {
+    mockGetHost.mockReturnValue(fakeBastion({ authMethod: 'key', keyPath: 'C:\\keys\\id_ed25519' }));
+    mockGetSecretForConnection.mockResolvedValue(null);
+    mockLoadPrivateKey.mockReturnValue(Buffer.from('fake-key'));
+
+    const { client, connect, emit } = makeFakeClient();
+    __setClientFactoryForTest(() => client);
+
+    const promise = testConnection(fakeInput({ proxyJumpHostId: 7 }), 'target-secret');
+    await vi.waitFor(() => {
+      if (connect.mock.calls.length === 0) throw new Error('bastion.connect ещё не вызван');
+    });
+    emit('error', Object.assign(new Error('auth'), { level: 'client-authentication' }));
+    emit('close');
+
+    // Не hostSecretMissing (та проверка касается только password-хостов) —
+    // ключевой auth без passphrase такой же законный случай, как
+    // незашифрованный приватный ключ; попытка подключения реально происходит.
+    expect(await promise).toEqual({ ok: false, errorKey: 'clog.error.auth', step: 'jump' });
   });
 
   it('bastion недоступен: цепочка обрывается на первом хопе с step "jump"', async () => {
@@ -167,6 +219,75 @@ describe('testConnection', () => {
     expect(result).toEqual({ ok: false, errorKey: 'clog.jump.selfReference', step: 'jump' });
     expect(mockGetHost).not.toHaveBeenCalled();
     expect(factory).not.toHaveBeenCalled();
+  });
+
+  it('отпечаток bastion не в known_hosts — отказ до аутентификации, пароль не уходит', async () => {
+    mockGetHost.mockReturnValue(fakeBastion());
+    mockGetSecretForConnection.mockResolvedValue('bastion-secret');
+    mockMatchesKnownKey.mockReturnValue(false);
+
+    const { client, connect, emit } = makeFakeClient();
+    __setClientFactoryForTest(() => client);
+
+    const promise = testConnection(fakeInput({ proxyJumpHostId: 7 }), 'target-secret');
+    await vi.waitFor(() => {
+      if (connect.mock.calls.length === 0) throw new Error('bastion.connect ещё не вызван');
+    });
+
+    // ssh2 зовёт hostVerifier в рукопожатии, ДО отправки пароля (SSH-07):
+    // отказ здесь означает, что секрет bastion серверу так и не достался.
+    const config = connect.mock.calls[0]?.[0] as { hostVerifier: (key: Buffer) => boolean };
+    expect(config.hostVerifier(Buffer.from('unknown-key'))).toBe(false);
+    expect(mockMatchesKnownKey).toHaveBeenCalledWith('203.0.113.1', 22, expect.any(Buffer));
+
+    emit('error', Object.assign(new Error('handshake failed'), { level: undefined }));
+    emit('close');
+    const result = await promise;
+
+    // Не «сервер недоступен» — иначе пользователь чинил бы сеть вместо ключа.
+    expect(result).toEqual({ ok: false, errorKey: 'clog.jump.hostkeyUnknown', step: 'jump' });
+  });
+
+  it('отпечаток bastion известен — цепочка идёт дальше', async () => {
+    mockGetHost.mockReturnValue(fakeBastion());
+    mockGetSecretForConnection.mockResolvedValue('bastion-secret');
+
+    const jump = makeFakeClient();
+    const target = makeFakeClient();
+    const clients = [jump.client, target.client];
+    __setClientFactoryForTest(() => clients.shift() as FakeableTestClient);
+
+    const promise = testConnection(fakeInput({ proxyJumpHostId: 7 }), 'target-secret');
+    await vi.waitFor(() => {
+      if (jump.connect.mock.calls.length === 0) throw new Error('bastion.connect ещё не вызван');
+    });
+
+    const jumpConfig = jump.connect.mock.calls[0]?.[0] as {
+      hostVerifier: (key: Buffer) => boolean;
+    };
+    expect(jumpConfig.hostVerifier(Buffer.from('known-key'))).toBe(true);
+
+    jump.emit('ready');
+    await vi.waitFor(() => {
+      if (target.connect.mock.calls.length === 0) throw new Error('target.connect ещё не вызван');
+    });
+    target.emit('ready');
+
+    expect(await promise).toEqual({ ok: true });
+  });
+
+  it('целевой хост отпечаток не сверяет — поведение старше jump-хостов, не трогаем', async () => {
+    const { client, connect, emit } = makeFakeClient();
+    __setClientFactoryForTest(() => client);
+
+    const promise = testConnection(fakeInput(), 'pw');
+    const config = connect.mock.calls[0]?.[0] as { hostVerifier: (key: Buffer) => boolean };
+
+    expect(config.hostVerifier(Buffer.from('any-key'))).toBe(true);
+    expect(mockMatchesKnownKey).not.toHaveBeenCalled();
+
+    emit('ready');
+    await promise;
   });
 
   it('bastion ok, target недоступен: ошибка без step "jump" — она про целевой хост', async () => {

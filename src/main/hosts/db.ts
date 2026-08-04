@@ -58,10 +58,21 @@ const MIGRATIONS: MigrationStep[] = [
       id: number;
       name: string;
     }>;
-    const setJumpId = db.prepare('UPDATE hosts SET proxy_jump_host_id = ? WHERE id = ?');
+    // Сначала разрешаем все алиасы, затем отбрасываем связи, нарушающие
+    // single-hop (ADR-0006): ребро X→Y выживает, только если у самого Y нет
+    // исходящего ребра. Так после миграции цепочка A→B→C превращается в B→C
+    // (A остаётся без jump-хоста), а взаимные ссылки A↔B исчезают целиком —
+    // ни одна пара не может дать второй прыжок. Данные и так были нерабочими
+    // (proxy_jump никогда не участвовал в подключении), поэтому потеря
+    // неоднозначной связи безопаснее, чем молча собранная цепочка.
+    const edges = new Map<number, number>();
     for (const row of rows) {
       const jumpId = resolveHostRefByName(allHosts, row.proxy_jump);
-      if (jumpId !== null) setJumpId.run(jumpId, row.id);
+      if (jumpId !== null && jumpId !== row.id) edges.set(row.id, jumpId);
+    }
+    const setJumpId = db.prepare('UPDATE hosts SET proxy_jump_host_id = ? WHERE id = ?');
+    for (const [hostId, jumpId] of edges) {
+      if (!edges.has(jumpId)) setJumpId.run(jumpId, hostId);
     }
   }
 ];

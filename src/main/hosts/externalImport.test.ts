@@ -103,6 +103,49 @@ describe('applyExternalImport — резолв ProxyJump', () => {
     expect(created?.proxyJumpHostId).toBeUndefined();
   });
 
+  it('цепочка A→B→C в одном батче: второе звено помечается unresolved (ADR-0006)', async () => {
+    const { applyExternalImport, repo } = await fresh();
+
+    const res = applyExternalImport(
+      [
+        host({ name: 'a', address: '203.0.113.20', proxyJump: 'b' }),
+        host({ name: 'b', address: '203.0.113.21', proxyJump: 'c' }),
+        host({ name: 'c', address: '203.0.113.22' })
+      ],
+      'skip'
+    );
+
+    expect(res.imported).toBe(3);
+    // a→b проходит первым; к моменту b→c хост b уже чей-то jump-хост,
+    // поэтому связь не ставится, а пользователь видит её в unresolved.
+    expect(res.unresolvedProxyJump).toEqual(['b']);
+    const a = repo.listHosts().find((h) => h.name === 'a')!;
+    const b = repo.listHosts().find((h) => h.name === 'b')!;
+    expect(a.proxyJumpHostId).toBe(b.id);
+    expect(b.proxyJumpHostId).toBeUndefined();
+  });
+
+  it('алиас указывает на хост, у которого уже есть свой jump-хост — unresolved', async () => {
+    const { applyExternalImport, repo } = await fresh();
+    const base = {
+      address: '198.51.100.1',
+      port: 22,
+      username: 'root',
+      authMethod: 'password' as const,
+      guardEnabled: true
+    };
+    const rootId = repo.createHost({ ...base, name: 'root-bastion' });
+    repo.createHost({ ...base, name: 'mid', address: '198.51.100.2', proxyJumpHostId: rootId });
+
+    const res = applyExternalImport(
+      [host({ name: 'prod-db', address: '203.0.113.20', proxyJump: 'mid' })],
+      'skip'
+    );
+
+    expect(res.unresolvedProxyJump).toEqual(['prod-db']);
+    expect(repo.listHosts().find((h) => h.name === 'prod-db')?.proxyJumpHostId).toBeUndefined();
+  });
+
   it('хосты без ProxyJump не попадают ни в резолв, ни в unresolved', async () => {
     const { applyExternalImport } = await fresh();
 

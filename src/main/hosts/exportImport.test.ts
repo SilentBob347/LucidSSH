@@ -30,6 +30,17 @@ vi.mock('./repository', () => ({
   setProxyJumpHostId: (id: number, proxyJumpHostId: number | null) => {
     const h = fakeHosts.find((x) => x.id === id);
     if (h) h.proxyJumpHostId = proxyJumpHostId ?? undefined;
+  },
+  // Та же логика, что в настоящем repository.checkJumpHost (ADR-0006) — на
+  // фейковых хостах этого модуля; сам инвариант проверяется на реальной БД
+  // в repository.test.ts.
+  checkJumpHost: (jumpHostId: number, hostId?: number): string | null => {
+    if (hostId !== undefined && jumpHostId === hostId) return 'self';
+    const jump = fakeHosts.find((h) => h.id === jumpHostId);
+    if (!jump) return 'not-found';
+    if (jump.proxyJumpHostId !== undefined) return 'chain';
+    if (hostId !== undefined && fakeHosts.some((h) => h.proxyJumpHostId === hostId)) return 'chain';
+    return null;
   }
 }));
 vi.mock('./keyFile', () => ({

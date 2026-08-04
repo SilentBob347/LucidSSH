@@ -163,6 +163,30 @@ export function setProxyJumpHostId(id: number, proxyJumpHostId: number | null): 
     .run(proxyJumpHostId, id);
 }
 
+/** Почему связку «хост → jump-хост» принимать нельзя (null — можно). */
+export type JumpHostRejection = 'self' | 'not-found' | 'chain';
+
+/**
+ * Единственная проверка инварианта single-hop (ADR-0006) на стороне данных.
+ * Фильтр списка в форме подключения — только первая линия: он не защищает ни
+ * импорт, ни прямой вызов IPC-канала, ни редактирование хоста, который сам уже
+ * служит чьим-то jump-хостом. Поэтому решение принимается здесь, а UI и импорт
+ * зовут одно и то же.
+ *
+ * `hostId` — id хоста, которому назначается jump (undefined при создании
+ * нового: у нового хоста ещё не может быть зависимых).
+ */
+export function checkJumpHost(jumpHostId: number, hostId?: number): JumpHostRejection | null {
+  if (hostId !== undefined && jumpHostId === hostId) return 'self';
+  const jump = getHost(jumpHostId);
+  if (!jump) return 'not-found';
+  // Второй прыжок с той стороны: выбранный bastion сам ходит через кого-то.
+  if (jump.proxyJumpHostId !== undefined) return 'chain';
+  // Второй прыжок с этой стороны: хост сам служит чьим-то bastion'ом.
+  if (hostId !== undefined && listHostsReferencingProxyJump(hostId).length > 0) return 'chain';
+  return null;
+}
+
 /** Хосты, у которых jump-хостом настроен именно `hostId` (для предупреждения об удалении). */
 export function listHostsReferencingProxyJump(hostId: number): Host[] {
   const rows = openHostsDb()

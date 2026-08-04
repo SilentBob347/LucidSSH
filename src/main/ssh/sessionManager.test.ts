@@ -16,6 +16,7 @@ vi.mock('../window/mainWindow', () => ({ getMainWindow: vi.fn(() => null) }));
 vi.mock('./knownHosts', () => ({
   addKnownKey: vi.fn(),
   findKnownKey: vi.fn(() => null),
+  keyTypeFromBlob: vi.fn(() => 'ssh-ed25519'),
   replaceKnownKey: vi.fn(),
   sha256Fingerprint: vi.fn(() => 'sha256:fake')
 }));
@@ -438,12 +439,14 @@ describe('подключение через jump-хост (SSH-05)', () => {
     jump.emit('close');
 
     await waitForDisconnected(sessionId);
-    const entry = logOf(sessionId).find((e) => e.messageKey === 'clog.jump.error.auth');
+    // Общий ключ с целевым хостом (упрощение после code-review) —
+    // различение по step, не по отдельному переводу.
+    const entry = logOf(sessionId).find((e) => e.messageKey === 'clog.error.auth');
     expect(entry?.step).toBe('jump');
     expect(created()).toBe(1); // второй Client даже не создавался
   });
 
-  it('после успешного bastion ошибка на целевом хосте логируется прежним step', async () => {
+  it('после успешного bastion ошибка на целевом хосте логируется прежним step, тем же ключом', async () => {
     const { hops } = chainClients();
     const [jump, dest] = hops as [Fake, Fake];
 
@@ -456,9 +459,12 @@ describe('подключение через jump-хост (SSH-05)', () => {
     dest.emit('close');
 
     await waitForDisconnected(sessionId);
-    const keys = logOf(sessionId);
-    expect(keys.find((e) => e.messageKey === 'clog.error.auth')?.step).toBe('auth');
-    expect(keys.some((e) => e.messageKey.startsWith('clog.jump.error.'))).toBe(false);
+    // Тот же messageKey, что и при ошибке на bastion (тест выше) — единственное
+    // отличие в записи лога это step, wrapJumpStep в renderer добавляет
+    // префикс «Jump-хост · » только по нему.
+    const entries = logOf(sessionId).filter((e) => e.messageKey === 'clog.error.auth');
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.step).toBe('auth');
   });
 
   it('bastion, отказавший в туннеле, закрывает попытку с отдельной ошибкой', async () => {

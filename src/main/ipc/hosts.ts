@@ -81,6 +81,10 @@ export function registerHostIpcHandlers(): void {
       if (input.groupId !== undefined && !repo.groupExists(input.groupId)) {
         throw new IpcValidationError('groupId: group not found');
       }
+      if (input.proxyJumpHostId !== undefined) {
+        const rejection = repo.checkJumpHost(input.proxyJumpHostId);
+        if (rejection) throw new IpcValidationError(`proxyJumpHostId: ${rejection}`);
+      }
       const id = repo.createHost(input);
       if (secret !== undefined) await keychain.setSecret(id, secret);
       return { id };
@@ -97,6 +101,10 @@ export function registerHostIpcHandlers(): void {
       if (!repo.getHost(id)) throw new IpcValidationError('hostId: not found');
       if (input.groupId !== undefined && !repo.groupExists(input.groupId)) {
         throw new IpcValidationError('groupId: group not found');
+      }
+      if (input.proxyJumpHostId !== undefined) {
+        const rejection = repo.checkJumpHost(input.proxyJumpHostId, id);
+        if (rejection) throw new IpcValidationError(`proxyJumpHostId: ${rejection}`);
       }
       repo.updateHost(id, input);
       if (secret !== undefined) await keychain.setSecret(id, secret);

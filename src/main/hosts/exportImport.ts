@@ -222,7 +222,12 @@ export function importHosts(
     const allHosts = repo.listHosts();
     for (const { id, proxyJumpName } of pendingProxyJump) {
       const jumpId = resolveHostRefByName(allHosts, proxyJumpName);
-      if (jumpId !== null) repo.setProxyJumpHostId(id, jumpId);
+      // Как и в externalImport.ts: связь ставится только если не создаёт
+      // второй прыжок (ADR-0006) — импорт не должен собирать конфигурацию,
+      // которую форма подключения собрать не даст.
+      if (jumpId !== null && repo.checkJumpHost(jumpId, id) === null) {
+        repo.setProxyJumpHostId(id, jumpId);
+      }
     }
   }
 

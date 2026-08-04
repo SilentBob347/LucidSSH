@@ -81,6 +81,29 @@ export function findKnownKey(
   return null;
 }
 
+/** Тип ключа из блоба host key (первое length-prefixed поле). */
+export function keyTypeFromBlob(blob: Buffer): string {
+  try {
+    const len = blob.readUInt32BE(0);
+    if (len > 0 && len < 64 && blob.length >= 4 + len) {
+      return blob.toString('utf8', 4, 4 + len);
+    }
+  } catch {
+    /* повреждённый блоб — вернём unknown */
+  }
+  return 'unknown';
+}
+
+/** Совпадает ли предъявленный сервером ключ с уже сохранённым в known_hosts.
+ *  Отвечает false и на незнакомый сервер, и на изменившийся ключ — тем, кому
+ *  разница важна (диалог SSH-03 vs предупреждение SSH-04), нужен findKnownKey
+ *  напрямую. Здесь — для мест, где решение пользователя спросить негде и
+ *  единственный безопасный ответ «не совпал — не подключаемся». */
+export function matchesKnownKey(address: string, port: number, rawKey: Buffer): boolean {
+  const known = findKnownKey(address, port, keyTypeFromBlob(rawKey));
+  return known !== null && known.keyBase64 === rawKey.toString('base64');
+}
+
 export function addKnownKey(address: string, port: number, keyType: string, rawKey: Buffer): void {
   mkdirSync(configDir(), { recursive: true });
   const line = `${hostToken(address, port)} ${keyType} ${rawKey.toString('base64')}\n`;

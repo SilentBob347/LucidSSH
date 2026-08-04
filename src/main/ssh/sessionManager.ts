@@ -12,9 +12,11 @@ import { loadPrivateKey, PrivateKeyError } from './keys';
 import {
   addKnownKey,
   findKnownKey,
+  keyTypeFromBlob,
   replaceKnownKey,
   sha256Fingerprint
 } from './knownHosts';
+import { forwardOut } from './forwardOut';
 import {
   ShellIntegrationSession,
   SETUP_CAP_MS,
@@ -163,19 +165,6 @@ function log(
   send(IPC.evConnectionLog, s.id, entry);
 }
 
-/** Тип ключа из блоба host key (первое length-prefixed поле). */
-function keyTypeFromBlob(blob: Buffer): string {
-  try {
-    const len = blob.readUInt32BE(0);
-    if (len > 0 && len < 64 && blob.length >= 4 + len) {
-      return blob.toString('utf8', 4, 4 + len);
-    }
-  } catch {
-    /* повреждённый блоб — вернём unknown */
-  }
-  return 'unknown';
-}
-
 export function getSession(sessionId: string): ManagedSession | undefined {
   return sessions.get(sessionId);
 }
@@ -321,13 +310,6 @@ function stepFor(opts: AttemptOptions, step: ConnectionLogEntry['step']): Connec
   return opts.role === 'jump' ? 'jump' : step;
 }
 
-/** Ключ i18n с учётом роли: у bastion свои формулировки ошибок и успеха
- *  (`clog.jump.*`), чтобы «неверный пароль на bastion» читалось иначе, чем
- *  «неверный пароль на целевом сервере». */
-function keyFor(opts: AttemptOptions, key: string): string {
-  return opts.role === 'jump' ? `clog.jump.${key}` : `clog.${key}`;
-}
-
 /**
  * Один заход на подключение: создаёт Client, вешает все обработчики, зовёт
  * connect(). Возвращает 'ready' при успехе (openShell уже вызван внутри —
@@ -422,7 +404,7 @@ async function attemptConnect(
       log(
         session,
         'info',
-        keyFor(opts, 'ready'),
+        'clog.ready',
         {
           method: password !== undefined ? 'password' : host.authMethod,
           ms: Date.now() - session.connectStartedAt
@@ -456,11 +438,13 @@ async function attemptConnect(
             ? 'timeout'
             : 'socket';
       if (category === 'auth') authFailed = true;
-      // Текст ошибки ssh2 не содержит секретов, но для надёжности не пробрасываем его
+      // Текст ошибки ssh2 не содержит секретов, но для надёжности не пробрасываем его.
+      // Общий ключ для bastion и целевого хоста — различение по `step` (см.
+      // wrapJumpStep в renderer), не по отдельному переводу.
       log(
         session,
         'error',
-        keyFor(opts, `error.${category}`),
+        `clog.error.${category}`,
         undefined,
         stepFor(opts, category === 'auth' ? 'auth' : 'tcp')
       );
@@ -542,7 +526,7 @@ async function attemptConnect(
     try {
       client.connect(connectConfig);
     } catch {
-      log(session, 'error', keyFor(opts, 'error.socket'), undefined, stepFor(opts, 'tcp'));
+      log(session, 'error', 'clog.error.socket', undefined, stepFor(opts, 'tcp'));
       finishDisconnected(session);
       settle('other');
     }
@@ -610,9 +594,10 @@ async function establishJumpTunnel(
   host: Host,
   jumpHostId: number
 ): Promise<JumpTunnel | null> {
-  // ADR-0006 оставляет защиту от цепочек фильтру списка в UI, но ссылку на
-  // самого себя может создать и миграция v2 (db.ts): она резолвит старый
-  // текстовый proxy_jump по имени, а оно может совпасть с именем самого хоста.
+  // Основная защита от self-reference и цепочек — repo.checkJumpHost
+  // (ADR-0006), вызывается при сохранении хоста. Проверка здесь — запасная,
+  // на случай прямой правки БД в обход приложения: без неё установление
+  // соединения ушло бы в цикл вместо понятной ошибки.
   if (jumpHostId === host.id) {
     log(session, 'error', 'clog.jump.selfReference', undefined, 'jump');
     finishDisconnected(session);
@@ -651,18 +636,6 @@ async function establishJumpTunnel(
     name: bastion.name,
     openSock: () => forwardOut(client, host.address, host.port)
   };
-}
-
-/** Канал bastion→target через уже установленное соединение с bastion.
- *  Адрес источника ssh2 передаёт серверу лишь как справочный (в OpenSSH это
- *  локальный конец форварда) — реального сокета за ним нет. */
-function forwardOut(client: Client, address: string, port: number): Promise<ClientChannel> {
-  return new Promise((resolve, reject) => {
-    client.forwardOut('127.0.0.1', 0, address, port, (err, channel) => {
-      if (err || !channel) reject(err ?? new Error('forwardOut: no channel'));
-      else resolve(channel);
-    });
-  });
 }
 
 /**
@@ -708,7 +681,7 @@ async function connectWithCredentials(
       } catch (err) {
         const reason = err instanceof PrivateKeyError ? err.reason : 'unparsable';
         if (reason !== 'needs-passphrase' || attempt >= MAX_PASSPHRASE_ATTEMPTS) {
-          log(session, 'error', keyFor(opts, `keyError.${reason}`), undefined, stepFor(opts, 'auth'));
+          log(session, 'error', `clog.keyError.${reason}`, undefined, stepFor(opts, 'auth'));
           finishDisconnected(session);
           return false;
         }
@@ -721,13 +694,7 @@ async function connectWithCredentials(
           );
           keyPassphrase = answer;
         } catch {
-          log(
-            session,
-            'error',
-            keyFor(opts, 'keyError.needs-passphrase'),
-            undefined,
-            stepFor(opts, 'auth')
-          );
+          log(session, 'error', 'clog.keyError.needs-passphrase', undefined, stepFor(opts, 'auth'));
           finishDisconnected(session);
           return false;
         }
