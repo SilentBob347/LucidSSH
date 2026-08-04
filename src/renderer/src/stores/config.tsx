@@ -1,6 +1,7 @@
 import type { JSX, ReactNode } from 'react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { AppConfig } from '@shared/config';
+import type { AppConfig, UpdateHotkeyResult } from '@shared/config';
+import type { HotkeyAction } from '@shared/hotkeys';
 
 /**
  * Стор настроек: кэш config.json + точечное обновление (SET-07 пишет немедленно).
@@ -16,6 +17,13 @@ export function getCurrentConfig(): AppConfig | null {
 interface ConfigStore {
   config: AppConfig | null;
   update: (path: string, value: string | number | boolean) => Promise<void>;
+  /** SET-10: перепривязка хоткея с проверкой конфликтов (issue #1). При
+   *  конфликте состояние стора не меняется — возвращает, кто уже владеет
+   *  комбинацией, чтобы секция «Горячие клавиши» показала сообщение. */
+  updateHotkey: (action: HotkeyAction, combo: string) => Promise<UpdateHotkeyResult>;
+  /** «Сбросить хоткеи к заводским» — только карта хоткеев, остальные настройки
+   *  не трогает (в отличие от общего сброса SET-08 внизу Настроек). */
+  resetHotkeys: () => Promise<void>;
   /** Отметить показ одноразовой подсказки (§5.1, SNIP-08). */
   markHint: (hintId: string) => Promise<void>;
   /** «Сбросить счётчик показов подсказок» (Настройки → Интерфейс). */
@@ -40,6 +48,21 @@ export function ConfigProvider({ children }: { children: ReactNode }): JSX.Eleme
     setConfig(next);
   }, []);
 
+  const updateHotkey = useCallback(async (action: HotkeyAction, combo: string) => {
+    const result = await window.lucidSSH.updateHotkey(action, combo);
+    if (result.ok) {
+      currentConfig = result.config;
+      setConfig(result.config);
+    }
+    return result;
+  }, []);
+
+  const resetHotkeys = useCallback(async () => {
+    const next = await window.lucidSSH.resetHotkeys();
+    currentConfig = next;
+    setConfig(next);
+  }, []);
+
   const markHint = useCallback(async (hintId: string) => {
     const next = await window.lucidSSH.markHint(hintId);
     currentConfig = next;
@@ -53,8 +76,8 @@ export function ConfigProvider({ children }: { children: ReactNode }): JSX.Eleme
   }, []);
 
   const value = useMemo<ConfigStore>(
-    () => ({ config, update, markHint, resetHints }),
-    [config, update, markHint, resetHints]
+    () => ({ config, update, updateHotkey, resetHotkeys, markHint, resetHints }),
+    [config, update, updateHotkey, resetHotkeys, markHint, resetHints]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

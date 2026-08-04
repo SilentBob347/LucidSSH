@@ -110,4 +110,15 @@ describe('resetConfig (SET-08)', () => {
     expect(fresh.window).toEqual({ width: 999, height: 555, maximized: true });
     expect(fresh.onboarding).toEqual({ completed: true });
   });
+
+  it('восстанавливает заводскую карту хоткеев (SET-10) — не трогает хосты/ключи/историю', async () => {
+    const { loadConfig, updateConfig, resetConfig } = await freshStore();
+    const { DEFAULT_HOTKEYS } = await import('@shared/hotkeys');
+    loadConfig();
+    updateConfig((cfg) => {
+      cfg.hotkeys.openCatalog = 'Ctrl+Alt+P'; // пользователь перепривязал хоткей
+    });
+    const fresh = resetConfig();
+    expect(fresh.hotkeys).toEqual(DEFAULT_HOTKEYS);
+  });
 });

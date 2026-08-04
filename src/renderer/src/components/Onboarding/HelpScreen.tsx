@@ -4,28 +4,28 @@ import { useTranslation } from 'react-i18next';
 import { usePanels } from '@/stores/panels';
 import { useConfig } from '@/stores/config';
 import { Icon } from '@/components/common/Icon';
+import {
+  DEFAULT_HOTKEYS,
+  FIXED_HOTKEYS,
+  HOTKEY_ACTIONS,
+  formatComboForDisplay,
+  hotkeyLabelKey,
+  type FixedHotkeyAction,
+  type HotkeyAction
+} from '@shared/hotkeys';
 
 /**
  * Полное руководство (HELP-01/02; дизайн «LucidSSH — Руководство»). Модалка
  * 800×600 с мини-титлбаром и вкладками: начало работы, сохранённые команды,
- * Страж, детектор ошибок, горячие клавиши. Только чтение.
+ * Страж, детектор ошибок, горячие клавиши. Только чтение (в отличие от
+ * Настроек → Горячие клавиши — там же и редактируются, SET-10) — комбинации
+ * читаются из config.hotkeys, а не хардкодятся, иначе список тут же
+ * разойдётся с фактическими биндингами после первого же ребиндинга.
  */
 
 type Tab = 'start' | 'saved' | 'guard' | 'error' | 'hotkeys';
 
-const HOTKEYS: { keys: string; key: string }[] = [
-  { keys: 'Ctrl + K', key: 'quickConnect' },
-  { keys: 'Ctrl + ,', key: 'openSettings' },
-  { keys: 'Ctrl + H', key: 'openHistory' },
-  { keys: 'Ctrl + L', key: 'openCatalog' },
-  { keys: 'Ctrl + Space', key: 'snippetPalette' },
-  { keys: 'Ctrl + F', key: 'search' },
-  { keys: 'Ctrl + W', key: 'closeTab' },
-  { keys: 'Ctrl + Shift + C', key: 'copy' },
-  { keys: 'Ctrl + Shift + V', key: 'paste' },
-  { keys: 'Esc', key: 'closePanel' },
-  { keys: 'F1', key: 'guide' }
-];
+const HOTKEY_ROW_IDS: (HotkeyAction | FixedHotkeyAction)[] = [...HOTKEY_ACTIONS, 'closePanel', 'help'];
 
 export function HelpScreen(): JSX.Element {
   const { t } = useTranslation();
@@ -105,17 +105,24 @@ export function HelpScreen(): JSX.Element {
             <>
               <H2>{t('help.tabs.hotkeys')}</H2>
               <div className="mt-[18px] max-w-[560px]">
-                {HOTKEYS.map((h) => (
-                  <div
-                    key={h.keys}
-                    className="flex items-center justify-between border-b border-[rgba(255,255,255,0.06)] py-[11px]"
-                  >
-                    <span className="text-[13px] text-text-body">{t(`settings.hk.${h.key}`)}</span>
-                    <span className="rounded-[4px] border border-border-strong px-[6px] py-[2px] font-mono text-[11.5px] text-text-body">
-                      {h.keys}
-                    </span>
-                  </div>
-                ))}
+                {HOTKEY_ROW_IDS.map((id) => {
+                  const keys =
+                    id === 'closePanel' || id === 'help'
+                      ? FIXED_HOTKEYS[id]
+                      : (config?.hotkeys[id] ?? DEFAULT_HOTKEYS[id]);
+                  const labelKey = hotkeyLabelKey(id);
+                  return (
+                    <div
+                      key={id}
+                      className="flex items-center justify-between border-b border-[rgba(255,255,255,0.06)] py-[11px]"
+                    >
+                      <span className="text-[13px] text-text-body">{t(`settings.hk.${labelKey}`)}</span>
+                      <span className="rounded-[4px] border border-border-strong px-[6px] py-[2px] font-mono text-[11.5px] text-text-body">
+                        {formatComboForDisplay(keys)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </>
           ) : (

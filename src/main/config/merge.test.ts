@@ -9,7 +9,8 @@ const defaults = {
   history: { enabled: true, perHostDisabled: [] as number[] },
   dashboard: { dismissedAlerts: {} as Record<number, DashboardAlertIssue[]> },
   shownCounts: {} as Record<string, number>,
-  pendingKeyDeployments: [] as Array<{ keyPath: string; publicKey: string }>
+  pendingKeyDeployments: [] as Array<{ keyPath: string; publicKey: string }>,
+  hotkeys: { quickConnect: 'Ctrl+K', openCatalog: 'Ctrl+Shift+L' }
 };
 
 describe('mergeWithDefaults', () => {
@@ -84,5 +85,15 @@ describe('mergeWithDefaults', () => {
       dismissedAlerts: {}
     });
     expect(mergeWithDefaults(defaults, {}).dashboard).toEqual({ dismissedAlerts: {} });
+  });
+
+  it('hotkeys (SET-10): без сохранённых оверрайдов — заводские значения по всем действиям', () => {
+    const merged = mergeWithDefaults(defaults, {});
+    expect(merged.hotkeys).toEqual(defaults.hotkeys);
+  });
+
+  it('hotkeys: сохранённый оверрайд одного действия не трогает остальные', () => {
+    const merged = mergeWithDefaults(defaults, { hotkeys: { openCatalog: 'Ctrl+Alt+L' } });
+    expect(merged.hotkeys).toEqual({ quickConnect: 'Ctrl+K', openCatalog: 'Ctrl+Alt+L' });
   });
 });

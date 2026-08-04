@@ -16,6 +16,17 @@ import { Icon } from '@/components/common/Icon';
 import { LogoMark } from '@/components/common/LogoMark';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
 import { parseReleaseNotes } from './releaseNotes';
+import {
+  DEFAULT_HOTKEYS,
+  FIXED_HOTKEYS,
+  HOTKEY_ACTIONS,
+  formatComboForDisplay,
+  hotkeyLabelKey,
+  isValidHotkeyCombo,
+  normalizeCombo,
+  type FixedHotkeyAction,
+  type HotkeyAction
+} from '@shared/hotkeys';
 
 /**
  * Страница настроек (SET-01…08; Design_Brief §3.10; скриншот 08). Отдельная
@@ -101,7 +112,7 @@ export function SettingsScreen({ onOpenGuide }: { onOpenGuide: () => void }): JS
           <Icon name="settings" size={18} className="text-lavender" />
           <span className="text-[16px] font-semibold text-text-strong">{t('settings.title')}</span>
           <span className="rounded-[4px] border border-[rgba(255,255,255,0.1)] px-[7px] py-[2px] font-mono text-[11px] text-text-dim">
-            Ctrl + ,
+            {formatComboForDisplay(config.hotkeys.openSettings)}
           </span>
         </div>
         <button
@@ -646,34 +657,110 @@ function InterfaceSection({ config, update }: { config: AppConfig; update: Updat
   );
 }
 
-interface Hotkey {
+interface HotkeyRow {
+  id: HotkeyAction | FixedHotkeyAction;
   keys: string;
   action: string;
+  editable: boolean;
 }
 
+/**
+ * SET-10 (issue #1): 9 из 11 задокументированных хоткеев редактируются —
+ * клик по карандашу переводит строку в режим захвата, следующая нажатая
+ * комбинация (с модификатором) уходит в config.hotkeys через updateHotkey.
+ * Esc и F1 показаны без карандаша (FIXED_HOTKEYS) — см. HotkeyRow.editable.
+ */
 function HotkeysSection(): JSX.Element {
   const { t } = useTranslation();
+  const { config, updateHotkey, resetHotkeys } = useConfig();
   const [q, setQ] = useState('');
-  const all: Hotkey[] = useMemo(
-    () => [
-      { keys: 'Ctrl + K', action: t('settings.hk.quickConnect') },
-      { keys: 'Ctrl + ,', action: t('settings.hk.openSettings') },
-      { keys: 'Ctrl + H', action: t('settings.hk.openHistory') },
-      { keys: 'Ctrl + L', action: t('settings.hk.openCatalog') },
-      { keys: 'Ctrl + Space', action: t('settings.hk.snippetPalette') },
-      { keys: 'Ctrl + F', action: t('settings.hk.search') },
-      { keys: 'Ctrl + W', action: t('settings.hk.closeTab') },
-      { keys: 'Ctrl + Shift + C', action: t('settings.hk.copy') },
-      { keys: 'Ctrl + Shift + V', action: t('settings.hk.paste') },
-      { keys: 'Esc', action: t('settings.hk.closePanel') },
-      { keys: 'F1', action: t('settings.hk.guide') }
-    ],
+  const [editing, setEditing] = useState<HotkeyAction | null>(null);
+  const [pendingCombo, setPendingCombo] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<{ action: HotkeyAction; ownerLabel: string } | null>(
+    null
+  );
+
+  const hotkeys = config?.hotkeys ?? DEFAULT_HOTKEYS;
+
+  const ownerLabelFor = useCallback(
+    (owner: HotkeyAction | FixedHotkeyAction): string => t(`settings.hk.${hotkeyLabelKey(owner)}`),
     [t]
   );
+
+  // Пока идёт захват — окно ловит следующую комбинацию в capture-фазе (раньше
+  // остальных обработчиков, включая глобальные хоткеи App.tsx/TerminalArea).
+  // Esc отменяет захват без сохранения (обычная конвенция) — он никогда не
+  // доходит до попытки биндинга, F1 тоже не считается готовой комбинацией
+  // (isValidHotkeyCombo требует модификатор): Esc и F1 остаются зафиксированы
+  // «по умолчанию» без исключений, решение принято явно в обсуждении тикета
+  // 01 (05.08.2026), не по букве AC4 issue #1 — там был предусмотрен показ
+  // «уже занято» и для попытки биндинга на Esc/F1, разработчик отклонил это
+  // как избыточное: раз их вообще нельзя редактировать, отдельное сообщение
+  // об этом не нужно, а Esc — общепринятая отмена, ей не место в конфликтах.
+  useEffect(() => {
+    if (!editing) return;
+    const action = editing;
+    const onKey = (e: KeyboardEvent): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        setEditing(null);
+        setPendingCombo(null);
+        return;
+      }
+      const combo = normalizeCombo(e);
+      if (!combo) return;
+      setPendingCombo(combo);
+      if (!isValidHotkeyCombo(combo)) return; // ждём комбинацию хотя бы с одним модификатором
+      void (async () => {
+        const result = await updateHotkey(action, combo);
+        setConflict(
+          !result.ok && result.conflictWith
+            ? { action, ownerLabel: ownerLabelFor(result.conflictWith) }
+            : null
+        );
+        setEditing(null);
+        setPendingCombo(null);
+      })();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [editing, updateHotkey, ownerLabelFor]);
+
+  const rows: HotkeyRow[] = useMemo(
+    () => [
+      ...HOTKEY_ACTIONS.map((id) => ({
+        id,
+        keys: hotkeys[id],
+        action: t(`settings.hk.${id}`),
+        editable: true
+      })),
+      {
+        id: 'closePanel' as const,
+        keys: FIXED_HOTKEYS.closePanel,
+        action: t('settings.hk.closePanel'),
+        editable: false
+      },
+      {
+        id: 'help' as const,
+        keys: FIXED_HOTKEYS.help,
+        action: t('settings.hk.guide'),
+        editable: false
+      }
+    ],
+    [hotkeys, t]
+  );
+
   const query = q.trim().toLowerCase();
-  const rows = all.filter(
+  const filteredRows = rows.filter(
     (r) => !query || r.action.toLowerCase().includes(query) || r.keys.toLowerCase().includes(query)
   );
+
+  const startEditing = (id: HotkeyAction): void => {
+    setConflict(null);
+    setPendingCombo(null);
+    setEditing(id);
+  };
 
   return (
     <>
@@ -685,25 +772,85 @@ function HotkeysSection(): JSX.Element {
         className="h-9 w-full rounded-[6px] border border-[rgba(255,255,255,0.12)] bg-bg-panel px-3 text-[13px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent"
       />
       <div className="overflow-hidden rounded-[8px] border border-border-default bg-bg-panel">
-        {rows.length === 0 ? (
+        {filteredRows.length === 0 ? (
           <div className="py-[26px] text-center text-[12.5px] text-text-dim">
             {t('settings.hk.noMatches')}
           </div>
         ) : (
-          rows.map((r) => (
-            <div
-              key={r.keys}
-              className="flex items-center justify-between gap-[14px] border-b border-[rgba(255,255,255,0.05)] px-4 py-[11px] last:border-b-0"
-            >
-              <span className="text-[13px] text-text-body">{r.action}</span>
-              <span className="shrink-0 rounded-[5px] border border-[rgba(255,255,255,0.1)] bg-bg-base px-[9px] py-[3px] font-mono text-[12px] text-text-muted">
-                {r.keys}
-              </span>
-            </div>
-          ))
+          filteredRows.map((r) => {
+            const isEditing = r.editable && editing === r.id;
+            const showConflict = r.editable && conflict?.action === r.id;
+            return (
+              <div
+                key={r.id}
+                className="border-b border-[rgba(255,255,255,0.05)] px-4 py-[11px] last:border-b-0"
+              >
+                <div className="flex items-center justify-between gap-[14px]">
+                  <span className="text-[13px] text-text-body">{r.action}</span>
+                  <div className="flex shrink-0 items-center gap-[6px]">
+                    <span
+                      className={`rounded-[5px] border px-[9px] py-[3px] font-mono text-[12px] ${
+                        isEditing
+                          ? 'border-accent text-accent'
+                          : 'border-[rgba(255,255,255,0.1)] text-text-muted'
+                      } bg-bg-base`}
+                    >
+                      {isEditing
+                        ? (pendingCombo && formatComboForDisplay(pendingCombo)) ||
+                          t('settings.hk.pressKeys')
+                        : formatComboForDisplay(r.keys)}
+                    </span>
+                    {r.editable && !isEditing && (
+                      <button
+                        type="button"
+                        aria-label={t('settings.hk.editAction', { action: r.action })}
+                        onClick={() => startEditing(r.id as HotkeyAction)}
+                        className="flex size-[24px] items-center justify-center rounded-[5px] text-text-muted hover:bg-bg-elevated hover:text-text-strong"
+                      >
+                        <Icon name="edit" size={14} />
+                      </button>
+                    )}
+                    {isEditing && (
+                      <button
+                        type="button"
+                        aria-label={t('common.cancel')}
+                        onClick={() => {
+                          setEditing(null);
+                          setPendingCombo(null);
+                        }}
+                        className="flex size-[24px] items-center justify-center rounded-[5px] text-text-muted hover:bg-bg-elevated hover:text-text-strong"
+                      >
+                        <Icon name="close" size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {showConflict && (
+                  <div className="mt-[6px] text-[11.5px] text-danger-text">
+                    {t('settings.hk.conflict', { action: conflict?.ownerLabel })}
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
-      <div className="text-[11.5px] text-text-dim">{t('settings.hk.readOnlyNote')}</div>
+      <div className="text-[11.5px] text-text-dim">{t('settings.hk.editHint')}</div>
+      <div className="text-[11.5px] text-text-dim">
+        <button
+          type="button"
+          onClick={() => {
+            setEditing(null);
+            setPendingCombo(null);
+            setConflict(null);
+            void resetHotkeys();
+          }}
+          className="text-lavender hover:underline"
+        >
+          {t('settings.hk.resetLink')}
+        </button>{' '}
+        {t('settings.hk.resetNote')}
+      </div>
     </>
   );
 }

@@ -1,4 +1,5 @@
 import type { AppConfig } from '@shared/config';
+import { DEFAULT_HOTKEYS } from '@shared/hotkeys';
 import { detectSystemLanguage } from '../i18n/languages';
 
 export function createDefaultConfig(appVersion: string): AppConfig {
@@ -50,6 +51,7 @@ export function createDefaultConfig(appVersion: string): AppConfig {
     guard: {
       globalEnabled: true
     },
+    hotkeys: { ...DEFAULT_HOTKEYS },
     history: {
       enabled: true,
       perHostDisabled: []
