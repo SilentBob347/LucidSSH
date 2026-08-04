@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ExternalImportResult, ImportSource } from '@shared/import';
+import type { ExternalImportApplyResult, ExternalImportResult, ImportSource } from '@shared/import';
 import { useHosts } from '@/stores/hosts';
 import { Icon } from '@/components/common/Icon';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
@@ -20,7 +20,7 @@ export function ExternalImportDialog({ onClose }: { onClose: () => void }): JSX.
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [strategy, setStrategy] = useState<'skip' | 'rename'>('skip');
-  const [applied, setApplied] = useState<{ imported: number; skipped: number } | null>(null);
+  const [applied, setApplied] = useState<ExternalImportApplyResult | null>(null);
   const [busy, setBusy] = useState(false);
 
   const loadPutty = useCallback(async () => {
@@ -163,7 +163,21 @@ export function ExternalImportDialog({ onClose }: { onClose: () => void }): JSX.
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
           {applied ? (
             <div className="py-6 text-center text-[13px] text-text-body">
-              {t('import.resultBody', applied)}
+              {t('import.resultBody', { imported: applied.imported, skipped: applied.skipped })}
+              {applied.unresolvedProxyJump.length > 0 && (
+                <div className="mx-auto mt-3 max-w-[360px] rounded-[6px] border border-warning/25 bg-warning/10 px-3 py-2 text-left">
+                  <div className="flex items-center gap-1 text-[11.5px] font-semibold text-warning-text">
+                    <Icon name="alert" size={13} /> {t('import.unresolvedProxyJump')}
+                  </div>
+                  <div className="mt-1 space-y-[2px]">
+                    {applied.unresolvedProxyJump.map((name, i) => (
+                      <div key={i} className="truncate font-mono text-[10.5px] text-text-dim">
+                        {name}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : loading ? (
             <div className="py-8 text-center text-[12.5px] text-text-dim">{t('import.loading')}</div>

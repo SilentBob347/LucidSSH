@@ -761,6 +761,7 @@
     "dupeRename": "Rename",
     "importBtn": "Import ({{count}})",
     "resultBody": "Imported: {{imported}} · skipped: {{skipped}}",
+    "unresolvedProxyJump": "Jump host not found by name — set it up manually:",
     "ok": "Done",
     "putty": {
       "none": "No PuTTY sessions found in the registry"

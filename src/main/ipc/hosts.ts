@@ -24,7 +24,7 @@ import { importPuttyPreview } from '../hosts/puttyImport';
 import { importSshConfigPreview } from '../hosts/sshConfigImport';
 import { importWinScpRegistryPreview, importWinScpIniPreview } from '../hosts/winscpImport';
 import { applyExternalImport } from '../hosts/externalImport';
-import type { ExternalImportResult, ImportedHost } from '@shared/import';
+import type { ExternalImportApplyResult, ExternalImportResult, ImportedHost } from '@shared/import';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { getMainWindow } from '../window/mainWindow';
@@ -343,7 +343,7 @@ export function registerHostIpcHandlers(): void {
 
   ipcMain.handle(
     IPC.importExternalApply,
-    (event, rawHosts: unknown, rawStrategy: unknown): { imported: number; skipped: number } => {
+    (event, rawHosts: unknown, rawStrategy: unknown): ExternalImportApplyResult => {
       assertSenderIsMainWindow(event);
       if (rawStrategy !== 'skip' && rawStrategy !== 'rename') {
         throw new IpcValidationError('strategy: skip|rename expected');

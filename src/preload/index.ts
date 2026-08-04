@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC, type AppInfo } from '@shared/ipc';
 import type { Host, HostGroup, HostInput, ImportPreview } from '@shared/hosts';
-import type { ExternalImportResult, ImportedHost } from '@shared/import';
+import type { ExternalImportApplyResult, ExternalImportResult, ImportedHost } from '@shared/import';
 import type {
   AuthPromptRequest,
   ConnectionLogEntry,
@@ -113,7 +113,7 @@ const api = {
   applyExternalImport: (
     hosts: ImportedHost[],
     strategy: 'skip' | 'rename'
-  ): Promise<{ imported: number; skipped: number }> =>
+  ): Promise<ExternalImportApplyResult> =>
     ipcRenderer.invoke(IPC.importExternalApply, hosts, strategy),
 
   // --- SSH-сессии (SSH-01…07, CLOG) ---
