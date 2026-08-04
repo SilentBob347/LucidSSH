@@ -53,9 +53,8 @@ CREATE TABLE hosts (
   auth_method   TEXT    NOT NULL,            -- 'password' | 'key'
   key_path      TEXT,                        -- path to the ORIGINAL key file, not a copy (SEC-02)
   group_id      INTEGER REFERENCES groups(id) ON DELETE SET NULL,
-  proxy_jump    TEXT,                        -- host id or ProxyJump string (SSH-05)
+  proxy_jump_host_id INTEGER REFERENCES hosts(id) ON DELETE SET NULL, -- jump host, a reference to another saved host (SSH-05)
   note          TEXT,
-  color_tag     TEXT,                        -- 'red'|'orange'|'green'|'blue'|'gray'|NULL (no tag), HM-08
   guard_enabled INTEGER NOT NULL DEFAULT 1,  -- per-host guard disable (GUARD-05)
   sort_order    INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT    NOT NULL,
@@ -69,7 +68,6 @@ CREATE TABLE hosts (
 
 ```ts
 type AuthMethod = 'password' | 'key';
-type HostColorTag = 'red' | 'orange' | 'green' | 'blue' | 'gray'; // HM-08
 
 interface HostGroup {
   id: number;
@@ -88,9 +86,8 @@ interface Host {
   authMethod: AuthMethod;
   keyPath?: string;        // path to the original
   groupId?: number;
-  proxyJump?: string;
+  proxyJumpHostId?: number;
   note?: string;
-  colorTag?: HostColorTag;  // HM-08, undefined/null = no tag
   guardEnabled: boolean;
   sortOrder: number;
   createdAt: string;
@@ -107,7 +104,7 @@ interface HostInput {
   authMethod: AuthMethod;
   keyPath?: string;
   groupId?: number;
-  proxyJump?: string;
+  proxyJumpHostId?: number;
   note?: string;
   guardEnabled: boolean;
 }
