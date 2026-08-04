@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] — 2026-08-05
+
+### Added
+
+- **Editable hotkeys**: the Settings → Hotkeys section is no longer read-only — 9 of the 11 app shortcuts can now be rebound (`Esc` and `F1` stay fixed). Assigning a combination that's already in use is blocked, with a hint showing which action currently owns it.
+- The in-app changelog is now shown inline in Settings → About while an update is available or downloaded, instead of only on the GitHub Releases page.
+
+### Fixed
+
+- **Jump host (ProxyJump) connections now actually work.** In 1.0.0 the setting was stored, imported, and validated, but the second SSH hop was never established on a real connection attempt — every jump-host connection silently went direct instead. The jump host is now picked from your saved hosts (not a free-text alias), "Test connection" runs the full two-hop chain, deleting a host that's used as someone's jump host warns first, and `~/.ssh/config` import resolves `ProxyJump` aliases to the matching imported host.
+- Clicking an update-available notification in the header bell now opens Settings → About; it previously dismissed the notification without navigating anywhere.
+
+### Changed
+
+- `Ctrl+L` is no longer intercepted by the app — it now reaches the shell directly and clears the screen, per the common terminal convention. The command catalog, which previously opened on `Ctrl+L`, moved to `Ctrl+Shift+L` by default.
+
 ## [1.0.0] — 2026-07-25
 
 First release of LucidSSH — a simple SSH client for Windows. Fully local: no account, no cloud, no telemetry.
