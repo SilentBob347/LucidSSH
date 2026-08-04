@@ -34,6 +34,7 @@ import { usePanels } from '@/stores/panels';
 import { useHosts } from '@/stores/hosts';
 import { useEvents } from '@/stores/events';
 import { setComposerInsertHandler, setComposerValueGetter } from '@/stores/composerBus';
+import { normalizeCombo } from '@shared/hotkeys';
 
 /**
  * Центральная область (Design_Brief §3.3): таб-бар, xterm.js, контекстное меню
@@ -154,29 +155,34 @@ export function TerminalArea(): JSX.Element {
     !config?.ui.expertMode &&
     (config?.shownCounts['onboardingTips'] ?? 0) < 1;
 
-  // Хоткеи терминала (SET-06): Ctrl+F поиск, Ctrl+L каталог, Ctrl+W закрыть вкладку,
-  // Ctrl+Shift+C/V копировать/вставить активной сессии.
+  // Хоткеи терминала (SET-06/SET-10): поиск, каталог, закрыть вкладку,
+  // копировать/вставить, палитра сниппетов — все читаются из config.hotkeys,
+  // а не сравниваются с буквальными клавишами (issue #1). Ctrl+L больше не
+  // перехватывается здесь вовсе — раз он не совпадает ни с одним биндингом,
+  // событие не отменяется и доходит до xterm/shell как обычно (по умолчанию
+  // это очищает экран, конвенция терминалов).
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      const mod = e.ctrlKey || e.metaKey;
-      if (!mod) return;
-      const key = e.key.toLowerCase();
-      if (key === 'f' && showTerminal) {
+      const hk = config?.hotkeys;
+      if (!hk) return;
+      const combo = normalizeCombo(e);
+      if (!combo) return;
+      if (combo === hk.search && showTerminal) {
         e.preventDefault();
         setSearchOpen(true);
-      } else if (key === 'l') {
+      } else if (combo === hk.openCatalog) {
         e.preventDefault();
         void update('ui.catalogPanelOpen', !(config?.ui.catalogPanelOpen ?? false));
-      } else if (key === 'w' && active) {
+      } else if (combo === hk.closeTab && active) {
         e.preventDefault();
         void closeTab(active.sessionId);
-      } else if (e.shiftKey && key === 'c' && active) {
+      } else if (combo === hk.copy && active) {
         e.preventDefault();
         copySelection(active.sessionId);
-      } else if (e.shiftKey && key === 'v' && showTerminal && active) {
+      } else if (combo === hk.paste && showTerminal && active) {
         e.preventDefault();
         handlePaste(active.sessionId);
-      } else if (e.key === ' ' && showTerminal && active) {
+      } else if (combo === hk.snippetPalette && showTerminal && active) {
         // SNIP-09: без активной сессии палитра не открывается вовсе (как и
         // остальные терминал-хоткеи выше, привязанные к showTerminal).
         // Ctrl+Space исторически маппится терминалами на управляющий символ

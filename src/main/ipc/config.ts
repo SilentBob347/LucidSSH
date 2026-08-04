@@ -1,10 +1,17 @@
 import { ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
-import type { AppConfig } from '@shared/config';
+import type { AppConfig, UpdateHotkeyResult } from '@shared/config';
 import { DASHBOARD_ALERT_ISSUES, type DashboardAlertIssue } from '@shared/dashboard';
 import { INTERACTIVE_PROGRAMS } from '@shared/interactivePrograms';
+import {
+  DEFAULT_HOTKEYS,
+  HOTKEY_ACTIONS,
+  findHotkeyConflict,
+  isValidHotkeyCombo,
+  type HotkeyAction
+} from '@shared/hotkeys';
 import { loadConfig, updateConfig } from '../config/store';
-import { assertSenderIsMainWindow, IpcValidationError } from './validate';
+import { assertSenderIsMainWindow, assertString, IpcValidationError } from './validate';
 
 /**
  * Чтение и точечное обновление config.json (SET-07 — запись немедленно).
@@ -78,6 +85,42 @@ export function registerConfigIpcHandlers(): void {
     }
     const setter = WRITABLE[rawPath]!;
     return updateConfig((cfg) => setter(value as Primitive, cfg));
+  });
+
+  // SET-10 (issue #1): перепривязка редактируемого хоткея — с проверкой
+  // конфликтов против остальных редактируемых действий и зафиксированных
+  // Esc/F1 (findHotkeyConflict). При конфликте запись не происходит, ответ
+  // называет действие-владельца, чтобы UI показал сообщение (не троит через throw —
+  // конфликт это ожидаемый исход взаимодействия, а не программная ошибка).
+  ipcMain.handle(
+    IPC.configUpdateHotkey,
+    (event, rawAction: unknown, rawCombo: unknown): UpdateHotkeyResult => {
+      assertSenderIsMainWindow(event);
+      if (typeof rawAction !== 'string' || !(HOTKEY_ACTIONS as readonly string[]).includes(rawAction)) {
+        throw new IpcValidationError('action: unknown');
+      }
+      const combo = assertString(rawCombo, 'combo', 40);
+      if (!isValidHotkeyCombo(combo)) {
+        throw new IpcValidationError('combo: invalid format');
+      }
+      const action = rawAction as HotkeyAction;
+      const cfg = loadConfig();
+      const conflictWith = findHotkeyConflict(combo, cfg.hotkeys, action) ?? undefined;
+      if (conflictWith) return { ok: false, config: cfg, conflictWith };
+      const next = updateConfig((c) => {
+        c.hotkeys[action] = combo;
+      });
+      return { ok: true, config: next };
+    }
+  );
+
+  // «Сбросить хоткеи к заводским» — точечный сброс только карты хоткеев
+  // (в отличие от configReset/SET-08, который сбрасывает вообще все настройки).
+  ipcMain.handle(IPC.configResetHotkeys, (event): AppConfig => {
+    assertSenderIsMainWindow(event);
+    return updateConfig((cfg) => {
+      cfg.hotkeys = { ...DEFAULT_HOTKEYS };
+    });
   });
 
   // Счётчик показов одноразовых подсказок (§5.1, SNIP-08). Только известные id.

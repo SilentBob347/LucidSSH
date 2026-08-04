@@ -1,5 +1,6 @@
 import type { PendingKeyDeployment } from './keygen';
 import type { DashboardAlertIssue } from './dashboard';
+import type { FixedHotkeyAction, HotkeyAction } from './hotkeys';
 
 /**
  * Формат %APPDATA%\LucidSSH\config.json (Data_Structures.md §6).
@@ -57,6 +58,9 @@ export interface AppConfig {
   guard: {
     globalEnabled: boolean; // GUARD-05
   };
+  /** SET-10: биндинги 9 редактируемых хоткеев (issue #1). Esc/F1 не входят —
+   *  зафиксированы, см. FIXED_HOTKEYS в shared/hotkeys.ts. */
+  hotkeys: Record<HotkeyAction, string>;
   history: {
     enabled: boolean; // HIST-07
     perHostDisabled: number[];
@@ -74,4 +78,12 @@ export interface AppConfig {
     autoCheck: boolean; // OQ-09
     source: string;
   };
+}
+
+/** Результат попытки перепривязать хоткей (config:update-hotkey). При
+ *  конфликте `config` возвращается неизменным — записи не было (SET-10). */
+export interface UpdateHotkeyResult {
+  ok: boolean;
+  config: AppConfig;
+  conflictWith?: HotkeyAction | FixedHotkeyAction;
 }

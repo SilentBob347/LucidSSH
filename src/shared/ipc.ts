@@ -17,6 +17,8 @@ export const IPC = {
   // --- Настройки (config.json, без секретов) ---
   configGet: 'config:get',
   configUpdate: 'config:update',
+  configUpdateHotkey: 'config:update-hotkey', // SET-10 — с проверкой конфликтов, отдельно от общего configUpdate
+  configResetHotkeys: 'config:reset-hotkeys', // SET-10 — сброс только карты хоткеев, не всех настроек (в отличие от configReset/SET-08)
   configMarkHint: 'config:mark-hint', // счётчик показов подсказок (§5.1, SNIP-08)
   configResetHints: 'config:reset-hints', // «Сбросить счётчик показов подсказок» (SET-05)
   configDismissDashboardAlert: 'config:dismiss-dashboard-alert', // DASH-09 «Больше не показывать»

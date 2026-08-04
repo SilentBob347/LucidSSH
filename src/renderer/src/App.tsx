@@ -23,6 +23,7 @@ import { ConfigProvider, useConfig } from './stores/config';
 import { PanelsProvider, usePanels } from './stores/panels';
 import { EventsProvider, useEvents } from './stores/events';
 import { UpdatesProvider } from './stores/updates';
+import { FIXED_HOTKEYS, normalizeCombo } from '@shared/hotkeys';
 
 /**
  * Welcome-экран показывается вместо основного UI, пока нет ни одного хоста
@@ -66,22 +67,12 @@ function AppBody(): JSX.Element {
     if (hostKeyPrompt?.isChanged) addFingerprintEvent(hostKeyPrompt.hostName);
   }, [hostKeyPrompt, addFingerprintEvent]);
 
-  // Глобальные хоткеи (SET-01 Ctrl+, · SET-06). Ctrl+F/поиск живёт в TerminalArea.
+  // Глобальные хоткеи (SET-01 Ctrl+, · SET-06/SET-10). Ctrl+F/поиск живёт в
+  // TerminalArea. Биндинги читаются из config.hotkeys (кроме F1 — зафиксирован,
+  // FIXED_HOTKEYS), а не сравниваются с буквальными клавишами — SET-10, issue #1.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
-        e.preventDefault();
-        openSettings();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h') {
-        e.preventDefault();
-        openHistory();
-      } else if (e.key === 'F1') {
-        e.preventDefault();
-        openHelp();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        openQuickConnect();
-      } else if (
+      if (
         // ВРЕМЕННЫЙ dev-хук для визуальной проверки WelcomeScreen без удаления
         // хостов (пачка 9 дизайн-аудита) — import.meta.env.DEV вырезается
         // Vite-сборкой в проде (dead-code elimination), в упакованное
@@ -93,11 +84,31 @@ function AppBody(): JSX.Element {
       ) {
         e.preventDefault();
         setPreviewWelcome((v) => !v);
+        return;
+      }
+      const combo = normalizeCombo(e);
+      if (!combo) return;
+      if (combo === FIXED_HOTKEYS.help) {
+        e.preventDefault();
+        openHelp();
+        return;
+      }
+      const hk = config?.hotkeys;
+      if (!hk) return;
+      if (combo === hk.openSettings) {
+        e.preventDefault();
+        openSettings();
+      } else if (combo === hk.openHistory) {
+        e.preventDefault();
+        openHistory();
+      } else if (combo === hk.quickConnect) {
+        e.preventDefault();
+        openQuickConnect();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [openSettings, openHistory, openHelp, openQuickConnect]);
+  }, [config?.hotkeys, openSettings, openHistory, openHelp, openQuickConnect]);
 
   const activeSession = sessions.find((s) => s.sessionId === activeSessionId);
   const leftRef = useRef<HTMLElement>(null);

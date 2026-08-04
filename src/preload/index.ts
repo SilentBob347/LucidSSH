@@ -11,7 +11,8 @@ import type {
   SessionStatus,
   TestConnectionResult
 } from '@shared/ssh';
-import type { AppConfig } from '@shared/config';
+import type { AppConfig, UpdateHotkeyResult } from '@shared/config';
+import type { HotkeyAction } from '@shared/hotkeys';
 import type { SubmitResult } from '@shared/guard';
 import type { Breadcrumb } from '@shared/breadcrumb';
 import type { DashboardAlert, DashboardAlertIssue, DashboardMetrics } from '@shared/dashboard';
@@ -41,6 +42,9 @@ const api = {
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.configGet),
   updateConfig: (path: string, value: string | number | boolean): Promise<AppConfig> =>
     ipcRenderer.invoke(IPC.configUpdate, path, value),
+  updateHotkey: (action: HotkeyAction, combo: string): Promise<UpdateHotkeyResult> =>
+    ipcRenderer.invoke(IPC.configUpdateHotkey, action, combo),
+  resetHotkeys: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.configResetHotkeys),
   resetConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.configReset),
   markHint: (hintId: string): Promise<AppConfig> => ipcRenderer.invoke(IPC.configMarkHint, hintId),
   resetHintCounters: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.configResetHints),

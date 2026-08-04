@@ -666,7 +666,12 @@
     "hk": {
       "searchPlaceholder": "Search by action or key…",
       "noMatches": "Nothing found",
-      "readOnlyNote": "In 1.0 the list is view-only.",
+      "editHint": "Click the pencil next to an action and press the new key combination.",
+      "pressKeys": "Press a key combination…",
+      "editAction": "Edit: {{action}}",
+      "conflict": "Already used by \"{{action}}\"",
+      "resetLink": "Reset hotkeys to defaults",
+      "resetNote": "(other settings stay unchanged)",
       "quickConnect": "Quick Connect",
       "openSettings": "Open settings",
       "openHistory": "Open command history",
