@@ -34,7 +34,7 @@ export const IPC = {
   hostsList: 'hosts:list',
   hostCreate: 'hosts:create',
   hostUpdate: 'hosts:update',
-  hostDelete: 'hosts:delete',
+  hostDelete: 'hosts:delete', // force-флаг вторым аргументом — SSH-05 тикет 05, обход предупреждения о jump-зависимостях
   hostHasSecret: 'hosts:has-secret',
   hostDeleteSecret: 'hosts:delete-secret',
   hostPickKeyFile: 'hosts:pick-key-file',

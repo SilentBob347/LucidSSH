@@ -64,7 +64,13 @@ const api = {
     ipcRenderer.invoke(IPC.hostCreate, input, secret),
   updateHost: (id: number, input: HostInput, secret?: string): Promise<void> =>
     ipcRenderer.invoke(IPC.hostUpdate, id, input, secret),
-  deleteHost: (id: number): Promise<void> => ipcRenderer.invoke(IPC.hostDelete, id),
+  // SSH-05 тикет 05: без force удаление хоста, используемого как jump-хост,
+  // не проходит — возвращается { deleted: false, dependents } для предупреждения.
+  deleteHost: (
+    id: number,
+    force?: boolean
+  ): Promise<{ deleted: true } | { deleted: false; dependents: Host[] }> =>
+    ipcRenderer.invoke(IPC.hostDelete, id, force),
   reorderHosts: (orderedIds: number[]): Promise<void> =>
     ipcRenderer.invoke(IPC.hostsReorder, orderedIds),
   hostHasSecret: (id: number): Promise<boolean> => ipcRenderer.invoke(IPC.hostHasSecret, id),

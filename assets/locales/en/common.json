@@ -57,6 +57,11 @@
       "body": "“{{name}}” will be removed from the list. The saved password will be deleted from Windows Credential Manager.",
       "confirm": "Delete"
     },
+    "deleteJumpWarning": {
+      "title": "This host is used as a jump host",
+      "body": "“{{name}}” is used as a jump host by: {{names}}. After deletion they will connect directly, without the intermediate host.",
+      "confirm": "Delete anyway"
+    },
     "footer": {
       "settings": "Settings",
       "importPutty": "Import PuTTY",

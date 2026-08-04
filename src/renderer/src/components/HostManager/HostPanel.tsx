@@ -166,6 +166,11 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
   const [deleteTarget, setDeleteTarget] = useState<Host | null>(null);
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<HostGroup | null>(null);
   const [snippetHostTarget, setSnippetHostTarget] = useState<Host | null>(null);
+  // SSH-05 тикет 05: хост, который удаляют, но его использует как jump-хост кто-то ещё
+  const [jumpDependentsTarget, setJumpDependentsTarget] = useState<{
+    host: Host;
+    dependents: Host[];
+  } | null>(null);
 
   // Переупорядочивание хостов внутри группы перетаскиванием (только внутри
   // одной и той же группы/«без группы» — перенос между группами делает Edit).
@@ -236,6 +241,21 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
     else void removeGroup(g);
   };
 
+  // Общий финальный шаг удаления. Хендлер `hosts:delete` сам проверяет
+  // jump-зависимости (SSH-05 тикет 05) и без force отказывает, возвращая
+  // список задетых хостов — тогда вместо удаления показываем предупреждение.
+  const deleteHostOrWarn = async (host: Host, force = false): Promise<void> => {
+    const result = await window.lucidSSH.deleteHost(host.id, force);
+    setDeleteTarget(null);
+    setSnippetHostTarget(null);
+    if (!result.deleted) {
+      setJumpDependentsTarget({ host, dependents: result.dependents });
+      return;
+    }
+    setJumpDependentsTarget(null);
+    await refresh();
+  };
+
   const removeHost = async (host: Host): Promise<void> => {
     // SNIP-07: серверные сниппеты нельзя удалять молча — спрашиваем пользователя
     if (await window.lucidSSH.hostHasSnippets(host.id)) {
@@ -243,16 +263,12 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
       setSnippetHostTarget(host);
       return;
     }
-    await window.lucidSSH.deleteHost(host.id);
-    setDeleteTarget(null);
-    await refresh();
+    await deleteHostOrWarn(host);
   };
 
   const resolveAndDelete = async (host: Host, action: 'delete' | 'make-global'): Promise<void> => {
     await window.lucidSSH.resolveHostSnippets(host.id, action);
-    await window.lucidSSH.deleteHost(host.id);
-    setSnippetHostTarget(null);
-    await refresh();
+    await deleteHostOrWarn(host);
   };
 
   const dropOnRow = async (groupHostsList: Host[], targetId: number): Promise<void> => {
@@ -549,6 +565,22 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
           >
             {t('hostSnippets.delete')}
           </button>
+        </ConfirmDialog>
+      )}
+
+      {/* SSH-05 тикет 05: удаляемый хост используется как jump-хост у других */}
+      {jumpDependentsTarget && (
+        <ConfirmDialog
+          title={t('hosts.deleteJumpWarning.title')}
+          confirmLabel={t('hosts.deleteJumpWarning.confirm')}
+          danger
+          onConfirm={() => void deleteHostOrWarn(jumpDependentsTarget.host, true)}
+          onCancel={() => setJumpDependentsTarget(null)}
+        >
+          {t('hosts.deleteJumpWarning.body', {
+            name: jumpDependentsTarget.host.name,
+            names: jumpDependentsTarget.dependents.map((h) => h.name).join(', ')
+          })}
         </ConfirmDialog>
       )}
     </aside>
