@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DangerPatternId } from '@shared/guard';
 
 vi.mock('../ssh/sessionManager', () => ({
   getSession: vi.fn(),
@@ -401,6 +402,113 @@ describe('GUARD-07 — риск потери SSH-доступа', () => {
     const ok = confirmDangerousCommand(res.prompt.requestId, '');
     expect(ok).toBe(true);
     expect(mockSendInput).toHaveBeenCalledWith('s1', 'systemctl restart sshd');
+    expect(mockSendCommandLine).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Сквозные тесты Стража: patterns × manager (.scratch/guard-crossing-tests/spec.md).
+ * Единственный блок во всём файле, где vi.mock('./patterns') наполняется настоящей
+ * реализацией через vi.importActual — остальные моки (sessionManager/hosts/config/i18n)
+ * остаются на месте. Проверяет три инварианта, которые раньше держались только на
+ * моках или комментарии; существующие 26 кейсов выше не меняются и должны остаться
+ * зелёными — их зелёность подтверждает, что importActual не протёк за пределы блока.
+ */
+describe('Страж целиком — patterns × manager (сквозные тесты)', () => {
+  // По одному представительному, ПРОСТОМУ (не составному — см. Out of Scope спеки)
+  // образцу на каждый DangerPatternId. Record — так что новый id без образца
+  // не компилируется (это и есть проверка «порог × пересечение» из инварианта 1).
+  // Образцы и их target — из существующего корпуса guard/patterns.test.ts, не
+  // придуманы заново.
+  const CORPUS: Record<DangerPatternId, { sample: string; target: string }> = {
+    'rm-recursive': { sample: 'rm -rf /var/www', target: '/var/www' },
+    'dd-write': { sample: 'dd if=/dev/zero of=/dev/sda bs=1M', target: '/dev/sda' },
+    mkfs: { sample: 'mkfs /dev/sdb1', target: '/dev/sdb1' },
+    'chmod-777': { sample: 'chmod -R 777 /var/www', target: '/var/www' },
+    truncate: { sample: 'truncate -s 0 /var/log/syslog', target: '/var/log/syslog' },
+    'redirect-device': { sample: 'echo test > /dev/sda', target: '/dev/sda' },
+    shred: { sample: 'shred -n 3 /dev/sdb', target: '/dev/sdb' },
+    wipefs: { sample: 'wipefs -a /dev/sdc', target: '/dev/sdc' },
+    'fork-bomb': { sample: ':(){ :|:& };:', target: ':(){ :|:& };:' },
+    'drop-database': { sample: 'mysql -e "DROP DATABASE production"', target: 'production' },
+    'kill-init': { sample: 'kill -9 1', target: 'kill -9 1' }
+  };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockLoadConfig.mockReturnValue(fakeConfig(true));
+    mockGetSession.mockReturnValue(fakeSession(1));
+    mockGetHost.mockReturnValue(fakeHost(true));
+    // clearAllMocks не сбрасывает implementation, выставленную в другом describe —
+    // фиксируем поведение мока i18n явно, чтобы блок не зависел от порядка тестов.
+    mockT.mockImplementation((key: string) => key);
+    const actual = await vi.importActual<typeof import('./patterns')>('./patterns');
+    mockAnalyzeCommand.mockImplementation(actual.analyzeCommand);
+    mockAnalyzeAccessRisk.mockImplementation(actual.analyzeAccessRisk);
+  });
+
+  describe('инвариант 1 — ни один паттерн корпуса не проваливается на настоящих regex через сырой путь', () => {
+    for (const [patternId, { sample, target }] of Object.entries(CORPUS) as [
+      DangerPatternId,
+      { sample: string; target: string }
+    ][]) {
+      it(`${patternId}: "${sample}" — blocked, sendInput не вызывается`, () => {
+        const res = submitRawInput('s1', sample);
+        expect(res.status).toBe('blocked');
+        if (res.status !== 'blocked') return;
+        expect(res.prompt.patternId).toBe(patternId);
+        // GUARD-03: реальная цель, не заглушка мока — регресс семантики цели.
+        expect(res.prompt.target).toBe(target);
+        expect(res.prompt.confirmationText.length).toBeGreaterThan(0);
+        expect(mockSendInput).not.toHaveBeenCalled();
+      });
+    }
+  });
+
+  it('инвариант 2 — опасность (analyzeCommand) проверяется раньше риска доступа (GUARD-07)', () => {
+    // Составная команда: обе половины разбираются обеими функциями настоящей
+    // реализации (splitCompound). target здесь не проверяется — на составных
+    // командах его захват неверен, отдельный дефект (.scratch/guard-compound-target).
+    const res = submitCommand('s1', 'rm -rf /tmp/build && systemctl stop sshd');
+    expect(res.status).toBe('blocked');
+    if (res.status !== 'blocked') return;
+    expect(res.prompt.patternId).toBe('rm-recursive');
+  });
+
+  it('инвариант 3 — круг подтверждения на настоящих данных: Команда (sendCommandLine)', () => {
+    const { sample } = CORPUS['rm-recursive'];
+
+    const blocked = submitCommand('s1', sample);
+    if (blocked.status !== 'blocked') throw new Error('expected blocked');
+    expect(confirmDangerousCommand(blocked.prompt.requestId, 'заведомо неверный текст')).toBe(
+      false
+    );
+    expect(mockSendCommandLine).not.toHaveBeenCalled();
+
+    const blocked2 = submitCommand('s1', sample);
+    if (blocked2.status !== 'blocked') throw new Error('expected blocked');
+    expect(confirmDangerousCommand(blocked2.prompt.requestId, blocked2.prompt.confirmationText)).toBe(
+      true
+    );
+    expect(mockSendCommandLine).toHaveBeenCalledWith('s1', sample, 'confirmed');
+  });
+
+  it('инвариант 3 — круг подтверждения на настоящих данных: Сырой текст (sendInput, без \\n)', () => {
+    const { sample } = CORPUS['rm-recursive'];
+
+    const blocked = submitRawInput('s1', sample);
+    if (blocked.status !== 'blocked') throw new Error('expected blocked');
+    expect(confirmDangerousCommand(blocked.prompt.requestId, 'заведомо неверный текст')).toBe(
+      false
+    );
+    expect(mockSendInput).not.toHaveBeenCalled();
+
+    const blocked2 = submitRawInput('s1', sample);
+    if (blocked2.status !== 'blocked') throw new Error('expected blocked');
+    expect(confirmDangerousCommand(blocked2.prompt.requestId, blocked2.prompt.confirmationText)).toBe(
+      true
+    );
+    expect(mockSendInput).toHaveBeenCalledWith('s1', sample);
     expect(mockSendCommandLine).not.toHaveBeenCalled();
   });
 });
