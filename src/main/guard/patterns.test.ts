@@ -28,7 +28,9 @@ describe('analyzeCommand — срабатывание (GUARD-01)', () => {
   });
 
   it('опасная часть составной команды', () => {
-    expect(analyzeCommand('cd /tmp && rm -rf ./cache')?.patternId).toBe('rm-recursive');
+    const m = analyzeCommand('cd /tmp && rm -rf ./cache');
+    expect(m?.patternId).toBe('rm-recursive');
+    expect(m?.target).toBe('./cache');
     expect(analyzeCommand('echo hi; dd if=/dev/zero of=/dev/sda')?.patternId).toBe('dd-write');
   });
 
@@ -74,6 +76,56 @@ describe('analyzeCommand — срабатывание (GUARD-01)', () => {
 
   it('kill -9 1', () => {
     expect(analyzeCommand('kill -9 1')?.patternId).toBe('kill-init');
+  });
+});
+
+/**
+ * GUARD-03: цель подтверждения — объект из опасного фрагмента, а не хвост всей
+ * строки. Регресс на дефекте, когда `rm -rf /var/www; echo done` просил набрать
+ * «done»: паттерны с якорем `$` захватывали конец строки целиком.
+ */
+describe('analyzeCommand — цель в составной команде (GUARD-03)', () => {
+  const cases: { cmd: string; target: string; confirmationText: string }[] = [
+    { cmd: 'rm -rf /var/www; echo done', target: '/var/www', confirmationText: 'www' },
+    {
+      cmd: 'rm -rf ./node_modules && npm install',
+      target: './node_modules',
+      confirmationText: 'node_modules'
+    },
+    { cmd: 'rm -rf dist && npm run build', target: 'dist', confirmationText: 'dist' },
+    {
+      cmd: 'rm -rf /tmp/cache; systemctl restart nginx',
+      target: '/tmp/cache',
+      confirmationText: 'cache'
+    },
+    { cmd: 'shred /etc/passwd; echo done', target: '/etc/passwd', confirmationText: 'passwd' },
+    { cmd: 'wipefs -a /dev/sdb && reboot', target: '/dev/sdb', confirmationText: 'sdb' },
+    {
+      cmd: 'rm -rf /tmp/build && systemctl restart sshd',
+      target: '/tmp/build',
+      confirmationText: 'build'
+    }
+  ];
+
+  for (const { cmd, target, confirmationText } of cases) {
+    it(`цель из опасного фрагмента, а не хвост строки: ${cmd}`, () => {
+      const m = analyzeCommand(cmd);
+      expect(m?.target).toBe(target);
+      expect(m?.confirmationText).toBe(confirmationText);
+      expect(m?.confirmationKind).toBe('target');
+    });
+  }
+
+  it('флаги не попадают в цель на простой команде', () => {
+    expect(analyzeCommand('wipefs -a /dev/sdb')?.target).toBe('/dev/sdb');
+    expect(analyzeCommand('shred -n 3 /dev/sdb')?.target).toBe('/dev/sdb');
+  });
+
+  it('форк-бомба распознаётся, несмотря на разбиение по | и ;', () => {
+    // Ради неё существует проход по всей строке: разбиение разрушило бы паттерн.
+    expect(analyzeCommand(':(){ :|:& };:')?.patternId).toBe('fork-bomb');
+    expect(analyzeCommand('echo hi; :(){ :|:& };:')?.patternId).toBe('fork-bomb');
+    expect(analyzeCommand('sudo :(){ :|:& };:')?.patternId).toBe('fork-bomb');
   });
 });
 
