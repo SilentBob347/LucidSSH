@@ -467,12 +467,13 @@ describe('Страж целиком — patterns × manager (сквозные т
 
   it('инвариант 2 — опасность (analyzeCommand) проверяется раньше риска доступа (GUARD-07)', () => {
     // Составная команда: обе половины разбираются обеими функциями настоящей
-    // реализации (splitCompound). target здесь не проверяется — на составных
-    // командах его захват неверен, отдельный дефект (.scratch/guard-compound-target).
+    // реализации (splitCompound). Цель берётся из опасного фрагмента, а не с
+    // конца всей строки — иначе подтверждать пришлось бы «sshd».
     const res = submitCommand('s1', 'rm -rf /tmp/build && systemctl stop sshd');
     expect(res.status).toBe('blocked');
     if (res.status !== 'blocked') return;
     expect(res.prompt.patternId).toBe('rm-recursive');
+    expect(res.prompt.target).toBe('/tmp/build');
   });
 
   it('инвариант 3 — круг подтверждения на настоящих данных: Команда (sendCommandLine)', () => {

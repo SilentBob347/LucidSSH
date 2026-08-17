@@ -27,6 +27,15 @@ export interface DangerMatch {
 interface GuardPattern {
   id: DangerPatternId;
   re: RegExp;
+  /**
+   * Матчить ТОЛЬКО строку целиком, не разбивая её на простые команды.
+   * Ставится паттерну, в чьём регекспе `;` `&&` `||` `|` — значащие символы:
+   * разбиение по ним разрушило бы сам паттерн (единственный такой — форк-бомба).
+   * Всем остальным флаг НЕ нужен: их матч по всей строке ломает цель — якорь `$`
+   * захватывает хвост всей строки вместо объекта опасного фрагмента (GUARD-03),
+   * и `rm -rf /var/www; echo done` просит подтвердить словом «done».
+   */
+  matchWhole?: true;
   scope: DangerScope | ((m: RegExpMatchArray) => DangerScope);
   /** Извлечение цели из совпадения; null → вся команда */
   target: (m: RegExpMatchArray) => string | null;
@@ -51,7 +60,8 @@ const CONFIRM_WORD = 'ПОДТВЕРЖДАЮ';
 
 /**
  * Паттерны применяются к каждой команде в составной строке (после разбиения
- * по ; && || |). Порядок важен: первый совпавший выигрывает.
+ * по ; && || |) — кроме помеченных `matchWhole`, которые матчатся только по
+ * строке целиком. Порядок важен: первый совпавший выигрывает.
  */
 const PATTERNS: GuardPattern[] = [
   {
@@ -112,9 +122,11 @@ const PATTERNS: GuardPattern[] = [
     target: (m) => lastToken(m[1])
   },
   {
-    // fork-бомба
+    // fork-бомба. matchWhole: содержит `|` и `;` как значащие символы —
+    // разбиение составной команды разорвало бы паттерн на части.
     id: 'fork-bomb',
     re: /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/,
+    matchWhole: true,
     scope: 'other',
     target: () => null
   },
@@ -224,12 +236,14 @@ export function analyzeCommand(command: string): DangerMatch | null {
   const trimmed = command.trim();
   if (trimmed.length === 0 || trimmed.length > 10_000) return null;
 
-  // Паттерны, разрушаемые разбиением по |/; (fork-бомба) — проверяем целиком.
-  const wholeMatch = matchPatterns(trimmed);
+  // Проход 1: паттерны, разрушаемые разбиением по |/; (fork-бомба) — по всей строке.
+  const wholeMatch = matchPatterns(trimmed, WHOLE_PATTERNS);
   if (wholeMatch) return wholeMatch;
 
+  // Проход 2: все остальные — только по фрагментам, чтобы цель бралась из
+  // опасного фрагмента, а не с конца всей строки (GUARD-03).
   for (const part of splitCompound(trimmed)) {
-    const match = matchPatterns(part);
+    const match = matchPatterns(part, PART_PATTERNS);
     if (match) return match;
   }
   return null;
@@ -243,9 +257,13 @@ export function stripCmdPrefix(command: string): string {
   return command.replace(CMD_PREFIX_RE, '');
 }
 
-function matchPatterns(part: string): DangerMatch | null {
+/** Две непересекающиеся группы: каждый паттерн проверяется ровно в одном проходе. */
+const WHOLE_PATTERNS = PATTERNS.filter((p) => p.matchWhole === true);
+const PART_PATTERNS = PATTERNS.filter((p) => p.matchWhole !== true);
+
+function matchPatterns(part: string, patterns: GuardPattern[]): DangerMatch | null {
   const unprefixed = part.replace(CMD_PREFIX_RE, '');
-  for (const pattern of PATTERNS) {
+  for (const pattern of patterns) {
     const m = unprefixed.match(pattern.re) ?? part.match(pattern.re);
     if (!m) continue;
     const rawTarget = pattern.target(m);
