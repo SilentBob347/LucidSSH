@@ -7,13 +7,13 @@
  * отражается в UI-текстах.
  */
 
-import type { AccessRiskId } from '@shared/guard';
+import type { AccessRiskId, DangerPatternId } from '@shared/guard';
 
 export type DangerScope = 'file' | 'directory' | 'disk' | 'other';
 
 export interface DangerMatch {
   /** id паттерна — для i18n-объяснения (guard.patterns.<id>) */
-  patternId: string;
+  patternId: DangerPatternId;
   /** Реальная цель из команды (GUARD-03) */
   target: string;
   scope: DangerScope;
@@ -25,7 +25,7 @@ export interface DangerMatch {
 }
 
 interface GuardPattern {
-  id: string;
+  id: DangerPatternId;
   re: RegExp;
   scope: DangerScope | ((m: RegExpMatchArray) => DangerScope);
   /** Извлечение цели из совпадения; null → вся команда */

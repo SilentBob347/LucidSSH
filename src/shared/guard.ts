@@ -4,11 +4,27 @@
 
 export type DangerScope = 'file' | 'directory' | 'disk' | 'other';
 
+/** id опасного паттерна (guard/patterns.ts, GUARD-01) — для i18n-объяснения
+ *  (guard.explain.<id>) и сравнений в renderer. Закрытый юнион: новый паттерн
+ *  без добавления сюда не пройдёт компиляцию (см. PATTERNS в patterns.ts). */
+export type DangerPatternId =
+  | 'rm-recursive'
+  | 'dd-write'
+  | 'mkfs'
+  | 'chmod-777'
+  | 'truncate'
+  | 'redirect-device'
+  | 'shred'
+  | 'wipefs'
+  | 'fork-bomb'
+  | 'drop-database'
+  | 'kill-init';
+
 export interface DangerousCommandPrompt {
   requestId: string;
   sessionId: string;
   command: string;
-  patternId: string;
+  patternId: DangerPatternId;
   target: string; // реальный путь/объект (GUARD-03)
   scope: DangerScope;
   /** 'target' — подтверждение именем объекта, 'word' — общим словом подтверждения. */
