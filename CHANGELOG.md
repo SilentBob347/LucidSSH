@@ -6,8 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **The dangerous command guard now names every object a compound command destroys.** `rm -rf /var/www && rm -rf /etc` used to name only the first one, so you confirmed one deletion while two were about to happen. The dialog now lists all of them and asks you to type the name of one of them — picked at random among the most severe, so the expected answer can't be learned by habit and typed without reading. Commands with a single dangerous fragment are unchanged.
+
 ### Fixed
 
+- **`rm -rf /` now actually has to be typed out to be confirmed.** The guard asks for the affected object's name, but the root directory has no last path segment, so the expected text was empty — the confirm button was active before you typed anything, on the single most destructive command it recognizes. It now asks you to type `/`.
 - **The dangerous command guard now asks you to confirm the right object.** In a compound command whose destructive part wasn't last — `rm -rf ./node_modules && npm install` — the confirmation dialog named the tail of the whole line (`install`) instead of what was actually being deleted. The guard still blocked such commands, but the name you had to type said nothing about the danger. It now takes the object from the destructive fragment itself.
 - The same fix now also covers a background launch with a single `&` — `rm -rf /var/www & echo done` asked you to confirm `done` instead of `/var/www`. A redirect like `2>&1`, `&>file`, or `>&2` is correctly left alone; it's not treated as a separator.
 
