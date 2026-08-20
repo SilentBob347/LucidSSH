@@ -1,8 +1,8 @@
 import type { JSX } from 'react';
-import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AccessRiskPrompt } from '@shared/guard';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Предупреждение о риске потери SSH-доступа (GUARD-07).
@@ -22,15 +22,7 @@ export function AccessRiskModal({
 }): JSX.Element {
   const { t } = useTranslation();
   const backdrop = useBackdropClose(onCancel);
-
-  // Закрытие по Esc — у модалки нет поля ввода, слушаем окно.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onCancel();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
+  useEscapeClose('access-risk-modal', onCancel);
 
   return (
     <div

@@ -11,6 +11,18 @@
  * `onEscape` только у верхнего входа.
  */
 
+/**
+ * Единственное официальное место сравнения с литералом `'Escape'` в renderer
+ * (остальные ловит ESLint `no-restricted-syntax`, см. eslint.config.mjs).
+ * Экспортируется для редких мест, которым нужно узнать клавишу, не владея её
+ * обработкой, — например HotkeysSection в SettingsScreen.tsx: пока идёт захват
+ * новой комбинации, её собственный `keydown`-слушатель обязан пропустить Esc
+ * мимо себя (`stopPropagation()` в escStack не блокирует другие слушатели того
+ * же узла — это делает только `stopImmediatePropagation()`, которую escStack
+ * намеренно не использует, см. spec `.scratch/esc-close-stack/spec.md`).
+ */
+export const ESCAPE_KEY = 'Escape';
+
 export interface KeyboardEventLike {
   key: string;
   repeat: boolean;
@@ -42,7 +54,7 @@ function getTarget(): EscTarget {
 }
 
 function handleKeyDown(event: KeyboardEventLike): void {
-  if (event.key !== 'Escape') return;
+  if (event.key !== ESCAPE_KEY) return;
   // OS-автоповтор при удержании клавиши шлёт несколько keydown с repeat=true
   // до одного keyup — без этой проверки удержанный Esc мог бы размотать
   // несколько уровней стека за одно физическое нажатие.

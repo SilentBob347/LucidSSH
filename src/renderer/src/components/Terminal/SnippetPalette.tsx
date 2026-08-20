@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { Snippet } from '@shared/history';
 import { insertIntoComposer } from '@/stores/composerBus';
 import { Icon } from '@/components/common/Icon';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Плавающая палитра быстрой вставки сниппетов (SNIP-09), Ctrl+Space рядом с
@@ -41,6 +42,8 @@ export function SnippetPalette({
       window.removeEventListener('resize', close);
     };
   }, [onClose]);
+
+  useEscapeClose('snippet-palette', onClose);
 
   const q = query.trim().toLowerCase();
   const filtered = useMemo(
@@ -82,10 +85,7 @@ export function SnippetPalette({
         placeholder={t('snippet.palette.placeholder')}
         className="h-8 shrink-0 rounded-t-[6px] border-b border-border-hairline bg-transparent px-[10px] text-[12.5px] text-text-strong outline-none placeholder:text-text-dim"
         onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.stopPropagation();
-            onClose();
-          } else if (e.key === 'ArrowDown') {
+          if (e.key === 'ArrowDown') {
             e.preventDefault();
             if (filtered.length > 0) setSelected((i) => (i + 1) % filtered.length);
           } else if (e.key === 'ArrowUp') {

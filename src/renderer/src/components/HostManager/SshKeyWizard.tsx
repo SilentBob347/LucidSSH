@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { PASSPHRASE_MIN } from '@shared/keygen';
 import { Icon } from '@/components/common/Icon';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Мастер создания SSH-ключа (HM-12), открывается из NewConnectionDrawer
@@ -56,18 +57,10 @@ export function SshKeyWizard({
     };
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    // capture: раньше Esc-обработчика самого drawer, чтобы Esc закрывал
-    // только мастер, а не всю форму хоста
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose]);
+  // Мастер регистрируется в стеке позже drawer'а (монтируется по клику внутри
+  // уже открытого NewConnectionDrawer) — LIFO сам кладёт его выше, без
+  // ручного capture/stopPropagation, которые были нужны старому механизму.
+  useEscapeClose('ssh-key-wizard', onClose);
 
   const generate = async (): Promise<void> => {
     if (generating) return;

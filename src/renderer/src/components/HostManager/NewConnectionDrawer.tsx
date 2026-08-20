@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ToggleRow } from '@/components/Settings/controls';
 import { SshKeyWizard } from './SshKeyWizard';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 import { wrapJumpStep } from '@/components/Terminal/connectionLogText';
 
 /**
@@ -244,14 +245,7 @@ export function NewConnectionDrawer(): JSX.Element | null {
     };
   }, [drawer.open, form?.authMethod, form?.keyPath]);
 
-  useEffect(() => {
-    if (!drawer.open) return;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') closeDrawer();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [drawer.open, closeDrawer]);
+  useEscapeClose('new-connection-drawer', closeDrawer, drawer.open);
 
   // До early return ниже: хук должен звонить каждый рендер одинаково
   // (Rules of Hooks) — вызов после `if (...) return null` менял бы число

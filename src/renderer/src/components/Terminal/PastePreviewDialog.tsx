@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Предпросмотр многострочной вставки (TERM-05, §14 гайда): пользователь видит
@@ -26,6 +27,7 @@ export function PastePreviewDialog({
   const hasDanger = lines.some((l) => DANGER_HINT.test(l));
 
   const backdrop = useBackdropClose(onCancel);
+  useEscapeClose('paste-preview-dialog', onCancel);
 
   return (
     <div

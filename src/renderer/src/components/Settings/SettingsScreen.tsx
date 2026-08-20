@@ -15,6 +15,8 @@ import { Card, Segment, SectionTitle, ToggleRow } from './controls';
 import { Icon } from '@/components/common/Icon';
 import { LogoMark } from '@/components/common/LogoMark';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
+import { ESCAPE_KEY } from '@/stores/escStack';
 import { parseReleaseNotes } from './releaseNotes';
 import {
   DEFAULT_HOTKEYS,
@@ -66,13 +68,7 @@ export function SettingsScreen({ onOpenGuide }: { onOpenGuide: () => void }): JS
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const resetConfirmBackdrop = useBackdropClose(() => setResetConfirmOpen(false));
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') closeSettings();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [closeSettings]);
+  useEscapeClose('settings-screen', closeSettings);
 
   // Настройки терминала применяем к живым сессиям сразу (SET-02).
   const updateTerminal = useCallback(
@@ -701,13 +697,16 @@ function HotkeysSection(): JSX.Element {
     if (!editing) return;
     const action = editing;
     const onKey = (e: KeyboardEvent): void => {
+      // Отмену захвата берёт на себя useEscapeClose ниже. Оба слушателя
+      // висят на одном и том же window с capture:true — stopPropagation() в
+      // escStack не мешает СОСЕДНЕМУ слушателю того же узла отработать (это
+      // умеет только stopImmediatePropagation, которую escStack намеренно не
+      // использует), поэтому здесь всё равно нужен явный пропуск Esc — иначе
+      // после отмены захвата этот обработчик успевал бы дёрнуть
+      // preventDefault/stopPropagation и setPendingCombo('Escape') повторно.
+      if (e.key === ESCAPE_KEY) return;
       e.preventDefault();
       e.stopPropagation();
-      if (e.key === 'Escape') {
-        setEditing(null);
-        setPendingCombo(null);
-        return;
-      }
       const combo = normalizeCombo(e);
       if (!combo) return;
       setPendingCombo(combo);
@@ -726,6 +725,18 @@ function HotkeysSection(): JSX.Element {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [editing, updateHotkey, ownerLabelFor]);
+
+  // Незавершённая правка (ADR-0010, SET-10): захват комбинации отменяется
+  // отдельным входом стека — часть выше, что делает с остальными клавишами
+  // во время захвата, к Esc не относится.
+  useEscapeClose(
+    'settings-hotkey-capture',
+    () => {
+      setEditing(null);
+      setPendingCombo(null);
+    },
+    editing !== null
+  );
 
   const rows: HotkeyRow[] = useMemo(
     () => [

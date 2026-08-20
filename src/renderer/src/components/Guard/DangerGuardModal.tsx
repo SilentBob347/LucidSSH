@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DangerousCommandPrompt } from '@shared/guard';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Модалка Стража (GUARD-02, GUARD-03; скриншот 05-Danger).
@@ -55,6 +56,7 @@ export function DangerGuardModal({
     prompt.patternId === 'rm-recursive' ? t('guard.confirmDelete') : t('guard.confirmRun');
   const matched = value === prompt.confirmationText;
   const backdrop = useBackdropClose(onCancel);
+  useEscapeClose('danger-guard-modal', onCancel);
 
   return (
     <div
@@ -121,7 +123,6 @@ export function DangerGuardModal({
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && matched) onConfirm(value);
-                if (e.key === 'Escape') onCancel();
               }}
               placeholder={prompt.confirmationText}
               className="h-[34px] w-full rounded-[4px] border border-danger/40 bg-bg-panel px-[11px] font-mono text-[13px] text-text-strong outline-none placeholder:text-text-dim focus:border-danger"

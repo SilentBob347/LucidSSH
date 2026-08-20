@@ -1,6 +1,7 @@
 import type { JSX, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Малая модалка подтверждения (esh-pop поверх бэкдропа, Design_Brief §4.2).
@@ -22,13 +23,11 @@ export function ConfirmDialog({
 }): JSX.Element {
   const { t } = useTranslation();
   const backdrop = useBackdropClose(onCancel);
+  useEscapeClose('confirm-dialog', onCancel);
   return (
     <div
       className="animate-[esh-fade_.15s_ease] fixed inset-0 z-50 flex items-center justify-center bg-black/70"
       {...backdrop}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onCancel();
-      }}
       role="presentation"
     >
       <div

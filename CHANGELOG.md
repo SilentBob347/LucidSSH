@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Esc now closes exactly one thing, in a consistent order, everywhere.** All 23 places that used to listen for Esc on their own — dialogs, drawers, the context menu, the snippet palette, search, the error panel, and in-place edits like a tab rename or a history note — now go through a single shared stack. The most recently opened thing closes first, regardless of where keyboard focus happens to be.
+
+### Fixed
+
+- **Esc no longer leaks into the remote session while also closing a panel.** Previously the key reached xterm's own handling before the panel's listener ran (no `preventDefault`), so it did both: the control byte was sent to the server *and* the panel closed. Now Esc belongs to the open panel until it's closed.
+- **Esc while editing a history note no longer closes the whole History drawer.** The note input and the drawer each listened for Esc independently; cancelling the note also closed the drawer underneath it.
+- The SSH key wizard's Esc handling no longer depends on a hand-rolled `capture`/`stopPropagation` trick to avoid closing the connection form behind it — the shared stack orders it correctly by construction.
+- Four surfaces that already closed on a backdrop click — the JSON host import dialog, the "Возможности LucidSSH" guide, the multi-line paste preview, and the server dashboard — now also close on Esc.
+
 - **The dangerous command guard now names every object a compound command destroys.** `rm -rf /var/www && rm -rf /etc` used to name only the first one, so you confirmed one deletion while two were about to happen. The dialog now lists all of them and asks you to type the name of one of them — picked at random among the most severe, so the expected answer can't be learned by habit and typed without reading. Commands with a single dangerous fragment are unchanged.
 
 ### Fixed

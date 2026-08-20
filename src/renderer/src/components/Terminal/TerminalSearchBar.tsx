@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getSearchAddon } from './XtermView';
 import { Icon } from '@/components/common/Icon';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Поиск по буферу терминала (FIND-01/02): строка поверх терминала, не блокирует
@@ -24,6 +25,8 @@ export function TerminalSearchBar({
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEscapeClose('terminal-search-bar', onClose);
 
   const opts = { caseSensitive, regex };
 
@@ -53,7 +56,6 @@ export function TerminalSearchBar({
             if (e.shiftKey) findPrev();
             else findNext();
           }
-          if (e.key === 'Escape') onClose();
         }}
         placeholder={t('find.placeholder')}
         className="h-[26px] w-[180px] rounded-[4px] border border-border-default bg-bg-base px-2 text-[12px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent"

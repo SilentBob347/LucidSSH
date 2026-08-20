@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { DashboardMetrics } from '@shared/dashboard';
 import { Icon } from '@/components/common/Icon';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Модалка «Дашборд сервера» (DASH-01…05, Design_Brief §3.9; docs/Final
@@ -123,6 +124,7 @@ export function ServerDashboardModal({
 
   const procs = metrics?.topProcesses ?? [];
   const backdrop = useBackdropClose(onClose);
+  useEscapeClose('server-dashboard-modal', onClose);
 
   return (
     <div

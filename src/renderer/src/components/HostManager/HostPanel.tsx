@@ -9,6 +9,7 @@ import { usePanels } from '@/stores/panels';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Icon } from '@/components/common/Icon';
 import { AddBadge } from '@/components/common/AddBadge';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Левая панель — менеджер хостов (HM-01, HM-02, HM-05; Design_Brief §3.2):
@@ -222,6 +223,16 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
     await refresh();
   };
 
+  // Незавершённая правка (ADR-0010): имя новой группы.
+  useEscapeClose(
+    'hostpanel-new-group',
+    () => {
+      setNewGroupOpen(false);
+      setNewGroupName('');
+    },
+    newGroupOpen
+  );
+
   const toggleGroup = async (g: HostGroup): Promise<void> => {
     await window.lucidSSH.setGroupCollapsed(g.id, !g.collapsed);
     await refresh();
@@ -369,10 +380,6 @@ export const HostPanel = forwardRef<HTMLElement, { width: number }>(function Hos
                 onChange={(e) => setNewGroupName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') void createGroup();
-                  if (e.key === 'Escape') {
-                    setNewGroupOpen(false);
-                    setNewGroupName('');
-                  }
                 }}
                 placeholder={t('hosts.newGroup.placeholder')}
                 maxLength={60}

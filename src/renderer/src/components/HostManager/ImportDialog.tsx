@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { ImportPreview } from '@shared/hosts';
 import { useHosts } from '@/stores/hosts';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Импорт хостов (EXP-02…04): предпросмотр (сколько добавится / конфликтов),
@@ -35,6 +36,7 @@ export function ImportDialog({
     }
   };
   const backdrop = useBackdropClose(onClose);
+  useEscapeClose('import-dialog', onClose);
 
   return (
     <div
