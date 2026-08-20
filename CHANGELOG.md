@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Esc while editing a history note no longer closes the whole History drawer.** The note input and the drawer each listened for Esc independently; cancelling the note also closed the drawer underneath it.
 - The SSH key wizard's Esc handling no longer depends on a hand-rolled `capture`/`stopPropagation` trick to avoid closing the connection form behind it — the shared stack orders it correctly by construction.
 - Four surfaces that already closed on a backdrop click — the JSON host import dialog, the "Возможности LucidSSH" guide, the multi-line paste preview, and the server dashboard — now also close on Esc.
+- The host import dialogs (JSON import and PuTTY/ssh_config/WinSCP import) can no longer be closed — by backdrop click, Esc, or the close button — while an import is actually being applied. Previously any of those closed the dialog immediately while the import kept running in the background, discarding the result (imported/skipped counts, errors) with no way to see it.
 
 - **The dangerous command guard now names every object a compound command destroys.** `rm -rf /var/www && rm -rf /etc` used to name only the first one, so you confirmed one deletion while two were about to happen. The dialog now lists all of them and asks you to type the name of one of them — picked at random among the most severe, so the expected answer can't be learned by habit and typed without reading. Commands with a single dangerous fragment are unchanged.
 

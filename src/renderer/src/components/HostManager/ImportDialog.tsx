@@ -35,8 +35,16 @@ export function ImportDialog({
       setBusy(false);
     }
   };
-  const backdrop = useBackdropClose(onClose);
-  useEscapeClose('import-dialog', onClose);
+  // Пока идёт применение импорта (busy), закрытие целиком запрещено — импорт
+  // короткий, и показать его до конца дешевле, чем заводить для него канал
+  // уведомлений о результате (.scratch/import-dialog-busy-close/spec.md).
+  // Действует на все пути закрытия разом — бэкдроп, Esc и «Отмена» ниже —
+  // иначе разрешить один и запретить другой было бы новой асимметрией.
+  const closeIfIdle = (): void => {
+    if (!busy) onClose();
+  };
+  const backdrop = useBackdropClose(closeIfIdle);
+  useEscapeClose('import-dialog', closeIfIdle);
 
   return (
     <div
@@ -81,8 +89,9 @@ export function ImportDialog({
             <>
               <button
                 type="button"
+                disabled={busy}
                 onClick={onClose}
-                className="h-[34px] rounded-[6px] bg-bg-tab-active px-4 text-[12.5px] text-text-body hover:text-text-strong"
+                className="h-[34px] rounded-[6px] bg-bg-tab-active px-4 text-[12.5px] text-text-body hover:text-text-strong disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t('common.cancel')}
               </button>
