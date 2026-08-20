@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { Snippet } from '@shared/history';
 import { Icon } from '@/components/common/Icon';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * SnippetSaveDialog (SNIP-01, SNIP-05; Design_Brief §3.5). Модалка 440px:
@@ -99,6 +100,7 @@ export function SnippetSaveDialog({
     'h-[34px] w-full rounded-[4px] border border-border-strong bg-bg-base px-[10px] text-[13px] text-text-strong outline-none placeholder:text-text-dim focus:border-accent';
 
   const backdrop = useBackdropClose(onClose);
+  useEscapeClose('snippet-save-dialog', onClose);
 
   return (
     <div
@@ -182,7 +184,6 @@ export function SnippetSaveDialog({
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && canSave) void save();
-                if (e.key === 'Escape') onClose();
               }}
               placeholder={t('snippet.namePlaceholder')}
               maxLength={100}

@@ -5,6 +5,7 @@ import type { ExternalImportApplyResult, ExternalImportResult, ImportSource } fr
 import { useHosts } from '@/stores/hosts';
 import { Icon } from '@/components/common/Icon';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Импорт хостов из внешних источников (HM-03 PuTTY, HM-04 ssh_config).
@@ -83,13 +84,7 @@ export function ExternalImportDialog({ onClose }: { onClose: () => void }): JSX.
     else setResult(null); // ssh-config ждёт выбора файла
   }, [source, loadPutty, loadWinScp]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeClose('external-import-dialog', onClose);
 
   const toggle = (i: number): void => {
     setSelected((prev) => {

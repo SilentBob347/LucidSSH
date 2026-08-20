@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Icon, type IconName } from '@/components/common/Icon';
 import { usePanels } from '@/stores/panels';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * FeatureGuide — модалка «Возможности LucidSSH» (скриншот 15-Guide):
@@ -20,6 +21,7 @@ export function FeatureGuide({ onClose }: { onClose: () => void }): JSX.Element 
   const { t } = useTranslation();
   const { openHelp } = usePanels();
   const backdrop = useBackdropClose(onClose);
+  useEscapeClose('feature-guide', onClose);
 
   return (
     <div

@@ -8,6 +8,7 @@ import { usePanels } from '@/stores/panels';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Icon } from '@/components/common/Icon';
 import { TmuxHintLink } from '@/components/Terminal/TmuxHintLink';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Таб-бар сессий 38px (Design_Brief §3.3): статус-точка, имя, ×.
@@ -98,6 +99,10 @@ export function TabBar({
     setRenamingId(null);
   };
 
+  // Незавершённая правка (ADR-0010): переименование вкладки — свой вход
+  // стека, не завязанный на фокус инпута.
+  useEscapeClose('tabbar-rename', () => setRenamingId(null), renamingId !== null);
+
   return (
     <div
       className="flex h-[38px] shrink-0 items-end border-b border-border-default bg-bg-base"
@@ -168,7 +173,6 @@ export function TabBar({
                   onBlur={commitRename}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') commitRename();
-                    if (e.key === 'Escape') setRenamingId(null);
                   }}
                   maxLength={60}
                   className="h-[22px] w-[120px] rounded-[3px] border border-accent bg-bg-base px-1 text-[12px] text-text-strong outline-none"

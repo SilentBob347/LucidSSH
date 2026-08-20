@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { parseQuickConnect } from '@shared/quickConnect';
 import { Icon } from '@/components/common/Icon';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * HM-11: «Быстрое подключение» — ввод `user@host[:port]`, соединение сразу
@@ -40,6 +41,7 @@ export function QuickConnectDialog({
   };
 
   const backdrop = useBackdropClose(onClose);
+  useEscapeClose('quick-connect-dialog', onClose);
 
   return (
     <div
@@ -70,7 +72,6 @@ export function QuickConnectDialog({
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void submit();
-              if (e.key === 'Escape') onClose();
             }}
             placeholder={t('quickConnect.placeholder')}
             spellCheck={false}

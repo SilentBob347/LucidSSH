@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { usePanels } from '@/stores/panels';
 import { useConfig } from '@/stores/config';
 import { Icon } from '@/components/common/Icon';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 import {
   DEFAULT_HOTKEYS,
   FIXED_HOTKEYS,
@@ -44,13 +45,7 @@ export function HelpScreen(): JSX.Element {
     el?.scrollIntoView({ block: 'start' });
   }, [helpTarget, tab]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') closeHelp();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [closeHelp]);
+  useEscapeClose('help-screen', closeHelp);
 
   const tabs: { k: Tab; label: string }[] = [
     { k: 'start', label: t('help.tabs.start') },

@@ -1,11 +1,12 @@
 import type { JSX } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ErrorExplanation } from '@shared/content';
 import { applyCommandSuggestion } from '@shared/fuzzyMatch';
 import { Icon } from '@/components/common/Icon';
 import { insertIntoComposer } from '@/stores/composerBus';
 import { useConfig } from '@/stores/config';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Панель детектора ошибок (ERR-03; скриншот 02-Error). Выезжает снизу области
@@ -29,14 +30,10 @@ export function ErrorDetector({
   void sessionId;
 
   // Esc должен закрывать панель независимо от фокуса — обычно он у терминала
-  // (xterm), а не у самой панели, поэтому слушатель на div её не ловит.
-  useEffect(() => {
-    const onEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onEsc);
-    return () => window.removeEventListener('keydown', onEsc);
-  }, [onClose]);
+  // (xterm), а не у самой панели (ADR-0010: панель не позиционирована, но
+  // всё равно Оверлей — критерий членства в стеке транзиентность, не способ
+  // позиционирования).
+  useEscapeClose('error-detector', onClose);
 
   const copy = (cmd: string, idx: number): void => {
     window.lucidSSH.clipboardWrite(cmd);

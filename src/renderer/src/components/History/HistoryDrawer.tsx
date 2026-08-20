@@ -8,6 +8,7 @@ import { usePanels } from '@/stores/panels';
 import { Icon } from '@/components/common/Icon';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Панель истории команд (HistoryDrawer, Design_Brief §3.5; скриншот 06).
@@ -58,13 +59,7 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
     // (main шлёт ev:history-recorded — иначе список замирает на моменте открытия).
   }, [refreshHistory, historyRevision]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') closeHistory();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [closeHistory]);
+  useEscapeClose('history-drawer', closeHistory);
 
   const hostChips = useMemo(() => {
     const map = new Map<number, string>();
@@ -90,6 +85,11 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
   };
 
   const backdrop = useBackdropClose(closeHistory);
+
+  // Незавершённая правка (ADR-0010): заметка редактируется поверх дровера —
+  // регистрируется позже него, значит по LIFO получает Esc первой (живой баг
+  // до этой миграции: Esc отменял правку и тут же закрывал весь дровер).
+  useEscapeClose('history-drawer-note', () => setNoteEditing(null), noteEditing !== null);
 
   return (
     <div
@@ -262,7 +262,6 @@ export function HistoryDrawer({ activeHostId }: { activeHostId?: number }): JSX.
                         onBlur={() => void saveNote(e.id)}
                         onKeyDown={(ev) => {
                           if (ev.key === 'Enter') void saveNote(e.id);
-                          if (ev.key === 'Escape') setNoteEditing(null);
                         }}
                         placeholder={t('history.notePlaceholder')}
                         className="mt-[7px] h-7 w-full rounded-[4px] border border-border-strong bg-bg-base px-2 text-[12px] text-text-strong outline-none focus:border-accent"

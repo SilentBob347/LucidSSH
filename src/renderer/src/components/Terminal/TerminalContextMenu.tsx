@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useEscapeClose } from '@/hooks/useEscapeClose';
 
 /**
  * Контекстное меню терминала (CTX-01): Копировать (активно при выделении),
@@ -31,16 +32,13 @@ export function TerminalContextMenu({
     const close = (): void => onClose();
     window.addEventListener('click', close);
     window.addEventListener('resize', close);
-    const onEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onEsc);
     return () => {
       window.removeEventListener('click', close);
       window.removeEventListener('resize', close);
-      window.removeEventListener('keydown', onEsc);
     };
   }, [onClose]);
+
+  useEscapeClose('terminal-context-menu', onClose);
 
   const item =
     'flex w-full items-center px-3 py-[6px] text-left text-[12.5px] text-text-body hover:bg-bg-elevated-2 hover:text-text-strong disabled:cursor-default disabled:text-text-faint disabled:hover:bg-transparent';

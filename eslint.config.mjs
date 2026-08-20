@@ -29,5 +29,27 @@ export default tseslint.config(
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn'
     }
+  },
+  {
+    // ADR-0010 (docs/agent/adr/0010-esc-stack-not-overlay-module.md): Esc
+    // маршрутизируется только через escStack/useEscapeClose, не точечными
+    // `if (e.key === 'Escape')`. Ловит копипасту синтаксически, не обход
+    // через константу — большего от синтаксического правила не ждём.
+    files: ['src/renderer/**/*.{ts,tsx}'],
+    ignores: [
+      'src/renderer/src/stores/escStack.ts',
+      'src/renderer/src/stores/escStack.test.ts',
+      'src/renderer/src/hooks/useEscapeClose.ts'
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "Literal[value='Escape']",
+          message:
+            "Не обрабатывайте 'Escape' точечно — регистрируйте вход через useEscapeClose (ADR-0010, docs/agent/adr/0010-esc-stack-not-overlay-module.md)."
+        }
+      ]
+    }
   }
 );
