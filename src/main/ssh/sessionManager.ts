@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Client, type ClientChannel } from 'ssh2';
 import type { ConnectionLogEntry, HostKeyPrompt, SessionStatus } from '@shared/ssh';
-import { isSignalExitCode } from '@shared/ssh';
 import { IPC } from '@shared/ipc';
 import type { Host } from '@shared/hosts';
 import { getHost } from '../hosts/repository';
@@ -27,15 +26,15 @@ import {
 } from './shellIntegrationSession';
 import { startDashboard, stopDashboard } from './dashboard';
 import { deployPendingKey, hasPendingDeployment } from './keygen';
-import { loadErrorPatterns, loadCommandCatalog } from '../content/loader';
-import { detectError, excerpt, isEmptyOutput, isNonErrorExitCode } from '../errors/detector';
-import { maskSecrets } from '../secrets/maskers';
-import { extractCommandName, findCommandSuggestions } from '../errors/fuzzyMatch';
 import { t } from '../i18n';
-import type { ErrorExplanation } from '@shared/content';
 import type { GuardStatus } from '@shared/history';
-import { recordHistory } from '../history/repository';
-import { notifyDisconnect, notifyCommandDone } from '../notifications/notifier';
+import { notifyDisconnect } from '../notifications/notifier';
+import {
+  checkShellUnavailable as reportShellUnavailable,
+  handleCommandFinished as reportCommandFinished,
+  recordCommand as reportCommand,
+  type SessionIdentity
+} from './commandReport';
 
 /**
  * SSH-сессии (SSH-01…SSH-07, §9 Security_Guide).
@@ -163,6 +162,17 @@ function log(
   s.log.push(entry);
   if (s.log.length > 500) s.log.shift();
   send(IPC.evConnectionLog, s.id, entry);
+}
+
+/** Личность Сессии для commandReport.ts — см. SessionIdentity там: одной
+ *  записью, а не по аргументу на поле. */
+function identityOf(session: ManagedSession): SessionIdentity {
+  return {
+    id: session.id,
+    hostId: session.hostId,
+    hostName: session.hostName,
+    quickConnectUsername: session.quickConnectUsername
+  };
 }
 
 export function sessionExists(sessionId: string): boolean {
@@ -958,13 +968,13 @@ function handleShellIntegrationEvent(session: ManagedSession, event: ShellIntegr
       send(IPC.evBreadcrumb, session.id, event.crumb);
       break;
     case 'command-finished':
-      handleCommandFinished(session, event);
+      reportCommandFinished(identityOf(session), event);
       break;
     case 'password-prompt':
       send(IPC.evPasswordPrompt, session.id);
       break;
     case 'unmarked-output':
-      checkShellUnavailable(session, event.output);
+      if (reportShellUnavailable(identityOf(session), event.output)) session.shellUnavailable = true;
       break;
     case 'integration-unconfirmed':
       send(IPC.evIntegrationUnconfirmed, session.id);
@@ -983,121 +993,10 @@ function handleShellIntegrationEvent(session: ManagedSession, event: ShellIntegr
   }
 }
 
-/**
- * Некоторые серверы аутентифицируют успешно, но не могут открыть интерактивную
- * сессию (login shell = nologin и т.п.) — канал сразу закрывается, ssh2 не
- * эмитит 'error' (это не ошибка аутентификации). Наш маркер breadcrumb в таком
- * случае никогда не приходит, поэтому обычный путь детектора (по exit code
- * команды) не срабатывает. Текст, который сервер успел прислать перед
- * закрытием канала (событие `unmarked-output` от ShellIntegrationSession.close()),
- * сверяется с базой паттернов scope 'ssh-connection'; совпадение показывается
- * как отдельное объяснение, а сессия помечается, чтобы client.on('close', ...)
- * не пытался переподключиться — повтор бесполезен.
- */
-function checkShellUnavailable(session: ManagedSession, output: string): void {
-  const patterns = loadErrorPatterns(loadConfig().language);
-  const result = detectError(patterns, 'ssh-connection', output, null, '');
-  if (result.matched) {
-    session.shellUnavailable = true;
-    send(IPC.evError, session.id, result.explanation);
-  }
-}
-
-/**
- * Обработка события «команда завершилась» от ShellIntegrationSession. Пустая
- * `command` — прямой ввод в xterm (main не знает его текста, история его не
- * пишет, см. HIST-01). При exit code ≠ 0 и включённой панели детектора
- * (SET-05) — матч по базе.
- */
-function handleCommandFinished(
-  session: ManagedSession,
-  event: Extract<ShellIntegrationEvent, { kind: 'command-finished' }>
-): void {
-  const { command, exitCode, output, guardStatus, typed, durationMs } = event;
-
-  // Запись в историю выполненной команды из композера (HIST-01). Прямой ввод в
-  // xterm не записывается — его текст main не знает. Маскирование секретов — в
-  // recordHistory (HIST-07).
-  if (command) {
-    recordCommand(session, command, exitCode, guardStatus, output);
-    // NOTIF-02: тост о долгой/упавшей команде, если окно не в фокусе
-    notifyCommandDone(session.hostName, exitCode, durationMs);
-  }
-
-  if (exitCode === null || exitCode === 0) return;
-  // Прервано сигналом (напр. Ctrl+C во время `tail -f`/`journalctl -f`) — это
-  // намеренное действие пользователя, а не ошибка команды.
-  if (isSignalExitCode(exitCode)) return;
-  // Пустой Enter: команды не было, $? унаследован от предыдущей — не детектор.
-  if (!typed && !command) return;
-  if (!loadConfig().ui.hints.errorPanel) return; // отключено в «Интерфейсе»
-
-  const patterns = loadErrorPatterns(loadConfig().language);
-  const result = detectError(patterns, 'command', output, exitCode, command);
-
-  let explanation: ErrorExplanation;
-  if (result.matched) {
-    explanation = result.explanation;
-    // ERR-07: для command-not-found ищем похожие имена в каталоге команд
-    // (расстояние Левенштейна ≤ 2). Формулировка «возможно» — это догадка, не факт.
-    if (explanation.id === 'command-not-found') {
-      const catalog = loadCommandCatalog(loadConfig().language);
-      const suggestions = findCommandSuggestions(
-        extractCommandName(command),
-        catalog.commands.map((c) => c.name)
-      );
-      if (suggestions.length > 0) explanation.suggestions = suggestions;
-    }
-  } else {
-    // Исключения из ERR-01: ненулевой exit code — штатный результат самой
-    // команды/намеренное действие пользователя, не сбой (найдено при
-    // тестировании 2026-07-24, issue 03-error-detector-fires-on-benign-nonzero-exit).
-    if (isNonErrorExitCode(command, output, exitCode)) return;
-    // Fallback-шаблон (ERR-06): пустой stderr → осмысленный текст
-    const explainKey = isEmptyOutput(output) ? 'errDetector.emptyOutput' : 'errDetector.fallbackExplain';
-    explanation = {
-      title: t('errDetector.fallbackTitle'),
-      explanation: t(explainKey, { code: exitCode }),
-      checks: [],
-      source: 'fallback',
-      command: maskSecrets(command).masked,
-      exitCode,
-      stderr: maskSecrets(excerpt(output)).masked
-    };
-  }
-  send(IPC.evError, session.id, explanation);
-}
-
-/** Запись команды в историю с учётом отключения истории (HIST-07). */
-function recordCommand(
-  session: ManagedSession,
-  command: string,
-  exitCode: number | null | undefined,
-  guardStatus?: GuardStatus,
-  output?: string
-): void {
-  const cfg = loadConfig();
-  if (!cfg.history.enabled) return;
-  if (cfg.history.perHostDisabled.includes(session.hostId)) return;
-  const host = getHost(session.hostId);
-  recordHistory({
-    command,
-    hostId: session.hostId,
-    hostName: session.hostName,
-    username: host?.username ?? session.quickConnectUsername ?? '',
-    exitCode: exitCode ?? undefined,
-    guardStatus,
-    output
-  });
-  // HistoryDrawer, если уже открыт, не перечитывает список сам по себе —
-  // нужен явный сигнал (тот же баг чинили для сниппетов, snippetsRevision).
-  send(IPC.evHistoryRecorded);
-}
-
 /** Прямая запись в историю (заблокированная стражем команда, HIST-05). */
 export function recordBlockedCommand(sessionId: string, command: string): void {
   const session = sessions.get(sessionId);
-  if (session) recordCommand(session, command, undefined, 'blocked');
+  if (session) reportCommand(identityOf(session), command, undefined, 'blocked');
 }
 
 /** Отправка ввода пользователя в сессию — сырая, без Стража; вызывающая
