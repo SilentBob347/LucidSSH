@@ -9,10 +9,10 @@ import {
   connectQuickHost,
   destroySession,
   disconnectSession,
-  getSession,
   getSessionLog,
   listSessions,
-  resizeSession
+  resizeSession,
+  sessionExists
 } from '../ssh/sessionManager';
 import {
   cancelDangerousCommand,
@@ -40,7 +40,7 @@ function assertSessionIdFormat(v: unknown): string {
 
 function validateSessionId(v: unknown): string {
   const id = assertSessionIdFormat(v);
-  if (!getSession(id)) throw new IpcValidationError('sessionId: unknown');
+  if (!sessionExists(id)) throw new IpcValidationError('sessionId: unknown');
   return id;
 }
 
@@ -120,7 +120,7 @@ export function registerSessionIpcHandlers(): void {
       if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 1 || cols > 1000 || rows < 1 || rows > 1000) {
         throw new IpcValidationError('size: invalid');
       }
-      if (!getSession(id)) return;
+      if (!sessionExists(id)) return;
       resizeSession(id, cols, rows);
     }
   );

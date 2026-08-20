@@ -3,10 +3,11 @@ import type { AccessRiskPrompt, DangerousCommandPrompt, SubmitResult } from '@sh
 import { getHost } from '../hosts/repository';
 import { loadConfig } from '../config/store';
 import {
-  getSession,
+  hostIdOf,
   recordBlockedCommand,
   sendCommandLine,
-  sendInput
+  sendInput,
+  sessionExists
 } from '../ssh/sessionManager';
 import type { DangerMatch } from './patterns';
 import { analyzeAccessRisk, analyzeDangers } from './patterns';
@@ -43,9 +44,9 @@ const pending = new Map<string, Pending>();
 /** Активен ли Страж для сессии: глобально И для конкретного хоста (GUARD-05). */
 function guardEnabledFor(sessionId: string): boolean {
   if (!loadConfig().guard.globalEnabled) return false;
-  const session = getSession(sessionId);
-  if (!session) return true;
-  const host = getHost(session.hostId);
+  const hostId = hostIdOf(sessionId);
+  if (hostId === undefined) return true;
+  const host = getHost(hostId);
   return host ? host.guardEnabled : true;
 }
 
@@ -55,8 +56,7 @@ function guardEnabledFor(sessionId: string): boolean {
  * Иначе команда отправляется с переводом строки.
  */
 export function submitCommand(sessionId: string, command: string): SubmitResult {
-  const session = getSession(sessionId);
-  if (!session) return { status: 'sent' }; // неизвестная сессия — IPC-слой уже отверг
+  if (!sessionExists(sessionId)) return { status: 'sent' }; // неизвестная сессия — IPC-слой уже отверг
 
   if (guardEnabledFor(sessionId)) {
     const danger = dangerPrompt(sessionId, command, 'command');
@@ -167,8 +167,7 @@ function riskPrompt(
  * текст, летящий в интерактивную программу).
  */
 export function submitRawInput(sessionId: string, data: string): SubmitResult {
-  const session = getSession(sessionId);
-  if (!session) return { status: 'sent' }; // неизвестная сессия — sendInput сам no-op
+  if (!sessionExists(sessionId)) return { status: 'sent' }; // неизвестная сессия — sendInput сам no-op
 
   if (data.length >= RAW_CHECK_THRESHOLD && guardEnabledFor(sessionId)) {
     const danger = dangerPrompt(sessionId, data, 'raw');
