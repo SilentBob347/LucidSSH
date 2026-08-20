@@ -16,14 +16,7 @@ import {
   sha256Fingerprint
 } from './knownHosts';
 import { forwardOut } from './forwardOut';
-import {
-  ShellIntegrationSession,
-  SETUP_CAP_MS,
-  type ShellIntegrationEvent,
-  type ShellIntegrationResult,
-  type ShellIntegrationTimer,
-  type TimerAction
-} from './shellIntegrationSession';
+import { ShellChannel } from './shellChannel';
 import { startDashboard, stopDashboard } from './dashboard';
 import { deployPendingKey, hasPendingDeployment } from './keygen';
 import { t } from '../i18n';
@@ -36,6 +29,11 @@ import {
   type SessionIdentity
 } from './commandReport';
 
+/** Размер PTY, с которым shell открывается до первого реального resize от
+ *  renderer (совпадает со старым дефолтом ManagedSession.cols/rows). */
+const DEFAULT_COLS = 80;
+const DEFAULT_ROWS = 24;
+
 /**
  * SSH-сессии (SSH-01…SSH-07, §9 Security_Guide).
  * Протокол подключения: renderer передаёт только hostId; main достаёт хост из
@@ -43,13 +41,13 @@ import {
  * (это гарантирует и протокол SSH, и hostVerifier ssh2); renderer получает
  * только sessionId и статусы. Секрет не кэшируется дольше подключения.
  *
- * Разбор вывода shell-интеграции (breadcrumb, эхо setup-команды, реинжект
- * после su/sudo, детекция запроса пароля) живёт за `ShellIntegrationSession`
- * (см. `.scratch/shell-integration-session/spec.md`) — эта коробка «не имеет
- * рук»: сама не пишет в provод и не заводит настоящих таймеров, только
- * сообщает решения (`ShellIntegrationResult`), которые ниже применяет
- * `applyResult`. Реальные `setTimeout` для её именованных таймеров живут в
- * `ManagedSession.shellTimers`.
+ * Конвейер вывода одного shell-потока (breadcrumb, эхо setup-команды,
+ * реинжект после su/sudo, детекция запроса пароля, PTY-resize, детектор
+ * ошибок/история команд) вынесен в `ShellChannel` (`shellChannel.ts`) —
+ * получает уже открытый поток и ничего не знает про `ManagedSession`
+ * (issue 03, `.scratch/shell-channel-extraction/spec.md`, ADR-0009).
+ * `openShell` ниже — вся его связь с Соединением: открыть поток, обработать
+ * ошибку открытия, построить канал, запустить дашборд.
  */
 
 interface ManagedSession {
@@ -62,19 +60,6 @@ interface ManagedSession {
    *  закрывать/пересоздавать нужно оба хопа. У каждой сессии он свой, пула нет
    *  (ADR-0007). */
   jumpClient: Client | null;
-  shell: ClientChannel | null;
-  cols: number;
-  rows: number;
-  /** Последний размер, реально применённый к PTY через setWindow (issue 11 /
-   *  ADR-0005) — отдельно от cols/rows, которые обновляются на каждый запрос
-   *  от renderer независимо от того, дошёл ли он до PTY. */
-  ptyCols: number;
-  ptyRows: number;
-  /** Идёт ли сейчас известная fullscreen-интерактивная программа (BRD-05/06) —
-   *  зеркалит то же состояние, что renderer отслеживает в TerminalArea.tsx по
-   *  событиям interactive-program/breadcrumb, нужно main для гейтинга resize
-   *  (ADR-0005). */
-  interactiveProgramActive: boolean;
   status: SessionStatus;
   log: ConnectionLogEntry[];
   userClosed: boolean;
@@ -88,15 +73,12 @@ interface ManagedSession {
   /** Имя пользователя для Quick Connect (HM-11, hostId=0 — нет строки в hosts,
    *  getHost(0) всегда null) — фоллбэк для recordCommand, где обычно берётся из host. */
   quickConnectUsername?: string;
-  /** Конвейер разбора вывода текущего shell-канала. Новый экземпляр — на
-   *  каждое открытие канала (в т.ч. после переподключения/эскалации), старый
-   *  выбрасывается; отдельного reset() нет — чистое состояние гарантирует
-   *  конструктор (см. ShellIntegrationSession). */
-  shellIntegration: ShellIntegrationSession | null;
-  /** Реальные таймеры именованных запросов коробки (см. applyTimerActions).
-   *  Живёт бок о бок с shellIntegration — оба создаются заново в openShell,
-   *  этого достаточно вместо ручного списка полей для сброса. */
-  shellTimers: Partial<Record<ShellIntegrationTimer, NodeJS.Timeout>>;
+  /** Конвейер вывода текущего shell-потока — новый экземпляр на каждое
+   *  открытие канала (в т.ч. после переподключения/эскалации), старый
+   *  выбрасывается; отдельного reset() нет, чистое состояние гарантирует
+   *  конструктор ShellChannel. `null` до первого openShell и после закрытия
+   *  потока (см. onClosed в openShell). */
+  shellChannel: ShellChannel | null;
 }
 
 interface PendingHostKey {
@@ -183,18 +165,6 @@ export function hostIdOf(sessionId: string): number | undefined {
   return sessions.get(sessionId)?.hostId;
 }
 
-/**
- * @deprecated Боевых вызывающих больше нет (`sessionExists`/`hostIdOf` их
- * заменили, .scratch/shell-channel-extraction/issues/01). Единственный
- * оставшийся потребитель — sessionManager.test.ts:680, который дёргает
- * `shellIntegration.tick(...)` внутри PTY-resize гейтинга; этот доступ уходит
- * вместе с выносом ShellChannel (issue 03, spec.md «Часть 3»), только тогда
- * getSession перестаёт экспортироваться.
- */
-export function getSession(sessionId: string): ManagedSession | undefined {
-  return sessions.get(sessionId);
-}
-
 export function getSessionLog(sessionId: string): ConnectionLogEntry[] {
   return sessions.get(sessionId)?.log ?? [];
 }
@@ -211,7 +181,7 @@ export function listSessions(): Array<{
     hostId: s.hostId,
     hostName: s.hostName,
     status: s.status,
-    busyCommand: s.shellIntegration?.runningCommand() ?? null
+    busyCommand: s.shellChannel?.runningCommand() ?? null
   }));
 }
 
@@ -220,7 +190,7 @@ export function listSessions(): Array<{
  *  renderer заранее не имеет списка сессий — только count, см. mainWindow.ts). */
 export function busySessions(): Array<{ hostName: string; command: string }> {
   return [...sessions.values()].flatMap((s) => {
-    const command = s.shellIntegration?.runningCommand() ?? null;
+    const command = s.shellChannel?.runningCommand() ?? null;
     return command === null ? [] : [{ hostName: s.hostName, command }];
   });
 }
@@ -235,20 +205,13 @@ export async function connectHost(hostId: number): Promise<{ sessionId: string }
     hostName: host.name,
     client: null,
     jumpClient: null,
-    shell: null,
-    cols: 80,
-    rows: 24,
-    ptyCols: 80,
-    ptyRows: 24,
-    interactiveProgramActive: false,
     status: 'connecting',
     log: [],
     userClosed: false,
     reconnectAttempts: 0,
     connectStartedAt: Date.now(),
     everConnected: false,
-    shellIntegration: null,
-    shellTimers: {}
+    shellChannel: null
   };
   sessions.set(session.id, session);
   setStatus(session, 'connecting');
@@ -287,20 +250,13 @@ export async function connectQuickHost(
     hostName: host.name,
     client: null,
     jumpClient: null,
-    shell: null,
-    cols: 80,
-    rows: 24,
-    ptyCols: 80,
-    ptyRows: 24,
-    interactiveProgramActive: false,
     status: 'connecting',
     log: [],
     userClosed: false,
     reconnectAttempts: 0,
     connectStartedAt: Date.now(),
     everConnected: false,
-    shellIntegration: null,
-    shellTimers: {},
+    shellChannel: null,
     quickConnectUsername: username
   };
   sessions.set(session.id, session);
@@ -857,140 +813,40 @@ function handleHostKey(
  * вставляется в xterm через write(), не innerHTML (TERM-07, §13 гайда).
  */
 function openShell(session: ManagedSession, client: Client): void {
-  client.shell(
-    { term: 'xterm-256color', cols: session.cols, rows: session.rows },
-    (err, stream) => {
-      if (err) {
-        log(session, 'error', 'clog.shellError', undefined, 'session');
-        setStatus(session, 'connected'); // канал не открылся, но соединение есть
-        return;
-      }
-      session.shell = stream;
-      // PTY уже открыт с session.cols/rows (см. client.shell(...) выше) —
-      // синхронизируем ptyCols/ptyRows, чтобы resizeSession/forceResize
-      // сравнивали с фактически применённым размером, а не с 80×24 по
-      // умолчанию (ADR-0005).
-      session.ptyCols = session.cols;
-      session.ptyRows = session.rows;
-      session.everConnected = true;
-      // Новый shell (в т.ч. после переподключения) — свежий конвейер разбора и
-      // пустой реестр таймеров сами по себе заменяют ручной список сброса
-      // прежних гейтов/полей (setupSent, commandGate.reset(), disarmReinject, …).
-      clearAllShellTimers(session);
-      session.shellIntegration = new ShellIntegrationSession();
-      setStatus(session, 'connected');
-      log(session, 'info', 'clog.shellOpen', undefined, 'session');
-
-      // Вывод сервера проходит через ShellIntegrationSession: APC-маркеры
-      // вырезаются (в xterm не попадают), из них формируется breadcrumb
-      // (BRD-04) и отслеживается exit code для детектора ошибок (ERR-01).
-      stream.on('data', (data: Buffer) => {
-        const box = session.shellIntegration;
-        if (!box) return;
-        applyResult(session, box.feed(data.toString('utf8')));
-      });
-      stream.stderr?.on('data', (data: Buffer) => {
-        send(IPC.evTerminalData, session.id, data.toString('utf8'));
-      });
-      stream.on('close', () => {
-        clearAllShellTimers(session);
-        const box = session.shellIntegration;
-        session.shell = null;
-        stopDashboard(session.id);
-        if (box) applyResult(session, box.close());
-      });
-
-      // Кап на случай сервера без MOTD/приглашения: настройка уйдёт даже
-      // если данных от сервера не было и silence-таймер не взводился. Это
-      // единственный таймер, который коробка не может попросить сама —
-      // её интерфейс не включает «канал открылся».
-      applyTimerActions(session, [{ timer: 'setup-cap', action: 'schedule', ms: SETUP_CAP_MS }]);
-
-      // Мини-дашборд: отдельный exec-канал, интервал 10 с (DASH-02).
-      // Логгер — причина недоступности метрик попадает в «Детали подключения» (DASH-05).
-      startDashboard(session.id, client, session.hostId, (messageKey, params) =>
-        log(session, 'warn', messageKey, params, 'session')
-      );
+  client.shell({ term: 'xterm-256color', cols: DEFAULT_COLS, rows: DEFAULT_ROWS }, (err, stream) => {
+    if (err) {
+      log(session, 'error', 'clog.shellError', undefined, 'session');
+      setStatus(session, 'connected'); // канал не открылся, но соединение есть
+      return;
     }
-  );
-}
-
-/** Применяет решение ShellIntegrationSession: пишет в provод, показывает
- *  текст в терминале, (пере)заводит/отменяет таймеры, разбирает события —
- *  единственное место, где коробка встречается с реальным IO. */
-function applyResult(session: ManagedSession, result: ShellIntegrationResult): void {
-  if (result.toWrite) session.shell?.write(result.toWrite);
-  if (result.display) send(IPC.evTerminalData, session.id, result.display);
-  applyTimerActions(session, result.timerActions);
-  for (const event of result.events) {
-    handleShellIntegrationEvent(session, event);
-  }
-}
-
-function clearShellTimer(session: ManagedSession, timer: ShellIntegrationTimer): void {
-  const handle = session.shellTimers[timer];
-  if (handle) {
-    clearTimeout(handle);
-    delete session.shellTimers[timer];
-  }
-}
-
-function clearAllShellTimers(session: ManagedSession): void {
-  for (const timer of Object.keys(session.shellTimers) as ShellIntegrationTimer[]) {
-    clearShellTimer(session, timer);
-  }
-}
-
-/** Заводит/отменяет именованные таймеры коробки — она сама «рук не имеет»
- *  (см. shellIntegrationSession.ts). По истечении таймер зовёт box.tick(). */
-function applyTimerActions(session: ManagedSession, actions: TimerAction[]): void {
-  for (const action of actions) {
-    clearShellTimer(session, action.timer);
-    if (action.action !== 'schedule') continue;
-    session.shellTimers[action.timer] = setTimeout(() => {
-      delete session.shellTimers[action.timer];
-      const box = session.shellIntegration;
-      if (!box) return;
-      applyResult(session, box.tick(action.timer));
-    }, action.ms);
-  }
-}
-
-function handleShellIntegrationEvent(session: ManagedSession, event: ShellIntegrationEvent): void {
-  switch (event.kind) {
-    case 'breadcrumb':
-      // breadcrumb приходит на каждое приглашение, в т.ч. на marker-перерисовку
-      // без Enter (SIGWINCH-эффект, см. shellIntegrationSession.test.ts) — во
-      // время реальной fullscreen-программы (vim/htop/...) этот маркер не
-      // приходит вовсе, так что сброс здесь корректно ловит именно выход из
-      // программы (ADR-0005), а не путает её с обычным промптом.
-      session.interactiveProgramActive = false;
-      send(IPC.evBreadcrumb, session.id, event.crumb);
-      break;
-    case 'command-finished':
-      reportCommandFinished(identityOf(session), event);
-      break;
-    case 'password-prompt':
-      send(IPC.evPasswordPrompt, session.id);
-      break;
-    case 'unmarked-output':
-      if (reportShellUnavailable(identityOf(session), event.output)) session.shellUnavailable = true;
-      break;
-    case 'integration-unconfirmed':
-      send(IPC.evIntegrationUnconfirmed, session.id);
-      break;
-    case 'interactive-program':
-      session.interactiveProgramActive = true;
-      // Досылаем ранее пропущенный (только-rows) resize (ADR-0005): если
-      // ErrorDetector/HintBar были открыты до запуска программы, PTY мог
-      // остаться на устаревшем rows — fullscreen-программе нужен точный
-      // размер сразу при старте, иначе она отрисуется некорректно.
-      if (session.cols !== session.ptyCols || session.rows !== session.ptyRows) {
-        applyRealResize(session, session.cols, session.rows);
+    session.everConnected = true;
+    const identity = identityOf(session);
+    session.shellChannel = new ShellChannel({
+      sessionId: session.id,
+      stream,
+      cols: DEFAULT_COLS,
+      rows: DEFAULT_ROWS,
+      deps: {
+        onCommandFinished: (event) => reportCommandFinished(identity, event),
+        onUnmarkedOutput: (output) => reportShellUnavailable(identity, output),
+        onShellUnavailable: () => {
+          session.shellUnavailable = true;
+        },
+        onClosed: () => {
+          session.shellChannel = null;
+          stopDashboard(session.id);
+        }
       }
-      send(IPC.evInteractiveProgram, session.id, event.program);
-      break;
-  }
+    });
+    setStatus(session, 'connected');
+    log(session, 'info', 'clog.shellOpen', undefined, 'session');
+
+    // Мини-дашборд: отдельный exec-канал, интервал 10 с (DASH-02).
+    // Логгер — причина недоступности метрик попадает в «Детали подключения» (DASH-05).
+    startDashboard(session.id, client, session.hostId, (messageKey, params) =>
+      log(session, 'warn', messageKey, params, 'session')
+    );
+  });
 }
 
 /** Прямая запись в историю (заблокированная стражем команда, HIST-05). */
@@ -1003,9 +859,7 @@ export function recordBlockedCommand(sessionId: string, command: string): void {
  *  сторона (guard/manager.ts или XtermView при «не на промпте») сама решает,
  *  когда это уместно (см. GUARD-02/04). */
 export function sendInput(sessionId: string, data: string): void {
-  const session = sessions.get(sessionId);
-  if (!session?.shellIntegration) return;
-  applyResult(session, session.shellIntegration.sendRawInput(data));
+  sessions.get(sessionId)?.shellChannel?.sendInput(data);
 }
 
 /**
@@ -1020,40 +874,16 @@ export function sendInput(sessionId: string, data: string): void {
  * могли разойтись).
  */
 export function sendCommandLine(sessionId: string, command: string, guardStatus?: GuardStatus): void {
-  const session = sessions.get(sessionId);
-  if (!session?.shellIntegration) return;
-  applyResult(session, session.shellIntegration.writeCommand(command, guardStatus));
+  sessions.get(sessionId)?.shellChannel?.sendCommandLine(command, guardStatus);
 }
 
-/** Реально применяет размер к PTY-каналу и запоминает его как последний
- *  применённый (ADR-0005) — единственное место, где вызывается setWindow. */
-function applyRealResize(session: ManagedSession, cols: number, rows: number): void {
-  session.ptyCols = cols;
-  session.ptyRows = rows;
-  session.shell?.setWindow(rows, cols, 0, 0);
-}
-
-/**
- * Изменение размера pty под размер xterm (TERM-xx). Гейтинг по cols
- * (issue 11 / ADR-0005): панели вроде ErrorDetector/HintBar меняют только
- * высоту (rows) контейнера xterm, не ширину — реальный PTY-resize (SIGWINCH-
- * эффект, приводящий к перерисовке приглашения на удалённой стороне) в этом
- * случае пропускается, если сейчас не идёт известная fullscreen-программа,
- * которой точный rows нужен для корректной отрисовки. При изменении cols
- * resize применяется всегда, как раньше.
- */
+/** Изменение размера pty под размер xterm (TERM-xx) — гейтинг по cols
+ *  (issue 11 / ADR-0005) живёт внутри ShellChannel.resize; до открытия
+ *  канала (shellChannel === null) запрос молча теряется — PTY откроется на
+ *  DEFAULT_COLS×DEFAULT_ROWS, следующий resize-эвент (например, от
+ *  ResizeObserver в XtermView) досинхронизирует размер. */
 export function resizeSession(sessionId: string, cols: number, rows: number): void {
-  const session = sessions.get(sessionId);
-  if (!session) return;
-  session.cols = cols;
-  session.rows = rows;
-
-  const colsChanged = cols !== session.ptyCols;
-  const rowsChanged = rows !== session.ptyRows;
-  if (!colsChanged && !rowsChanged) return;
-  if (!colsChanged && !session.interactiveProgramActive) return;
-
-  applyRealResize(session, cols, rows);
+  sessions.get(sessionId)?.shellChannel?.resize(cols, rows);
 }
 
 /** Решение пользователя по fingerprint (SSH-03/04). */
@@ -1187,7 +1017,7 @@ export function destroySession(sessionId: string): void {
   const session = sessions.get(sessionId);
   if (!session) return;
   session.userClosed = true;
-  clearAllShellTimers(session);
+  session.shellChannel?.dispose();
   stopDashboard(sessionId);
   cancelAuthPrompts(sessionId);
   session.client?.destroy();
