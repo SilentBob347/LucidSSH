@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - **Esc now closes exactly one thing, in a consistent order, everywhere.** All 23 places that used to listen for Esc on their own — dialogs, drawers, the context menu, the snippet palette, search, the error panel, and in-place edits like a tab rename or a history note — now go through a single shared stack. The most recently opened thing closes first, regardless of where keyboard focus happens to be.
+- **The dangerous command guard now names every object a compound command destroys.** `rm -rf /var/www && rm -rf /etc` used to name only the first one, so you confirmed one deletion while two were about to happen. The dialog now lists all of them and asks you to type the name of one of them — picked at random among the most severe, so the expected answer can't be learned by habit and typed without reading. Commands with a single dangerous fragment are unchanged.
 
 ### Fixed
 
@@ -17,11 +18,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The SSH key wizard's Esc handling no longer depends on a hand-rolled `capture`/`stopPropagation` trick to avoid closing the connection form behind it — the shared stack orders it correctly by construction.
 - Four surfaces that already closed on a backdrop click — the JSON host import dialog, the "Возможности LucidSSH" guide, the multi-line paste preview, and the server dashboard — now also close on Esc.
 - The host import dialogs (JSON import and PuTTY/ssh_config/WinSCP import) can no longer be closed — by backdrop click, Esc, or the close button — while an import is actually being applied. Previously any of those closed the dialog immediately while the import kept running in the background, discarding the result (imported/skipped counts, errors) with no way to see it.
-
-- **The dangerous command guard now names every object a compound command destroys.** `rm -rf /var/www && rm -rf /etc` used to name only the first one, so you confirmed one deletion while two were about to happen. The dialog now lists all of them and asks you to type the name of one of them — picked at random among the most severe, so the expected answer can't be learned by habit and typed without reading. Commands with a single dangerous fragment are unchanged.
-
-### Fixed
-
 - **`rm -rf /` now actually has to be typed out to be confirmed.** The guard asks for the affected object's name, but the root directory has no last path segment, so the expected text was empty — the confirm button was active before you typed anything, on the single most destructive command it recognizes. It now asks you to type `/`.
 - **The dangerous command guard now asks you to confirm the right object.** In a compound command whose destructive part wasn't last — `rm -rf ./node_modules && npm install` — the confirmation dialog named the tail of the whole line (`install`) instead of what was actually being deleted. The guard still blocked such commands, but the name you had to type said nothing about the danger. It now takes the object from the destructive fragment itself.
 - The same fix now also covers a background launch with a single `&` — `rm -rf /var/www & echo done` asked you to confirm `done` instead of `/var/www`. A redirect like `2>&1`, `&>file`, or `>&2` is correctly left alone; it's not treated as a separator.
