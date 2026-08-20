@@ -84,7 +84,13 @@ export function ExternalImportDialog({ onClose }: { onClose: () => void }): JSX.
     else setResult(null); // ssh-config ждёт выбора файла
   }, [source, loadPutty, loadWinScp]);
 
-  useEscapeClose('external-import-dialog', onClose);
+  // Пока идёт применение импорта (busy), закрытие целиком запрещено — тот же
+  // разбор, что в ImportDialog (.scratch/import-dialog-busy-close/spec.md),
+  // применённый ко всем путям закрытия: бэкдропу, Esc и крестику в шапке.
+  const closeIfIdle = (): void => {
+    if (!busy) onClose();
+  };
+  useEscapeClose('external-import-dialog', closeIfIdle);
 
   const toggle = (i: number): void => {
     setSelected((prev) => {
@@ -123,7 +129,7 @@ export function ExternalImportDialog({ onClose }: { onClose: () => void }): JSX.
     </button>
   );
 
-  const backdrop = useBackdropClose(onClose);
+  const backdrop = useBackdropClose(closeIfIdle);
 
   return (
     <div
@@ -142,8 +148,9 @@ export function ExternalImportDialog({ onClose }: { onClose: () => void }): JSX.
           <button
             type="button"
             aria-label={t('common.close')}
-            onClick={onClose}
-            className="flex size-[24px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-text-strong"
+            disabled={busy}
+            onClick={closeIfIdle}
+            className="flex size-[24px] items-center justify-center rounded-[4px] text-text-dim hover:bg-bg-elevated-2 hover:text-text-strong disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Icon name="close" size={15} />
           </button>
