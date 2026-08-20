@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DangerPatternId, DangerScope } from '@shared/guard';
 
 vi.mock('../ssh/sessionManager', () => ({
-  getSession: vi.fn(),
+  sessionExists: vi.fn(),
+  hostIdOf: vi.fn(),
   recordBlockedCommand: vi.fn(),
   sendCommandLine: vi.fn(),
   sendInput: vi.fn()
@@ -12,7 +13,7 @@ vi.mock('../config/store', () => ({ loadConfig: vi.fn() }));
 vi.mock('./patterns', () => ({ analyzeDangers: vi.fn(), analyzeAccessRisk: vi.fn() }));
 vi.mock('../i18n', () => ({ t: vi.fn((key: string) => key) }));
 
-import { getSession, recordBlockedCommand, sendCommandLine, sendInput } from '../ssh/sessionManager';
+import { hostIdOf, recordBlockedCommand, sendCommandLine, sendInput, sessionExists } from '../ssh/sessionManager';
 import { getHost } from '../hosts/repository';
 import { loadConfig } from '../config/store';
 import type { DangerMatch } from './patterns';
@@ -25,7 +26,8 @@ import {
   cancelDangerousCommand
 } from './manager';
 
-const mockGetSession = vi.mocked(getSession);
+const mockSessionExists = vi.mocked(sessionExists);
+const mockHostIdOf = vi.mocked(hostIdOf);
 const mockRecordBlockedCommand = vi.mocked(recordBlockedCommand);
 const mockSendCommandLine = vi.mocked(sendCommandLine);
 const mockSendInput = vi.mocked(sendInput);
@@ -35,11 +37,14 @@ const mockAnalyzeDangers = vi.mocked(analyzeDangers);
 const mockAnalyzeAccessRisk = vi.mocked(analyzeAccessRisk);
 const mockT = vi.mocked(t);
 
-// ManagedSession/Host/AppConfig не экспортированы из своих модулей (по дизайну) —
-// в тестах нужны только использованные manager.ts поля, остальное подделываем
-// через unknown-каст (не any — тот запрещён линтером).
-const fakeSession = (hostId: number): ReturnType<typeof getSession> =>
-  ({ hostId }) as unknown as ReturnType<typeof getSession>;
+// Host/AppConfig не экспортированы из своих модулей (по дизайну) — в тестах
+// нужны только использованные manager.ts поля, остальное подделываем через
+// unknown-каст (не any — тот запрещён линтером).
+/** Живая сессия хоста hostId: sessionExists → true, hostIdOf → hostId. */
+function fakeSession(hostId: number): void {
+  mockSessionExists.mockReturnValue(true);
+  mockHostIdOf.mockReturnValue(hostId);
+}
 const fakeHost = (guardEnabled: boolean): ReturnType<typeof getHost> =>
   ({ guardEnabled }) as unknown as ReturnType<typeof getHost>;
 const fakeConfig = (globalEnabled: boolean): ReturnType<typeof loadConfig> =>
@@ -54,14 +59,14 @@ describe('submitCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadConfig.mockReturnValue(fakeConfig(true));
-    mockGetSession.mockReturnValue(fakeSession(1));
+    fakeSession(1);
     mockGetHost.mockReturnValue(fakeHost(true));
     mockAnalyzeDangers.mockReturnValue([]);
     mockAnalyzeAccessRisk.mockReturnValue(null);
   });
 
   it('неизвестная сессия — команда не отправляется', () => {
-    mockGetSession.mockReturnValue(undefined);
+    mockSessionExists.mockReturnValue(false);
     const res = submitCommand('s1', 'ls');
     expect(res).toEqual({ status: 'sent' });
     expect(mockSendCommandLine).not.toHaveBeenCalled();
@@ -101,7 +106,7 @@ describe('submitCommand', () => {
   });
 
   it('hostId=0 (Quick Connect, HM-11) — getHost(0)=null, Страж включён по умолчанию', () => {
-    mockGetSession.mockReturnValue(fakeSession(0));
+    fakeSession(0);
     mockGetHost.mockReturnValue(null);
     mockAnalyzeDangers.mockReturnValue([{
       patternId: 'rm-recursive',
@@ -181,7 +186,7 @@ describe('submitCommand — несколько опасных фрагменто
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadConfig.mockReturnValue(fakeConfig(true));
-    mockGetSession.mockReturnValue(fakeSession(1));
+    fakeSession(1);
     mockGetHost.mockReturnValue(fakeHost(true));
     mockT.mockImplementation((key: string) => key);
     mockAnalyzeAccessRisk.mockReturnValue(null);
@@ -340,7 +345,7 @@ describe('submitRawInput', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadConfig.mockReturnValue(fakeConfig(true));
-    mockGetSession.mockReturnValue(fakeSession(1));
+    fakeSession(1);
     mockGetHost.mockReturnValue(fakeHost(true));
     mockAnalyzeDangers.mockReturnValue([]);
     mockAnalyzeAccessRisk.mockReturnValue(null);
@@ -378,7 +383,7 @@ describe('submitRawInput', () => {
   });
 
   it('неизвестная сессия — данные не отправляются', () => {
-    mockGetSession.mockReturnValue(undefined);
+    mockSessionExists.mockReturnValue(false);
     const res = submitRawInput('s1', 'rm -rf /var/www');
     expect(res).toEqual({ status: 'sent' });
     expect(mockSendInput).not.toHaveBeenCalled();
@@ -403,7 +408,7 @@ describe('confirmDangerousCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadConfig.mockReturnValue(fakeConfig(true));
-    mockGetSession.mockReturnValue(fakeSession(1));
+    fakeSession(1);
     mockGetHost.mockReturnValue(fakeHost(true));
   });
 
@@ -473,7 +478,7 @@ describe('cancelDangerousCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadConfig.mockReturnValue(fakeConfig(true));
-    mockGetSession.mockReturnValue(fakeSession(1));
+    fakeSession(1);
     mockGetHost.mockReturnValue(fakeHost(true));
   });
 
@@ -524,7 +529,7 @@ describe('GUARD-07 — риск потери SSH-доступа', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadConfig.mockReturnValue(fakeConfig(true));
-    mockGetSession.mockReturnValue(fakeSession(1));
+    fakeSession(1);
     mockGetHost.mockReturnValue(fakeHost(true));
     mockAnalyzeDangers.mockReturnValue([]);
     mockAnalyzeAccessRisk.mockReturnValue({ riskId: 'sshd-service' });
@@ -623,7 +628,7 @@ describe('Страж целиком — patterns × manager (сквозные т
   beforeEach(async () => {
     vi.clearAllMocks();
     mockLoadConfig.mockReturnValue(fakeConfig(true));
-    mockGetSession.mockReturnValue(fakeSession(1));
+    fakeSession(1);
     mockGetHost.mockReturnValue(fakeHost(true));
     // clearAllMocks не сбрасывает implementation, выставленную в другом describe —
     // фиксируем поведение мока i18n явно, чтобы блок не зависел от порядка тестов.

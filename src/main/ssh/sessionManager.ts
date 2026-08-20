@@ -165,6 +165,22 @@ function log(
   send(IPC.evConnectionLog, s.id, entry);
 }
 
+export function sessionExists(sessionId: string): boolean {
+  return sessions.has(sessionId);
+}
+
+export function hostIdOf(sessionId: string): number | undefined {
+  return sessions.get(sessionId)?.hostId;
+}
+
+/**
+ * @deprecated Боевых вызывающих больше нет (`sessionExists`/`hostIdOf` их
+ * заменили, .scratch/shell-channel-extraction/issues/01). Единственный
+ * оставшийся потребитель — sessionManager.test.ts:680, который дёргает
+ * `shellIntegration.tick(...)` внутри PTY-resize гейтинга; этот доступ уходит
+ * вместе с выносом ShellChannel (issue 03, spec.md «Часть 3»), только тогда
+ * getSession перестаёт экспортироваться.
+ */
 export function getSession(sessionId: string): ManagedSession | undefined {
   return sessions.get(sessionId);
 }

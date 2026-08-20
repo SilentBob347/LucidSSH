@@ -34,7 +34,7 @@ vi.mock('../history/repository', () => ({ recordHistory: vi.fn() }));
 vi.mock('../notifications/notifier', () => ({ notifyDisconnect: vi.fn(), notifyCommandDone: vi.fn() }));
 
 import { IPC } from '@shared/ipc';
-import type { HostKeyPrompt } from '@shared/ssh';
+import type { HostKeyPrompt, SessionStatus } from '@shared/ssh';
 import { loadConfig } from '../config/store';
 import { startDashboard } from './dashboard';
 import { getMainWindow } from '../window/mainWindow';
@@ -49,6 +49,8 @@ import {
   confirmHostKey,
   destroySession,
   getSession,
+  getSessionLog,
+  listSessions,
   resizeSession,
   sendCommandLine,
   __setClientFactoryForTest,
@@ -367,14 +369,16 @@ describe('подключение через jump-хост (SSH-05)', () => {
     return connectCalls(hop)[call]?.[0] as Record<string, unknown>;
   }
 
+  const statusOf = (sessionId: string): SessionStatus | undefined =>
+    listSessions().find((s) => s.sessionId === sessionId)?.status;
+
   async function waitForDisconnected(sessionId: string): Promise<void> {
     await vi.waitFor(() => {
-      if (getSession(sessionId)?.status !== 'disconnected') throw new Error('сессия ещё не закрыта');
+      if (statusOf(sessionId) !== 'disconnected') throw new Error('сессия ещё не закрыта');
     });
   }
 
-  const logOf = (sessionId: string): Array<{ messageKey: string; step?: string }> =>
-    getSession(sessionId)?.log ?? [];
+  const logOf = (sessionId: string): Array<{ messageKey: string; step?: string }> => getSessionLog(sessionId);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -416,7 +420,7 @@ describe('подключение через jump-хост (SSH-05)', () => {
     expect(destConfig['host']).toBe('10.0.0.5');
 
     dest.emit('ready');
-    expect(getSession(sessionId)?.status).toBe('connected');
+    expect(statusOf(sessionId)).toBe('connected');
     // Shell и дашборд открываются только на целевом хосте.
     expect(mockStartDashboard).toHaveBeenCalledTimes(1);
     expect(jump.client.shell).not.toHaveBeenCalled();
@@ -503,10 +507,10 @@ describe('подключение через jump-хост (SSH-05)', () => {
       jump1.emit('ready');
       await waitForConnect(dest1);
       dest1.emit('ready');
-      expect(getSession(sessionId)?.status).toBe('connected');
+      expect(statusOf(sessionId)).toBe('connected');
 
       dest1.emit('close'); // сервер разорвал соединение
-      expect(getSession(sessionId)?.status).toBe('reconnecting');
+      expect(statusOf(sessionId)).toBe('reconnecting');
 
       await vi.advanceTimersByTimeAsync(3000);
       // Переподключение поднимает первый хоп заново — новым соединением, а
@@ -674,7 +678,10 @@ describe('resizeSession — гейтинг PTY-resize по cols (issue 11 / ADR-
   /** Доводит сессию до состояния «первый маркер уже виден» (аналог warmUp()
    *  из shellIntegrationSession.test.ts) — без этого detectInteractiveProgram
    *  не срабатывает (firstMarkSeen должен быть true). tick() зовётся напрямую
-   *  на боксе, а не через реальный setTimeout — сама коробка не имеет рук. */
+   *  на боксе, а не через реальный setTimeout — сама коробка не имеет рук.
+   *  Единственное оставшееся использование getSession в этом файле — доступа
+   *  к shellIntegration нет ни через один публичный экспорт до выноса
+   *  ShellChannel (.scratch/shell-channel-extraction/issues/03). */
   function warmUp(sessionId: string, feedData: (chunk: string) => void): void {
     feedData('Welcome to Ubuntu 24.04\r\n');
     getSession(sessionId)?.shellIntegration?.tick('setup-silence');
