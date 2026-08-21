@@ -56,10 +56,15 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
       refreshSnippets();
     }, [refreshSnippets, snippetsRevision]);
 
+    // Серверная область есть только у сессии с сохранённым хостом: hostId=0 —
+    // Быстрое подключение (HM-11), записи в hosts нет, серверных сниппетов
+    // быть не может (SnippetSaveDialog запрещает их создание).
+    const hostScope = active && active.hostId !== 0 ? active : null;
+
     // Если активный хост исчез, а открыта его вкладка — вернуться к каталогу
     useEffect(() => {
-      if (tab === 'server' && !active) setTab('catalog');
-    }, [tab, active]);
+      if (tab === 'server' && !hostScope) setTab('catalog');
+    }, [tab, hostScope]);
 
     // WIN-04: ссылка «карточка tmux» из диалога закрытия — разово подставляет
     // поисковый запрос и переключает на вкладку каталога.
@@ -70,7 +75,7 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
       clearCatalogQuery();
     }, [catalogQuery, clearCatalogQuery]);
 
-    const serverSnips = snippets.filter((s) => s.hostId != null && s.hostId === active?.hostId);
+    const serverSnips = snippets.filter((s) => s.hostId != null && s.hostId === hostScope?.hostId);
     const globalSnips = snippets.filter((s) => s.hostId == null);
 
     const q = query.trim().toLowerCase();
@@ -161,9 +166,9 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
           <TabButton active={tab === 'catalog'} onClick={() => setTab('catalog')}>
             {t('catalog.tabCatalog')}
           </TabButton>
-          {active && (
+          {hostScope && (
             <TabButton active={tab === 'server'} onClick={() => setTab('server')}>
-              {active.hostName}
+              {hostScope.hostName}
             </TabButton>
           )}
           <TabButton active={tab === 'global'} onClick={() => setTab('global')}>
@@ -175,7 +180,7 @@ export const CatalogPanel = forwardRef<HTMLElement, { width: number; onClose: ()
         {tab !== 'catalog' ? (
           <SnippetList
             snippets={tab === 'server' ? serverSnips : globalSnips}
-            activeHostId={active?.hostId}
+            activeHostId={hostScope?.hostId}
             onChanged={refreshSnippets}
             onEdit={(s) => openSnippetDialog(s.command, s)}
           />

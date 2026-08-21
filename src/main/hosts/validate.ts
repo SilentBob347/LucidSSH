@@ -118,3 +118,16 @@ export function validateId(v: unknown, name = 'id'): number {
   }
   return v;
 }
+
+/**
+ * Необязательный hostId «в контексте текущей сессии»: undefined/null — контекста
+ * нет, `0` — сессия Быстрого подключения (HM-11), у которой нет записи в `hosts`
+ * и, значит, нет серверной области видимости (см. SnippetSaveDialog: сохранить
+ * серверный сниппет на сентинел нельзя). Все три случая нормализуются в
+ * undefined — «только глобальная область» (SNIP-05/SNIP-06); остальное проходит
+ * обычную строгую проверку validateId.
+ */
+export function validateOptionalHostId(v: unknown, name = 'hostId'): number | undefined {
+  if (v === undefined || v === null || v === 0) return undefined;
+  return validateId(v, name);
+}
