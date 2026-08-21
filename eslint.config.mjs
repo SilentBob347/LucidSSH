@@ -51,5 +51,39 @@ export default tseslint.config(
         }
       ]
     }
+  },
+  {
+    // ADR-0011 (docs/agent/adr/0011-typed-renderer-events.md): две «единственные
+    // двери» IPC в main. Оба селектора обязаны жить в одном блоке — во flat
+    // config правило из последующего блока перезаписывает одноимённое, а не
+    // дополняет его.
+    //
+    // Тесты исключены намеренно: `win.webContents.send.mock.calls` — законная
+    // проверка мока, а не отправка события.
+    files: ['src/main/**/*.ts'],
+    ignores: ['src/main/ipc/events.ts', 'src/main/**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          // Отправка события мимо emit() теряет и проверку isDestroyed(), и
+          // привязку к контракту RendererEvents. Ровно так разошлись три точки
+          // в mainWindow.ts до ADR-0011.
+          selector: "MemberExpression[property.name='send'][object.property.name='webContents']",
+          message:
+            'Не зовите webContents.send напрямую — отправляйте через emit() из src/main/ipc/events.ts (ADR-0011, docs/agent/adr/0011-typed-renderer-events.md).'
+        },
+        {
+          // Граница правила (записана в ADR-0011): проверяется наличие вызова в
+          // теле хендлера, но НЕ то, что он первый — `:first-child`/`:nth-child(1)`
+          // дают ложные срабатывания на всех 85 хендлерах. Ловит «забыл
+          // написать», пропускает «написал после работы».
+          selector:
+            "CallExpression[callee.object.name='ipcMain'] > ArrowFunctionExpression > BlockStatement:not(:has(ExpressionStatement > CallExpression[callee.name='assertSenderIsMainWindow']))",
+          message:
+            'IPC-хендлер обязан вызвать assertSenderIsMainWindow(event) — иначе канал принимает сообщения от любого отправителя (SEC-05, ADR-0011).'
+        }
+      ]
+    }
   }
 );
