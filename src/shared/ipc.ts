@@ -1,3 +1,10 @@
+import type { Breadcrumb } from './breadcrumb';
+import type { ErrorExplanation } from './content';
+import type { DashboardAlert, DashboardMetrics } from './dashboard';
+import type { InteractiveProgramName } from './interactivePrograms';
+import type { AuthPromptRequest, ConnectionLogEntry, HostKeyPrompt, SessionStatus } from './ssh';
+import type { UpdateStatus } from './updates';
+
 /**
  * Имена IPC-каналов. Каждый канал — одна конкретная операция (SEC-05, §4 гайда).
  * Универсальных каналов нет; renderer не передаёт имя канала как аргумент.
@@ -144,3 +151,51 @@ export interface AppInfo {
   version: string;
   language: string;
 }
+
+/**
+ * Контракт событий main → renderer (ADR-0011). Направление `ev:*` — единственное,
+ * где main инициирует обмен: обратной стороны с ручной валидацией у него нет,
+ * поэтому полезная нагрузка связывается типами, а не дисциплиной.
+ *
+ * Отправка — только через `emit()` из `src/main/ipc/events.ts` (правило ESLint
+ * запрещает `webContents.send` мимо него). Приём — листенеры в `src/preload`.
+ *
+ * Оговорка ADR-0011: именованные элементы кортежа дают подсказку в IDE, но не
+ * номинальную типизацию — перестановка двух соседних `string` (единственный
+ * такой случай — `evTerminalData`) компилятором не ловится.
+ */
+export type RendererEvents = {
+  [IPC.evWindowMaximized]: [maximized: boolean];
+  [IPC.evSessionStatus]: [sessionId: string, status: SessionStatus];
+  [IPC.evHostKeyPrompt]: [prompt: HostKeyPrompt];
+  [IPC.evAuthPrompt]: [prompt: AuthPromptRequest];
+  [IPC.evConnectionLog]: [sessionId: string, entry: ConnectionLogEntry];
+  [IPC.evTerminalData]: [sessionId: string, data: string];
+  [IPC.evConfirmWindowClose]: [
+    activeCount: number,
+    busySessions: Array<{ hostName: string; command: string }>
+  ];
+  [IPC.evBreadcrumb]: [sessionId: string, crumb: Breadcrumb];
+  [IPC.evDashboard]: [sessionId: string, metrics: DashboardMetrics];
+  [IPC.evDashboardAlert]: [sessionId: string, alert: DashboardAlert];
+  [IPC.evError]: [sessionId: string, explanation: ErrorExplanation];
+  [IPC.evUpdateStatus]: [status: UpdateStatus];
+  [IPC.evHistoryRecorded]: [];
+  [IPC.evPasswordPrompt]: [sessionId: string];
+  [IPC.evIntegrationUnconfirmed]: [sessionId: string];
+  [IPC.evInteractiveProgram]: [sessionId: string, program: InteractiveProgramName];
+};
+
+/** Все каналы `ev:*`, объявленные в `IPC` — выводятся из значений, не из списка. */
+type EvChannel = Extract<(typeof IPC)[keyof typeof IPC], `ev:${string}`>;
+
+/** Принимает только `never` — иначе не удовлетворяет ограничению параметра. */
+type AssertNever<T extends never> = T;
+
+/**
+ * Полнота контракта на уровне компилятора: канал `ev:*`, не добавленный в
+ * `RendererEvents`, остаётся в `Exclude` и роняет сборку здесь. Тест для этого
+ * не нужен, и рантайм-значения тоже — это объявление типа, оно не доживает до
+ * эмита, а не вычищается потом бандлером.
+ */
+export type RendererEventsAreComplete = AssertNever<Exclude<EvChannel, keyof RendererEvents>>;

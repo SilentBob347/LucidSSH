@@ -6,7 +6,7 @@ import type { Host } from '@shared/hosts';
 import { getHost } from '../hosts/repository';
 import { getSecretForConnection } from '../keychain';
 import { loadConfig } from '../config/store';
-import { getMainWindow } from '../window/mainWindow';
+import { emit } from '../ipc/events';
 import { loadPrivateKey, PrivateKeyError } from './keys';
 import {
   addKnownKey,
@@ -117,14 +117,9 @@ const AUTH_PROMPT_TIMEOUT_MS = 2 * 60 * 1000;
 const MAX_PASSPHRASE_ATTEMPTS = 3;
 const MAX_PASSWORD_ATTEMPTS = 3;
 
-function send(channel: string, ...args: unknown[]): void {
-  const win = getMainWindow();
-  if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
-}
-
 function setStatus(s: ManagedSession, status: SessionStatus): void {
   s.status = status;
-  send(IPC.evSessionStatus, s.id, status);
+  emit(IPC.evSessionStatus, s.id, status);
 }
 
 function log(
@@ -143,7 +138,7 @@ function log(
   };
   s.log.push(entry);
   if (s.log.length > 500) s.log.shift();
-  send(IPC.evConnectionLog, s.id, entry);
+  emit(IPC.evConnectionLog, s.id, entry);
 }
 
 /** Личность Сессии для commandReport.ts — см. SessionIdentity там: одной
@@ -402,7 +397,7 @@ async function attemptConnect(
       if (password !== undefined && host.keyPath) {
         void deployPendingKey(client, host.keyPath, (level, key) => {
           log(session, level, key, undefined, stepFor(opts, 'session'));
-          send(IPC.evTerminalData, session.id, `\r\n${t(key)}\r\n`);
+          emit(IPC.evTerminalData, session.id, `\r\n${t(key)}\r\n`);
         });
       }
       // Bastion — только транспорт: shell и дашборд открываются на целевом
@@ -804,7 +799,7 @@ function handleHostKey(
       ? sha256Fingerprint(Buffer.from(known.keyBase64, 'base64'))
       : undefined
   };
-  send(IPC.evHostKeyPrompt, prompt);
+  emit(IPC.evHostKeyPrompt, prompt);
 }
 
 /**
@@ -926,7 +921,7 @@ function requestAuthPrompt(
       reject(new Error('auth prompt timeout'));
     }, AUTH_PROMPT_TIMEOUT_MS);
     pendingAuthPrompts.set(requestId, { sessionId: session.id, resolve, reject, timeout });
-    send(IPC.evAuthPrompt, {
+    emit(IPC.evAuthPrompt, {
       sessionId: session.id,
       requestId,
       prompts,

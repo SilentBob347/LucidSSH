@@ -7,7 +7,7 @@ import {
   type DashboardAlertIssue,
   type DashboardMetrics
 } from '@shared/dashboard';
-import { getMainWindow } from '../window/mainWindow';
+import { emit } from '../ipc/events';
 import { loadConfig, updateConfig } from '../config/store';
 
 /** Логгер в лог соединения сессии (передаёт sessionManager, чтобы не плодить цикл импортов). */
@@ -90,14 +90,12 @@ interface DashboardState {
 const dashboards = new Map<string, DashboardState>();
 
 function send(sessionId: string, metrics: DashboardMetrics): void {
-  const win = getMainWindow();
-  if (win && !win.isDestroyed()) win.webContents.send(IPC.evDashboard, sessionId, metrics);
+  emit(IPC.evDashboard, sessionId, metrics);
 }
 
 function sendAlert(sessionId: string, alert: DashboardAlert): void {
   if (!dashboards.has(sessionId)) return;
-  const win = getMainWindow();
-  if (win && !win.isDestroyed()) win.webContents.send(IPC.evDashboardAlert, sessionId, alert);
+  emit(IPC.evDashboardAlert, sessionId, alert);
 }
 
 function parseRebootRequired(output: string): boolean {

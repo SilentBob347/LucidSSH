@@ -2,7 +2,7 @@ import { IPC } from '@shared/ipc';
 import type { ErrorExplanation } from '@shared/content';
 import type { GuardStatus } from '@shared/history';
 import { isSignalExitCode } from '@shared/ssh';
-import { getMainWindow } from '../window/mainWindow';
+import { emit } from '../ipc/events';
 import { loadConfig } from '../config/store';
 import { getHost } from '../hosts/repository';
 import { loadErrorPatterns, loadCommandCatalog } from '../content/loader';
@@ -33,11 +33,6 @@ export interface SessionIdentity {
   quickConnectUsername?: string;
 }
 
-function send(channel: string, ...args: unknown[]): void {
-  const win = getMainWindow();
-  if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
-}
-
 /**
  * Некоторые серверы аутентифицируют успешно, но не могут открыть интерактивную
  * сессию (login shell = nologin и т.п.) — канал сразу закрывается, ssh2 не
@@ -54,7 +49,7 @@ export function checkShellUnavailable(session: SessionIdentity, output: string):
   const patterns = loadErrorPatterns(loadConfig().language);
   const result = detectError(patterns, 'ssh-connection', output, null, '');
   if (result.matched) {
-    send(IPC.evError, session.id, result.explanation);
+    emit(IPC.evError, session.id, result.explanation);
     return true;
   }
   return false;
@@ -122,7 +117,7 @@ export function handleCommandFinished(
       stderr: maskSecrets(excerpt(output)).masked
     };
   }
-  send(IPC.evError, session.id, explanation);
+  emit(IPC.evError, session.id, explanation);
 }
 
 /** Запись команды в историю с учётом отключения истории (HIST-07). */
@@ -148,5 +143,5 @@ export function recordCommand(
   });
   // HistoryDrawer, если уже открыт, не перечитывает список сам по себе —
   // нужен явный сигнал (тот же баг чинили для сниппетов, snippetsRevision).
-  send(IPC.evHistoryRecorded);
+  emit(IPC.evHistoryRecorded);
 }
