@@ -16,7 +16,7 @@ import { Icon } from '@/components/common/Icon';
 import { LogoMark } from '@/components/common/LogoMark';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
 import { useEscapeClose } from '@/hooks/useEscapeClose';
-import { ESCAPE_KEY } from '@/stores/escStack';
+import { beginHotkeyCapture } from '@/stores/hotkeyBus';
 import { parseReleaseNotes } from './releaseNotes';
 import {
   DEFAULT_HOTKEYS,
@@ -25,7 +25,6 @@ import {
   formatComboForDisplay,
   hotkeyLabelKey,
   isValidHotkeyCombo,
-  normalizeCombo,
   type FixedHotkeyAction,
   type HotkeyAction
 } from '@shared/hotkeys';
@@ -683,32 +682,27 @@ function HotkeysSection(): JSX.Element {
     [t]
   );
 
-  // Пока идёт захват — окно ловит следующую комбинацию в capture-фазе (раньше
-  // остальных обработчиков, включая глобальные хоткеи App.tsx/TerminalArea).
-  // Esc отменяет захват без сохранения (обычная конвенция) — он никогда не
-  // доходит до попытки биндинга, F1 тоже не считается готовой комбинацией
-  // (isValidHotkeyCombo требует модификатор): Esc и F1 остаются зафиксированы
-  // «по умолчанию» без исключений, решение принято явно в обсуждении тикета
-  // 01 (05.08.2026), не по букве AC4 issue #1 — там был предусмотрен показ
-  // «уже занято» и для попытки биндинга на Esc/F1, разработчик отклонил это
-  // как избыточное: раз их вообще нельзя редактировать, отдельное сообщение
-  // об этом не нужно, а Esc — общепринятая отмена, ей не место в конфликтах.
+  // Пока идёт захват — режим захвата на hotkeyBus (ADR-0012): шина гасит все
+  // нажатия и не вызывает обработчики хоткеев вовсе. Раньше это был четвёртый
+  // самостоятельный слушатель на том же window, и он рассчитывал, что его
+  // stopPropagation() погасит остальные, — но stopPropagation() не блокирует
+  // соседние слушатели одного узла (это умеет только stopImmediatePropagation,
+  // см. разбор в escStack.ts), так что назначение Ctrl+F заодно открывало
+  // поиск за оверлеем Настроек.
+  //
+  // Esc отменяет захват без сохранения (обычная конвенция) — шина не трогает
+  // его вовсе, он уходит в escStack; сюда Esc не доходит и до попытки биндинга
+  // не доживает. F1 тоже не считается готовой комбинацией (isValidHotkeyCombo
+  // требует модификатор): Esc и F1 остаются зафиксированы «по умолчанию» без
+  // исключений, решение принято явно в обсуждении тикета 01 (05.08.2026), не
+  // по букве AC4 issue #1 — там был предусмотрен показ «уже занято» и для
+  // попытки биндинга на Esc/F1, разработчик отклонил это как избыточное: раз
+  // их вообще нельзя редактировать, отдельное сообщение об этом не нужно, а
+  // Esc — общепринятая отмена, ей не место в конфликтах.
   useEffect(() => {
     if (!editing) return;
     const action = editing;
-    const onKey = (e: KeyboardEvent): void => {
-      // Отмену захвата берёт на себя useEscapeClose ниже. Оба слушателя
-      // висят на одном и том же window с capture:true — stopPropagation() в
-      // escStack не мешает СОСЕДНЕМУ слушателю того же узла отработать (это
-      // умеет только stopImmediatePropagation, которую escStack намеренно не
-      // использует), поэтому здесь всё равно нужен явный пропуск Esc — иначе
-      // после отмены захвата этот обработчик успевал бы дёрнуть
-      // preventDefault/stopPropagation и setPendingCombo('Escape') повторно.
-      if (e.key === ESCAPE_KEY) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const combo = normalizeCombo(e);
-      if (!combo) return;
+    return beginHotkeyCapture((combo) => {
       setPendingCombo(combo);
       if (!isValidHotkeyCombo(combo)) return; // ждём комбинацию хотя бы с одним модификатором
       void (async () => {
@@ -721,9 +715,7 @@ function HotkeysSection(): JSX.Element {
         setEditing(null);
         setPendingCombo(null);
       })();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
+    });
   }, [editing, updateHotkey, ownerLabelFor]);
 
   // Незавершённая правка (ADR-0010, SET-10): захват комбинации отменяется

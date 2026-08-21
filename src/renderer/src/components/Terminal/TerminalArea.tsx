@@ -34,7 +34,7 @@ import { usePanels } from '@/stores/panels';
 import { useHosts } from '@/stores/hosts';
 import { useEvents } from '@/stores/events';
 import { setComposerInsertHandler, setComposerValueGetter } from '@/stores/composerBus';
-import { normalizeCombo } from '@shared/hotkeys';
+import { useHotkeys } from '@/hooks/useHotkeys';
 
 /**
  * Центральная область (Design_Brief §3.3): таб-бар, xterm.js, контекстное меню
@@ -161,43 +161,41 @@ export function TerminalArea(): JSX.Element {
   // перехватывается здесь вовсе — раз он не совпадает ни с одним биндингом,
   // событие не отменяется и доходит до xterm/shell как обычно (по умолчанию
   // это очищает экран, конвенция терминалов).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      const hk = config?.hotkeys;
-      if (!hk) return;
-      const combo = normalizeCombo(e);
-      if (!combo) return;
-      if (combo === hk.search && showTerminal) {
-        e.preventDefault();
-        setSearchOpen(true);
-      } else if (combo === hk.openCatalog) {
-        e.preventDefault();
-        void update('ui.catalogPanelOpen', !(config?.ui.catalogPanelOpen ?? false));
-      } else if (combo === hk.closeTab && active) {
-        e.preventDefault();
-        void closeTab(active.sessionId);
-      } else if (combo === hk.copy && active) {
-        e.preventDefault();
-        copySelection(active.sessionId);
-      } else if (combo === hk.paste && showTerminal && active) {
-        e.preventDefault();
-        handlePaste(active.sessionId);
-      } else if (combo === hk.snippetPalette && showTerminal && active) {
-        // SNIP-09: без активной сессии палитра не открывается вовсе (как и
-        // остальные терминал-хоткеи выше, привязанные к showTerminal).
-        // Ctrl+Space исторически маппится терминалами на управляющий символ
-        // NUL (0x00) — xterm.js может перехватить его на textarea раньше,
-        // чем событие всплывёт сюда. stopPropagation, чтобы xterm не отправил
-        // символ в сессию поверх открытия палитры.
-        e.preventDefault();
-        e.stopPropagation();
-        setPalettePos(mousePosRef.current);
-      }
-    };
-    // capture: true — перехватываем раньше, чем xterm.js на своей textarea
-    // успеет обработать Ctrl+Space по-своему (см. комментарий выше).
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
+  // Маршрутизация — через hotkeyBus (ADR-0012): фаза capture и отмена события
+  // на сработавшую комбинацию — забота шины. Она же снимает старый вопрос про
+  // Ctrl+Space: xterm.js перехватывал бы NUL (0x00) на своей textarea, но до
+  // неё событие больше не доходит — правило одно для всех комбинаций, а не
+  // отдельный stopPropagation в одной ветке.
+  useHotkeys('terminal-area', (combo) => {
+    const hk = config?.hotkeys;
+    if (!hk) return false;
+    if (combo === hk.search && showTerminal) {
+      setSearchOpen(true);
+      return true;
+    }
+    if (combo === hk.openCatalog) {
+      void update('ui.catalogPanelOpen', !(config?.ui.catalogPanelOpen ?? false));
+      return true;
+    }
+    if (combo === hk.closeTab && active) {
+      void closeTab(active.sessionId);
+      return true;
+    }
+    if (combo === hk.copy && active) {
+      copySelection(active.sessionId);
+      return true;
+    }
+    if (combo === hk.paste && showTerminal && active) {
+      handlePaste(active.sessionId);
+      return true;
+    }
+    if (combo === hk.snippetPalette && showTerminal && active) {
+      // SNIP-09: без активной сессии палитра не открывается вовсе (как и
+      // остальные терминал-хоткеи выше, привязанные к showTerminal).
+      setPalettePos(mousePosRef.current);
+      return true;
+    }
+    return false;
   });
 
   useEffect(() => {

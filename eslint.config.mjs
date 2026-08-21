@@ -39,7 +39,13 @@ export default tseslint.config(
     ignores: [
       'src/renderer/src/stores/escStack.ts',
       'src/renderer/src/stores/escStack.test.ts',
-      'src/renderer/src/hooks/useEscapeClose.ts'
+      'src/renderer/src/hooks/useEscapeClose.ts',
+      // hotkeyBus не обрабатывает Esc, а наоборот — обязан пропустить его мимо
+      // себя нетронутым (ADR-0012); тест это и проверяет, диспетчеризуя 'Escape'
+      // на фальшивое окно. Сам модуль сравнивает с ESCAPE_KEY из escStack, но
+      // ignores держим на паре файлов, чтобы тест не пришлось писать окольно.
+      'src/renderer/src/stores/hotkeyBus.ts',
+      'src/renderer/src/stores/hotkeyBus.test.ts'
     ],
     rules: {
       'no-restricted-syntax': [
