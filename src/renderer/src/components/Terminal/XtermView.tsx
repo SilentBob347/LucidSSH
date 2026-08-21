@@ -11,6 +11,7 @@ import type { AccessRiskPrompt, DangerousCommandPrompt } from '@shared/guard';
 import { getCurrentConfig } from '@/stores/config';
 import { attachTerminalWriter, dropTerminalBuffer } from '@/stores/terminalBuffer';
 import { Icon } from '@/components/common/Icon';
+import { reconcileEchoLine, redrawEchoLine } from './localEcho';
 
 /**
  * xterm.js-вью одной сессии (TERM-01, TERM-04, TERM-07).
@@ -83,6 +84,25 @@ function maskPasteIfAuthPrompt(sessionId: string, text: string): boolean {
 const commandBuffers = new Map<string, string>();
 const atPromptState = new Map<string, boolean>();
 const shellStateUnknown = new Map<string, boolean>();
+
+/**
+ * Эхо сверяется с экраном, а не считается по счётчику (ADR-0013,
+ * .scratch/local-echo-resize-desync/spec.md) — детали в localEcho.ts.
+ * echoStartCol — колонка, где Эхо начинается на своей экранной строке:
+ * записывается при переходе Набранной строки из пустой в непустую,
+ * переусваивается при расхождении со сверкой.
+ */
+const echoStartCol = new Map<string, number>();
+/** Отложенная сверка: doFit взводит таймер, следующая запись из PTY (колбэк
+ *  term.write) выполняет её раньше и снимает флаг сама; таймер — только
+ *  страховка на случай, если PTY вообще ничего не пришлёт (rows-only resize,
+ *  ADR-0005 не пускает его дальше renderer). handleCommandChar форсирует
+ *  сверку немедленно, если застаёт флаг — иначе Enter в окне между resize и
+ *  приходом данных отправил бы невидимую команду (ADR-0013 §4). */
+const reconcilePending = new Map<string, ReturnType<typeof setTimeout>>();
+/** Таймаут-страховка сверки (ADR-0013 §3) — цена безвредного таймера за то,
+ *  что rows-only resize не дублирует гейт ADR-0005 в renderer. */
+const RECONCILE_TIMEOUT_MS = 600;
 const dangerListeners = new Map<string, (prompt: DangerousCommandPrompt) => void>();
 const accessRiskListeners = new Map<string, (prompt: AccessRiskPrompt) => void>();
 const commandSentListeners = new Map<string, () => void>();
@@ -134,6 +154,58 @@ function ensureBreadcrumbSubscription(): void {
   window.lucidSSH.onIntegrationUnconfirmed((sessionId) => markIntegrationUnconfirmed(sessionId));
 }
 
+/** Отменяет отложенную сверку (таймер-страховку) — вызывается после того,
+ *  как сверка уже выполнилась (данными из PTY или самим таймером), и при
+ *  очистке состояния сессии. */
+function disarmReconcile(sessionId: string): void {
+  const timer = reconcilePending.get(sessionId);
+  if (timer !== undefined) clearTimeout(timer);
+  reconcilePending.delete(sessionId);
+}
+
+/** Взводит сверку после doFit (ADR-0013 §3–4): триггер — любой doFit, гейт
+ *  ADR-0005 по cols в renderer не дублируется. Настоящую сверку выполняет
+ *  либо колбэк term.write на следующих данных из PTY, либо этот таймер,
+ *  либо handleCommandChar, если пользователь набрал что-то раньше обоих. */
+function armReconcile(sessionId: string): void {
+  disarmReconcile(sessionId);
+  reconcilePending.set(
+    sessionId,
+    setTimeout(() => runReconcile(sessionId), RECONCILE_TIMEOUT_MS)
+  );
+}
+
+/** Сама сверка (ADR-0013 §3): дешёвая отсечка первой строкой — большинство
+ *  вызовов (почти каждый чанк вывода) на ней и заканчивается. `done` (если
+ *  дан) вызывается ПОСЛЕ того, как возможная перерисовка реально легла на
+ *  сетку — `term.write` у xterm асинхронный (WriteBuffer), поэтому
+ *  форсированный вызов из handleCommandChar (ADR-0013 §4) обязан дождаться
+ *  этого колбэка, прежде чем читать состояние терминала для самого ввода
+ *  (Backspace, история) — иначе он попадёт на ещё не применённую запись. */
+function runReconcile(sessionId: string, done?: () => void): void {
+  disarmReconcile(sessionId);
+  const term = cache.get(sessionId)?.term;
+  const text = isAtPrompt(sessionId) ? commandBuffers.get(sessionId) : undefined;
+  const startCol = echoStartCol.get(sessionId);
+  if (!term || !text || startCol === undefined) {
+    done?.();
+    return;
+  }
+  reconcileEchoLine(term, startCol, text, (newStartCol) => {
+    echoStartCol.set(sessionId, newStartCol);
+    done?.();
+  });
+}
+
+/** Записывает колонку старта Эха при переходе Набранной строки из пустой в
+ *  непустую — курсор в этот момент стоит там, где Эхо и начнётся, по
+ *  определению (ADR-0013 §2). Не привязываемся к markAtPrompt/finalizeLine:
+ *  привязка к промпту отвергнута, см. spec. */
+function markEchoStart(sessionId: string): void {
+  const term = cache.get(sessionId)?.term;
+  if (term) echoStartCol.set(sessionId, term.buffer.active.cursorX);
+}
+
 function clearSessionInputState(sessionId: string): void {
   commandBuffers.delete(sessionId);
   atPromptState.delete(sessionId);
@@ -141,16 +213,25 @@ function clearSessionInputState(sessionId: string): void {
   commandHistories.delete(sessionId);
   historyIndex.delete(sessionId);
   historyDraft.delete(sessionId);
+  echoStartCol.delete(sessionId);
+  disarmReconcile(sessionId);
 }
 
 /** Заменяет текущую набранную (но ещё не отправленную) строку на newText —
- *  стирает старое эхо посимвольным backspace и печатает новое. */
+ *  перерисовывает область Эха примитивом из localEcho.ts вместо посимвольного
+ *  backspace (тот не умел подниматься на строку выше при переносе — третий
+ *  дефект класса из ADR-0013). */
 function setBufferLine(sessionId: string, newText: string): void {
   const term = cache.get(sessionId)?.term;
   const old = commandBuffers.get(sessionId) ?? '';
-  if (old.length > 0) term?.write('\b \b'.repeat(old.length));
+  if (old.length > 0) {
+    const startCol = echoStartCol.get(sessionId) ?? 0;
+    if (term) redrawEchoLine(term, startCol, newText);
+  } else if (newText.length > 0) {
+    markEchoStart(sessionId);
+    term?.write(newText);
+  }
   commandBuffers.set(sessionId, newText);
-  if (newText) term?.write(newText);
 }
 
 function historyUp(sessionId: string): void {
@@ -189,6 +270,7 @@ function finalizeLine(sessionId: string): void {
   atPromptState.set(sessionId, false);
   historyIndex.delete(sessionId);
   historyDraft.delete(sessionId);
+  disarmReconcile(sessionId);
   if (sent.trim().length > 0) {
     const hist = commandHistories.get(sessionId) ?? [];
     if (hist[hist.length - 1] !== sent) hist.push(sent);
@@ -222,6 +304,22 @@ async function submitBufferedCommand(sessionId: string, command: string): Promis
 
 /** Обрабатывает один чанк ввода, пока сессия на промпте (см. коммент выше). */
 function handleCommandChar(sessionId: string, data: string): void {
+  // Окно между doFit и приходом данных из PTY (ADR-0013 §4): если сверка
+  // ещё не выполнилась, форсируем её немедленно по текущему состоянию
+  // экрана — иначе Enter в этом окне отправил бы невидимую команду, а
+  // сверка бы уже не помогла (finalizeLine отправляет раньше, чем данные
+  // могли бы прийти и её выполнить). Обработку самого чанка откладываем до
+  // колбэка: term.write асинхронный, если продолжить сразу же, Backspace
+  // или история из ЭТОГО ЖЕ чанка прочитали бы состояние терминала ДО того,
+  // как перерисовка сверки реально легла на сетку.
+  if (reconcilePending.has(sessionId)) {
+    runReconcile(sessionId, () => processCommandChunk(sessionId, data));
+    return;
+  }
+  processCommandChunk(sessionId, data);
+}
+
+function processCommandChunk(sessionId: string, data: string): void {
   // Стрелки вверх/вниз — локальная история (см. commandHistories выше).
   if (data === '\x1b[A') {
     historyUp(sessionId);
@@ -255,13 +353,20 @@ function handleCommandChar(sessionId: string, data: string): void {
     if (code === 0x7f || code === 0x08) {
       const buf = commandBuffers.get(sessionId) ?? '';
       if (buf.length > 0) {
-        commandBuffers.set(sessionId, buf.slice(0, -1));
-        term?.write('\b \b');
+        const newBuf = buf.slice(0, -1);
+        commandBuffers.set(sessionId, newBuf);
+        // Перерисовка вместо слепого '\b \b' (ADR-0013) — на экране может
+        // быть уже не то, что мы думаем, стирать вслепую значит рисковать
+        // съесть приглашение.
+        const startCol = echoStartCol.get(sessionId) ?? 0;
+        if (term) redrawEchoLine(term, startCol, newBuf);
       }
       continue;
     }
     if (code >= 0x20 || ch === '\t') {
-      commandBuffers.set(sessionId, (commandBuffers.get(sessionId) ?? '') + ch);
+      const buf = commandBuffers.get(sessionId) ?? '';
+      if (buf.length === 0) markEchoStart(sessionId);
+      commandBuffers.set(sessionId, buf + ch);
       term?.write(ch);
     }
     // Прочие управляющие символы игнорируются.
@@ -350,7 +455,9 @@ export function pasteText(sessionId: string, text: string): void {
  */
 export function insertText(sessionId: string, text: string): void {
   if (isAtPrompt(sessionId)) {
-    commandBuffers.set(sessionId, (commandBuffers.get(sessionId) ?? '') + text);
+    const buf = commandBuffers.get(sessionId) ?? '';
+    if (buf.length === 0 && text.length > 0) markEchoStart(sessionId);
+    commandBuffers.set(sessionId, buf + text);
     cache.get(sessionId)?.term.write(text);
   } else {
     pasteText(sessionId, text);
@@ -467,8 +574,13 @@ function createTerminal(sessionId: string): Cached {
     }
   });
 
-  // Вывод сервера — из буфера (накопленное до монтирования + живой поток)
-  attachTerminalWriter(sessionId, (data) => term.write(data));
+  // Вывод сервера — из буфера (накопленное до монтирования + живой поток).
+  // Колбэк term.write вызывается, когда чанк разобран и лёг на сетку — это
+  // и есть единственная точка сверки Эха с экраном (ADR-0013 §3), таймер
+  // не нужен.
+  attachTerminalWriter(sessionId, (data) => {
+    term.write(data, () => runReconcile(sessionId));
+  });
 
   const container = document.createElement('div');
   container.className = 'h-full w-full';
@@ -577,6 +689,10 @@ export function XtermView({
       try {
         cached!.fit.fit();
         window.lucidSSH.resizeSession(sessionId, cached!.term.cols, cached!.term.rows);
+        // Триггер сверки — любой doFit, без уточнений (ADR-0013 §3): гейт по
+        // cols из ADR-0005 не дублируется здесь, сверке всё равно, что было
+        // причиной расхождения.
+        armReconcile(sessionId);
       } catch {
         /* контейнер ещё без размера */
       }
