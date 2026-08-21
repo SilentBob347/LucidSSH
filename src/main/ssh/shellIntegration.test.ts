@@ -394,6 +394,40 @@ describe('matchesPasswordPromptPattern (TERM-09) — только явный с�
   });
 });
 
+describe('BreadcrumbParser — управляющие последовательности экрана проходят насквозь', () => {
+  // Баг «после выхода из top не возвращается экран» (21.08.2026) сначала искали
+  // здесь: подозревали, что придерживание хвоста (см. push) рвёт ESC[?1049l.
+  // Живая проверка через Docker показала, что конвейер чист, а top вообще не
+  // шлёт smcup/rmcup — чинилось на стороне xterm.js (scrollOnEraseInDisplay,
+  // XtermView.tsx). Тесты закрепляют «конвейер не при чём», чтобы при
+  // следующем похожем симптоме сюда не возвращались.
+  const ALT_ON = '[?1049h[22;0;0t';
+  const ALT_OFF = '[?1049l[23;0;0t';
+
+  it('smcup/rmcup доходят до терминала без изменений', () => {
+    const parser = new BreadcrumbParser();
+    const { cleaned } = parser.push(`${ALT_ON}vim screen${ALT_OFF}`);
+    expect(cleaned).toBe(`${ALT_ON}vim screen${ALT_OFF}`);
+  });
+
+  it('ESC на границе чанков не теряется (rmcup разрезан пополам)', () => {
+    const parser = new BreadcrumbParser();
+    // Хвост, начинающийся с ESC, придерживается до следующего чанка — важно,
+    // чтобы он вернулся целиком, а не был проглочен как недописанный маркер.
+    const first = parser.push('bye');
+    expect(first.cleaned).toBe('bye');
+    const second = parser.push('[?1049l');
+    expect(second.cleaned).toBe('[?1049l');
+  });
+
+  it('очистка экрана (ED2, так делает top) не вырезается вместе с маркером', () => {
+    const parser = new BreadcrumbParser();
+    const { cleaned, marks } = parser.push(`[H[2Jtop frame${mk('u', 'h', '/root', '0', '0')}`);
+    expect(cleaned).toBe('[H[2Jtop frame');
+    expect(marks).toHaveLength(1);
+  });
+});
+
 describe('buildCdCommand', () => {
   it('оборачивает путь в кавычки', () => {
     expect(buildCdCommand('/var/www')).toBe("cd '/var/www'");
