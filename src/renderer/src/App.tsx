@@ -23,7 +23,8 @@ import { ConfigProvider, useConfig } from './stores/config';
 import { PanelsProvider, usePanels } from './stores/panels';
 import { EventsProvider, useEvents } from './stores/events';
 import { UpdatesProvider } from './stores/updates';
-import { FIXED_HOTKEYS, normalizeCombo } from '@shared/hotkeys';
+import { FIXED_HOTKEYS } from '@shared/hotkeys';
+import { useHotkeys } from './hooks/useHotkeys';
 
 /**
  * Welcome-экран показывается вместо основного UI, пока нет ни одного хоста
@@ -70,45 +71,37 @@ function AppBody(): JSX.Element {
   // Глобальные хоткеи (SET-01 Ctrl+, · SET-06/SET-10). Ctrl+F/поиск живёт в
   // TerminalArea. Биндинги читаются из config.hotkeys (кроме F1 — зафиксирован,
   // FIXED_HOTKEYS), а не сравниваются с буквальными клавишами — SET-10, issue #1.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (
-        // ВРЕМЕННЫЙ dev-хук для визуальной проверки WelcomeScreen без удаления
-        // хостов (пачка 9 дизайн-аудита) — import.meta.env.DEV вырезается
-        // Vite-сборкой в проде (dead-code elimination), в упакованное
-        // приложение не попадёт. Убрать после проверки.
-        import.meta.env.DEV &&
-        (e.ctrlKey || e.metaKey) &&
-        e.shiftKey &&
-        e.key.toLowerCase() === 'w'
-      ) {
-        e.preventDefault();
-        setPreviewWelcome((v) => !v);
-        return;
-      }
-      const combo = normalizeCombo(e);
-      if (!combo) return;
-      if (combo === FIXED_HOTKEYS.help) {
-        e.preventDefault();
-        openHelp();
-        return;
-      }
-      const hk = config?.hotkeys;
-      if (!hk) return;
-      if (combo === hk.openSettings) {
-        e.preventDefault();
-        openSettings();
-      } else if (combo === hk.openHistory) {
-        e.preventDefault();
-        openHistory();
-      } else if (combo === hk.quickConnect) {
-        e.preventDefault();
-        openQuickConnect();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [config?.hotkeys, openSettings, openHistory, openHelp, openQuickConnect]);
+  // Маршрутизация — через hotkeyBus (ADR-0012): отмену события берёт на себя
+  // шина, здесь только «моё / не моё».
+  useHotkeys('app-global', (combo) => {
+    // ВРЕМЕННЫЙ dev-хук для визуальной проверки WelcomeScreen без удаления
+    // хостов (пачка 9 дизайн-аудита) — import.meta.env.DEV вырезается
+    // Vite-сборкой в проде (dead-code elimination), в упакованное
+    // приложение не попадёт. Убрать после проверки.
+    if (import.meta.env.DEV && combo === 'Ctrl+Shift+W') {
+      setPreviewWelcome((v) => !v);
+      return true;
+    }
+    if (combo === FIXED_HOTKEYS.help) {
+      openHelp();
+      return true;
+    }
+    const hk = config?.hotkeys;
+    if (!hk) return false;
+    if (combo === hk.openSettings) {
+      openSettings();
+      return true;
+    }
+    if (combo === hk.openHistory) {
+      openHistory();
+      return true;
+    }
+    if (combo === hk.quickConnect) {
+      openQuickConnect();
+      return true;
+    }
+    return false;
+  });
 
   const activeSession = sessions.find((s) => s.sessionId === activeSessionId);
   const leftRef = useRef<HTMLElement>(null);
