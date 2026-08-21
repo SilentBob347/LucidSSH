@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC, type AppInfo } from '@shared/ipc';
+import { IPC, type AppInfo, type RendererEvents } from '@shared/ipc';
 import type { Host, HostGroup, HostInput, ImportPreview } from '@shared/hosts';
 import type { ExternalImportApplyResult, ExternalImportResult, ImportedHost } from '@shared/import';
 import type {
@@ -26,6 +26,26 @@ import type { InteractiveProgramName } from '@shared/interactivePrograms';
  * Минимальный preload (SEC-05): только конкретные операции,
  * никаких универсальных send/invoke, никакого доступа к Node из renderer.
  */
+
+/**
+ * Подписка на событие main → renderer по контракту `RendererEvents` (ADR-0011).
+ * Приём связан той же картой, что и отправка в `src/main/ipc/events.ts`:
+ * колбэк, чья сигнатура не совпадает с объявленной полезной нагрузкой,
+ * не скомпилируется.
+ *
+ * Приведение `args` неизбежно — `ipcRenderer.on` отдаёт нетипизированный
+ * список: контракт описывает то, что кладёт `emit`, а не то, что проверяется
+ * в рантайме. Это единственная точка приведения на все 16 событий.
+ */
+function subscribe<K extends keyof RendererEvents>(
+  channel: K,
+  cb: (...args: RendererEvents[K]) => void
+): () => void {
+  const listener = (_e: Electron.IpcRendererEvent, ...args: unknown[]): void =>
+    cb(...(args as RendererEvents[K]));
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
 
 const api = {
   // --- Приложение ---
@@ -153,98 +173,32 @@ const api = {
     ipcRenderer.invoke(IPC.sessionSendInput, sessionId, data),
   resizeSession: (sessionId: string, cols: number, rows: number): void =>
     ipcRenderer.send(IPC.sessionResize, sessionId, cols, rows),
-  onTerminalData: (cb: (sessionId: string, data: string) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, sessionId: string, data: string): void =>
-      cb(sessionId, data);
-    ipcRenderer.on(IPC.evTerminalData, listener);
-    return () => ipcRenderer.removeListener(IPC.evTerminalData, listener);
-  },
-  onSessionStatus: (cb: (sessionId: string, status: SessionStatus) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, sessionId: string, status: SessionStatus): void =>
-      cb(sessionId, status);
-    ipcRenderer.on(IPC.evSessionStatus, listener);
-    return () => ipcRenderer.removeListener(IPC.evSessionStatus, listener);
-  },
-  onHostKeyPrompt: (cb: (prompt: HostKeyPrompt) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, prompt: HostKeyPrompt): void => cb(prompt);
-    ipcRenderer.on(IPC.evHostKeyPrompt, listener);
-    return () => ipcRenderer.removeListener(IPC.evHostKeyPrompt, listener);
-  },
-  onAuthPrompt: (cb: (prompt: AuthPromptRequest) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, prompt: AuthPromptRequest): void => cb(prompt);
-    ipcRenderer.on(IPC.evAuthPrompt, listener);
-    return () => ipcRenderer.removeListener(IPC.evAuthPrompt, listener);
-  },
-  onConnectionLog: (
-    cb: (sessionId: string, entry: ConnectionLogEntry) => void
-  ): (() => void) => {
-    const listener = (
-      _e: Electron.IpcRendererEvent,
-      sessionId: string,
-      entry: ConnectionLogEntry
-    ): void => cb(sessionId, entry);
-    ipcRenderer.on(IPC.evConnectionLog, listener);
-    return () => ipcRenderer.removeListener(IPC.evConnectionLog, listener);
-  },
-  onBreadcrumb: (cb: (sessionId: string, crumb: Breadcrumb) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, sessionId: string, crumb: Breadcrumb): void =>
-      cb(sessionId, crumb);
-    ipcRenderer.on(IPC.evBreadcrumb, listener);
-    return () => ipcRenderer.removeListener(IPC.evBreadcrumb, listener);
-  },
-  onHistoryRecorded: (cb: () => void): (() => void) => {
-    const listener = (): void => cb();
-    ipcRenderer.on(IPC.evHistoryRecorded, listener);
-    return () => ipcRenderer.removeListener(IPC.evHistoryRecorded, listener);
-  },
-  onPasswordPrompt: (cb: (sessionId: string) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, sessionId: string): void => cb(sessionId);
-    ipcRenderer.on(IPC.evPasswordPrompt, listener);
-    return () => ipcRenderer.removeListener(IPC.evPasswordPrompt, listener);
-  },
-  onIntegrationUnconfirmed: (cb: (sessionId: string) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, sessionId: string): void => cb(sessionId);
-    ipcRenderer.on(IPC.evIntegrationUnconfirmed, listener);
-    return () => ipcRenderer.removeListener(IPC.evIntegrationUnconfirmed, listener);
-  },
+  onTerminalData: (cb: (sessionId: string, data: string) => void): (() => void) =>
+    subscribe(IPC.evTerminalData, cb),
+  onSessionStatus: (cb: (sessionId: string, status: SessionStatus) => void): (() => void) =>
+    subscribe(IPC.evSessionStatus, cb),
+  onHostKeyPrompt: (cb: (prompt: HostKeyPrompt) => void): (() => void) =>
+    subscribe(IPC.evHostKeyPrompt, cb),
+  onAuthPrompt: (cb: (prompt: AuthPromptRequest) => void): (() => void) =>
+    subscribe(IPC.evAuthPrompt, cb),
+  onConnectionLog: (cb: (sessionId: string, entry: ConnectionLogEntry) => void): (() => void) =>
+    subscribe(IPC.evConnectionLog, cb),
+  onBreadcrumb: (cb: (sessionId: string, crumb: Breadcrumb) => void): (() => void) =>
+    subscribe(IPC.evBreadcrumb, cb),
+  onHistoryRecorded: (cb: () => void): (() => void) => subscribe(IPC.evHistoryRecorded, cb),
+  onPasswordPrompt: (cb: (sessionId: string) => void): (() => void) =>
+    subscribe(IPC.evPasswordPrompt, cb),
+  onIntegrationUnconfirmed: (cb: (sessionId: string) => void): (() => void) =>
+    subscribe(IPC.evIntegrationUnconfirmed, cb),
   onInteractiveProgram: (
     cb: (sessionId: string, program: InteractiveProgramName) => void
-  ): (() => void) => {
-    const listener = (
-      _e: Electron.IpcRendererEvent,
-      sessionId: string,
-      program: InteractiveProgramName
-    ): void => cb(sessionId, program);
-    ipcRenderer.on(IPC.evInteractiveProgram, listener);
-    return () => ipcRenderer.removeListener(IPC.evInteractiveProgram, listener);
-  },
-  onDashboard: (cb: (sessionId: string, metrics: DashboardMetrics) => void): (() => void) => {
-    const listener = (
-      _e: Electron.IpcRendererEvent,
-      sessionId: string,
-      metrics: DashboardMetrics
-    ): void => cb(sessionId, metrics);
-    ipcRenderer.on(IPC.evDashboard, listener);
-    return () => ipcRenderer.removeListener(IPC.evDashboard, listener);
-  },
-  onDashboardAlert: (cb: (sessionId: string, alert: DashboardAlert) => void): (() => void) => {
-    const listener = (
-      _e: Electron.IpcRendererEvent,
-      sessionId: string,
-      alert: DashboardAlert
-    ): void => cb(sessionId, alert);
-    ipcRenderer.on(IPC.evDashboardAlert, listener);
-    return () => ipcRenderer.removeListener(IPC.evDashboardAlert, listener);
-  },
-  onError: (cb: (sessionId: string, explanation: ErrorExplanation) => void): (() => void) => {
-    const listener = (
-      _e: Electron.IpcRendererEvent,
-      sessionId: string,
-      explanation: ErrorExplanation
-    ): void => cb(sessionId, explanation);
-    ipcRenderer.on(IPC.evError, listener);
-    return () => ipcRenderer.removeListener(IPC.evError, listener);
-  },
+  ): (() => void) => subscribe(IPC.evInteractiveProgram, cb),
+  onDashboard: (cb: (sessionId: string, metrics: DashboardMetrics) => void): (() => void) =>
+    subscribe(IPC.evDashboard, cb),
+  onDashboardAlert: (cb: (sessionId: string, alert: DashboardAlert) => void): (() => void) =>
+    subscribe(IPC.evDashboardAlert, cb),
+  onError: (cb: (sessionId: string, explanation: ErrorExplanation) => void): (() => void) =>
+    subscribe(IPC.evError, cb),
 
   // --- Каталог команд ---
   getCommandCatalog: (): Promise<CommandsDatabase> => ipcRenderer.invoke(IPC.catalogGet),
@@ -254,11 +208,8 @@ const api = {
   downloadUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.updateDownload),
   installUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.updateInstall),
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC.updateGetStatus),
-  onUpdateStatus: (cb: (status: UpdateStatus) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, status: UpdateStatus): void => cb(status);
-    ipcRenderer.on(IPC.evUpdateStatus, listener);
-    return () => ipcRenderer.removeListener(IPC.evUpdateStatus, listener);
-  },
+  onUpdateStatus: (cb: (status: UpdateStatus) => void): (() => void) =>
+    subscribe(IPC.evUpdateStatus, cb),
 
   // --- История команд ---
   listHistory: (query?: HistoryQuery): Promise<HistoryEntry[]> =>
@@ -307,24 +258,18 @@ const api = {
   windowToggleMaximize: (): void => ipcRenderer.send(IPC.windowToggleMaximize),
   windowClose: (): void => ipcRenderer.send(IPC.windowClose),
   windowConfirmClose: (): void => ipcRenderer.send(IPC.windowConfirmClose),
+  // Две подписки ниже не отдают полезную нагрузку колбэку как есть: контракт
+  // описывает то, что кладёт emit, а не то, что дошло — нормализация остаётся.
   onConfirmWindowClose: (
     cb: (activeCount: number, busySessions: Array<{ hostName: string; command: string }>) => void
-  ): (() => void) => {
-    const listener = (
-      _e: Electron.IpcRendererEvent,
-      activeCount: number,
-      busySessions: Array<{ hostName: string; command: string }>
-    ): void => cb(activeCount, Array.isArray(busySessions) ? busySessions : []);
-    ipcRenderer.on(IPC.evConfirmWindowClose, listener);
-    return () => ipcRenderer.removeListener(IPC.evConfirmWindowClose, listener);
-  },
-  onWindowMaximized: (cb: (maximized: boolean) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, maximized: boolean): void => {
+  ): (() => void) =>
+    subscribe(IPC.evConfirmWindowClose, (activeCount, busySessions) => {
+      cb(activeCount, Array.isArray(busySessions) ? busySessions : []);
+    }),
+  onWindowMaximized: (cb: (maximized: boolean) => void): (() => void) =>
+    subscribe(IPC.evWindowMaximized, (maximized) => {
       cb(maximized === true);
-    };
-    ipcRenderer.on(IPC.evWindowMaximized, listener);
-    return () => ipcRenderer.removeListener(IPC.evWindowMaximized, listener);
-  }
+    })
 } as const;
 
 export type LucidSSHBridge = typeof api;

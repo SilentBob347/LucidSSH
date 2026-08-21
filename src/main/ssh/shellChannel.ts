@@ -1,7 +1,7 @@
 import type { ClientChannel } from 'ssh2';
 import { IPC } from '@shared/ipc';
 import type { GuardStatus } from '@shared/history';
-import { getMainWindow } from '../window/mainWindow';
+import { emit } from '../ipc/events';
 import {
   ShellIntegrationSession,
   SETUP_CAP_MS,
@@ -50,11 +50,6 @@ export interface ShellChannelOptions {
   deps: ShellChannelDeps;
 }
 
-function send(channel: string, ...args: unknown[]): void {
-  const win = getMainWindow();
-  if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
-}
-
 export class ShellChannel {
   private readonly sessionId: string;
   private readonly stream: ClientChannel;
@@ -89,7 +84,7 @@ export class ShellChannel {
       this.applyResult(this.shellIntegration.feed(data.toString('utf8')));
     });
     this.stream.stderr?.on('data', (data: Buffer) => {
-      send(IPC.evTerminalData, this.sessionId, data.toString('utf8'));
+      emit(IPC.evTerminalData, this.sessionId, data.toString('utf8'));
     });
     this.stream.on('close', () => {
       this.clearAllShellTimers();
@@ -163,7 +158,7 @@ export class ShellChannel {
    *  единственное место, где коробка встречается с реальным IO. */
   private applyResult(result: ShellIntegrationResult): void {
     if (result.toWrite) this.stream.write(result.toWrite);
-    if (result.display) send(IPC.evTerminalData, this.sessionId, result.display);
+    if (result.display) emit(IPC.evTerminalData, this.sessionId, result.display);
     this.applyTimerActions(result.timerActions);
     for (const event of result.events) {
       this.handleShellIntegrationEvent(event);
@@ -206,19 +201,19 @@ export class ShellChannel {
         // приходит вовсе, так что сброс здесь корректно ловит именно выход из
         // программы (ADR-0005), а не путает её с обычным промптом.
         this.interactiveProgramActive = false;
-        send(IPC.evBreadcrumb, this.sessionId, event.crumb);
+        emit(IPC.evBreadcrumb, this.sessionId, event.crumb);
         break;
       case 'command-finished':
         this.deps.onCommandFinished(event);
         break;
       case 'password-prompt':
-        send(IPC.evPasswordPrompt, this.sessionId);
+        emit(IPC.evPasswordPrompt, this.sessionId);
         break;
       case 'unmarked-output':
         if (this.deps.onUnmarkedOutput(event.output)) this.deps.onShellUnavailable();
         break;
       case 'integration-unconfirmed':
-        send(IPC.evIntegrationUnconfirmed, this.sessionId);
+        emit(IPC.evIntegrationUnconfirmed, this.sessionId);
         break;
       case 'interactive-program':
         this.interactiveProgramActive = true;
@@ -229,7 +224,7 @@ export class ShellChannel {
         if (this.cols !== this.ptyCols || this.rows !== this.ptyRows) {
           this.applyRealResize(this.cols, this.rows);
         }
-        send(IPC.evInteractiveProgram, this.sessionId, event.program);
+        emit(IPC.evInteractiveProgram, this.sessionId, event.program);
         break;
     }
   }

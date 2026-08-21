@@ -4,7 +4,7 @@ import electronUpdater from 'electron-updater';
 import { IPC } from '@shared/ipc';
 import type { UpdateInfo, UpdateProgress, UpdateStatus } from '@shared/updates';
 import { app } from 'electron';
-import { getMainWindow } from '../window/mainWindow';
+import { emit } from '../ipc/events';
 import { loadConfig, configDir } from '../config/store';
 
 /**
@@ -25,8 +25,7 @@ let status: UpdateStatus = {
 };
 
 function send(): void {
-  const win = getMainWindow();
-  if (win && !win.isDestroyed()) win.webContents.send(IPC.evUpdateStatus, status);
+  emit(IPC.evUpdateStatus, status);
 }
 
 function setStatus(patch: Partial<UpdateStatus>): void {

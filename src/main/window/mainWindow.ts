@@ -4,6 +4,7 @@ import { IPC } from '@shared/ipc';
 import type { WindowState } from '@shared/config';
 import { loadConfig, updateConfig } from '../config/store';
 import { activeSessionCount, busySessions } from '../ssh/sessionManager';
+import { emit } from '../ipc/events';
 
 /**
  * Главное окно: изоляция renderer (SEC-05) + сохранение/восстановление
@@ -97,11 +98,11 @@ export function createMainWindow(): BrowserWindow {
   mainWindow.on('move', scheduleSave);
   mainWindow.on('maximize', () => {
     scheduleSave();
-    mainWindow?.webContents.send(IPC.evWindowMaximized, true);
+    emit(IPC.evWindowMaximized, true);
   });
   mainWindow.on('unmaximize', () => {
     scheduleSave();
-    mainWindow?.webContents.send(IPC.evWindowMaximized, false);
+    emit(IPC.evWindowMaximized, false);
   });
   mainWindow.on('close', (event) => {
     // WIN-02: при активных сессиях требуется подтверждение перед закрытием.
@@ -109,7 +110,7 @@ export function createMainWindow(): BrowserWindow {
       event.preventDefault();
       // WIN-04: расширенный текст (список хост+команда) для сессий, которые
       // сейчас выполняют команду.
-      mainWindow?.webContents.send(IPC.evConfirmWindowClose, activeSessionCount(), busySessions());
+      emit(IPC.evConfirmWindowClose, activeSessionCount(), busySessions());
       return;
     }
     if (saveTimer) clearTimeout(saveTimer);
