@@ -401,6 +401,15 @@ function createTerminal(sessionId: string): Cached {
     cursorBlink: true,
     cursorStyle: 'block',
     scrollback: 5000,
+    // ED2 (ESC[2J) уводит стёртый экран в scrollback, а не затирает вьюпорт
+    // на месте (дефолт xterm.js). Без этого `top` съедал историю сессии
+    // насовсем: в отличие от vim/less он НЕ переключается на alternate screen
+    // (smcup/rmcup не шлёт вовсе — проверено на живом сервере 21.08.2026),
+    // а чистит основной экран через ESC[H ESC[2J и не восстанавливает его —
+    // после выхода по `q` прокручивать назад было уже нечего. Флаг включает
+    // поведение PuTTY. Побочный эффект осознанный: `clear` и Ctrl+L тоже
+    // перестают уничтожать стёртый экран — он остаётся в scrollback.
+    scrollOnEraseInDisplay: true,
     drawBoldTextInBrightColors: cfg?.terminal.brightBold ?? true,
     theme: {
       background: '#1A1A22',
