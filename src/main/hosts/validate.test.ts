@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { validateGroupName, validateHostInput, validateId, validateSecret } from './validate';
+import {
+  validateGroupName,
+  validateHostInput,
+  validateId,
+  validateOptionalHostId,
+  validateSecret
+} from './validate';
 
 const valid = {
   name: 'web-01',
@@ -87,6 +93,27 @@ describe('validateGroupName / validateId', () => {
     expect(validateId(7)).toBe(7);
     for (const bad of [0, -1, 1.5, '7', null]) {
       expect(() => validateId(bad)).toThrow();
+    }
+  });
+});
+
+describe('validateOptionalHostId', () => {
+  it('отсутствие контекста хоста → undefined', () => {
+    expect(validateOptionalHostId(undefined)).toBeUndefined();
+    expect(validateOptionalHostId(null)).toBeUndefined();
+  });
+
+  it('0 — сентинел Быстрого подключения (HM-11) → undefined, а не ошибка', () => {
+    expect(validateOptionalHostId(0)).toBeUndefined();
+  });
+
+  it('положительный id проходит как есть', () => {
+    expect(validateOptionalHostId(42)).toBe(42);
+  });
+
+  it('остальной мусор по-прежнему отклоняется', () => {
+    for (const bad of [-1, 1.5, '7', {}, true, NaN]) {
+      expect(() => validateOptionalHostId(bad)).toThrow();
     }
   });
 });

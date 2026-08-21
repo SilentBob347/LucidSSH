@@ -20,7 +20,7 @@ import {
   updateSnippet
 } from '../history/snippets';
 import { assertSenderIsMainWindow, IpcValidationError } from './validate';
-import { validateId } from '../hosts/validate';
+import { validateId, validateOptionalHostId } from '../hosts/validate';
 
 /**
  * IPC истории и сниппетов (HIST-01…07, SNIP-01…08). Все аргументы валидируются
@@ -74,9 +74,9 @@ export function registerHistoryIpcHandlers(): void {
   // --- Сниппеты ---
   ipcMain.handle(IPC.snippetsList, (event, rawHostId: unknown): Snippet[] => {
     assertSenderIsMainWindow(event);
-    const hostId =
-      rawHostId === undefined || rawHostId === null ? undefined : validateId(rawHostId, 'hostId');
-    return listSnippets(hostId);
+    // hostId=0 — сентинел Быстрого подключения (HM-11): хоста нет, значит
+    // только глобальные сниппеты (SNIP-06), а не ошибка валидации.
+    return listSnippets(validateOptionalHostId(rawHostId));
   });
 
   ipcMain.handle(IPC.snippetCreate, (event, raw: unknown): { id: number } => {
