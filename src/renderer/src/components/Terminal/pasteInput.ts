@@ -18,6 +18,17 @@ export function stripControlChars(text: string): string {
   return text.replace(CONTROL_EXCEPT_TAB_RE, '');
 }
 
+/**
+ * Принимает ли строка ввода программную вставку (каталог, история, сниппеты,
+ * breadcrumb-«cd»). Активный промпт пароля её НЕ берёт: сниппет может быть
+ * секретом, а вставка в промпт напечатала бы его открытым текстом и прилипла
+ * бы к первой команде после входа. Пароль на промпт — только набором или
+ * вставкой из буфера (classifyPaste → 'mask').
+ */
+export function acceptsInsert(authPromptActive: boolean, shellChannelOpen: boolean): boolean {
+  return !authPromptActive && acceptsInput(authPromptActive, shellChannelOpen);
+}
+
 export type PasteRoute = 'ignore' | 'mask' | 'preview' | 'insert';
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { acceptsInput, classifyPaste, stripControlChars } from './pasteInput';
+import { acceptsInput, acceptsInsert, classifyPaste, stripControlChars } from './pasteInput';
 
 describe('stripControlChars', () => {
   it('pastejacking: ESC-последовательности не доходят ни до буфера, ни до эха', () => {
@@ -48,5 +48,17 @@ describe('без Канала', () => {
 
   it('при активном промпте вставка по-прежнему маскируется, даже без Канала', () => {
     expect(classifyPaste('s3cret', true, false)).toBe('mask');
+  });
+});
+
+describe('acceptsInsert', () => {
+  it('программная вставка (каталог, история, сниппет, breadcrumb) при активном промпте пароля отбрасывается', () => {
+    expect(acceptsInsert(true, true)).toBe(false);
+    expect(acceptsInsert(true, false)).toBe(false);
+  });
+
+  it('вне промпта пароля вставка идёт только при открытом Канале', () => {
+    expect(acceptsInsert(false, true)).toBe(true);
+    expect(acceptsInsert(false, false)).toBe(false);
   });
 });

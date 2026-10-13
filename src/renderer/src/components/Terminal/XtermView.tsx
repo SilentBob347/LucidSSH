@@ -12,7 +12,7 @@ import { getCurrentConfig } from '@/stores/config';
 import { attachTerminalWriter, dropTerminalBuffer } from '@/stores/terminalBuffer';
 import { Icon } from '@/components/common/Icon';
 import { reconcileEchoLine, redrawEchoLine } from './localEcho';
-import { acceptsInput, classifyPaste, stripControlChars } from './pasteInput';
+import { acceptsInput, acceptsInsert, classifyPaste, stripControlChars } from './pasteInput';
 
 /**
  * xterm.js-вью одной сессии (TERM-01, TERM-04, TERM-07).
@@ -507,7 +507,7 @@ export function insertText(sessionId: string, rawText: string): void {
   // Тот же фильтр, что у набора с клавиатуры (processCommandChunk): иначе
   // ESC-последовательности из буфера обмена или из пути breadcrumb правят
   // локальное эхо, и показанная строка расходится с отправляемой.
-  if (!acceptsInput(authInterceptors.has(sessionId), hasShellChannel(sessionId))) return;
+  if (!acceptsInsert(authInterceptors.has(sessionId), hasShellChannel(sessionId))) return;
   const text = stripControlChars(rawText);
   if (isAtPrompt(sessionId)) {
     const buf = commandBuffers.get(sessionId) ?? '';
