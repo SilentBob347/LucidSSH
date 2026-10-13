@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Breadcrumb } from '@shared/breadcrumb';
+import { buildCdCommand, type Breadcrumb } from '@shared/breadcrumb';
 import type { DashboardMetrics } from '@shared/dashboard';
 import type { InteractiveProgramName } from '@shared/interactivePrograms';
 import { insertIntoComposer } from '@/stores/composerBus';
@@ -180,7 +180,7 @@ export function BreadcrumbBar({
                       <button
                         type="button"
                         title={t('breadcrumb.insertCd')}
-                        onClick={() => insertIntoComposer(`cd ${seg.full}`)}
+                        onClick={() => insertIntoComposer(buildCdCommand(seg.full))}
                         className={`max-w-[160px] truncate hover:text-lavender-light hover:underline ${
                           isLast ? 'text-text-strong' : 'text-text-muted'
                         }`}

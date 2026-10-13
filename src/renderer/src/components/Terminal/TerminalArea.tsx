@@ -15,6 +15,7 @@ import {
   insertText,
   getPendingLine,
   confirmPendingLine,
+  pasteClipboardText,
   pasteText
 } from './XtermView';
 import { PastePreviewDialog } from './PastePreviewDialog';
@@ -296,14 +297,11 @@ export function TerminalArea(): JSX.Element {
   }, []);
 
   const handlePaste = useCallback((sessionId: string) => {
-    void window.lucidSSH.clipboardRead().then((text) => {
-      if (!text) return;
-      if (text.includes('\n') || text.includes('\r')) {
-        setPastePreview(text); // многострочная — предпросмотр (TERM-05)
-      } else {
-        insertText(sessionId, text);
-      }
-    });
+    // Многострочная — в предпросмотр (TERM-05); при активном промпте пароля —
+    // в маскированный перехватчик (SSH-06), как и остальные маршруты вставки.
+    void window.lucidSSH
+      .clipboardRead()
+      .then((text) => pasteClipboardText(sessionId, text, setPastePreview));
   }, []);
 
   return (

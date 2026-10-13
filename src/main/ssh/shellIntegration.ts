@@ -81,6 +81,8 @@ export const SHELL_INTEGRATION_SETUP =
 
 // eslint-disable-next-line no-control-regex
 const MARKER_RE = /\x1b_lucidssh([\s\S]*?)\x1b\\/;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS_RE = /[\x00-\x1f\x7f-\x9f]/g;
 
 /** Результат одного маркера: breadcrumb + код возврата последней команды. */
 export interface ShellMark {
@@ -270,23 +272,17 @@ function parseMarker(marker: string): ShellMark | null {
   // root без него — настоящий root-логин или `su -` (окружение вычищено).
   const privilege: Breadcrumb['privilege'] =
     euid === 0 ? (sudoUser ? 'sudo' : 'root') : 'normal';
+  // Маркер не аутентифицирован — его может подделать любой вывод сервера
+  // (`cat` файла, строка лога). Управляющие символы (C0, DEL, C1) из полей
+  // вырезаются: путь попадает в `cd` по клику и в отображение breadcrumb.
+  const clean = (field: string | undefined): string => (field ?? '').replace(CONTROL_CHARS_RE, '');
   const crumb: Breadcrumb = {
-    username: (username ?? '').slice(0, 64),
-    host: (host ?? '').slice(0, 128),
-    path: (path ?? '').slice(0, 4096),
+    username: clean(username).slice(0, 64),
+    host: clean(host).slice(0, 128),
+    path: clean(path).slice(0, 4096),
     privilege: Number.isFinite(euid) ? privilege : 'normal'
   };
   return { crumb, exitCode: Number.isInteger(exitNum) ? exitNum : null };
-}
-
-/**
- * Безопасное построение команды `cd` по клику на сегмент breadcrumb (BRD-02).
- * Путь берётся из данных сервера — оборачиваем в одинарные кавычки с
- * экранированием, чтобы недоверенный путь не расширялся shell'ом.
- */
-export function buildCdCommand(path: string): string {
-  const escaped = path.replace(/'/g, `'\\''`);
-  return `cd '${escaped}'`;
 }
 
 // ---------------------------------------------------------------------------
