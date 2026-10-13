@@ -12,7 +12,7 @@ import { getCurrentConfig } from '@/stores/config';
 import { attachTerminalWriter, dropTerminalBuffer } from '@/stores/terminalBuffer';
 import { Icon } from '@/components/common/Icon';
 import { reconcileEchoLine, redrawEchoLine } from './localEcho';
-import { classifyPaste, stripControlChars } from './pasteInput';
+import { acceptsInput, classifyPaste, stripControlChars } from './pasteInput';
 
 /**
  * xterm.js-вью одной сессии (TERM-01, TERM-04, TERM-07).
@@ -71,7 +71,7 @@ export function pasteClipboardText(
   onMultiline: (text: string) => void
 ): void {
   const intercept = authInterceptors.get(sessionId);
-  const route = classifyPaste(text, intercept !== undefined);
+  const route = classifyPaste(text, intercept !== undefined, hasShellChannel(sessionId));
   if (route === 'mask') intercept?.(text);
   else if (route === 'preview') onMultiline(text);
   else if (route === 'insert') insertText(sessionId, text);
@@ -134,6 +134,41 @@ const historyDraft = new Map<string, string>();
 function isAtPrompt(sessionId: string): boolean {
   return atPromptState.get(sessionId) ?? true;
 }
+
+/**
+ * Есть ли у сессии открытый Канал (статус 'connected'). Без него Набранной
+ * строки быть не может (CONTEXT.md): ввод, не забранный промптом пароля,
+ * отбрасывается (acceptsInput), а уход из 'connected' стирает уже набранное.
+ * Статус приходит событием main, которое эмитится в том же месте, где
+ * создаётся Канал (openShell). Дефолт true — на случай пропущенного события;
+ * 'connecting' эмитится при создании каждой сессии, так что окно не открыто.
+ */
+const shellChannelOpen = new Map<string, boolean>();
+
+function hasShellChannel(sessionId: string): boolean {
+  return shellChannelOpen.get(sessionId) ?? true;
+}
+
+/** Потеря Канала: Набранная строка и режим «внутри программы» не переживают
+ *  его — новый Канал начинает с пустой строки на промпте. Локальную историю
+ *  стрелок (commandHistories) не трогаем: это память сессии, не Канала. */
+function dropPendingLine(sessionId: string): void {
+  commandBuffers.delete(sessionId);
+  atPromptState.delete(sessionId);
+  historyIndex.delete(sessionId);
+  historyDraft.delete(sessionId);
+  echoStartCol.delete(sessionId);
+  disarmReconcile(sessionId);
+}
+
+// На загрузке модуля, не при первом терминале: терминал монтируется уже после
+// 'connecting' (а порой и после 'connected'), и подписка по требованию это
+// событие пропустила бы.
+window.lucidSSH.onSessionStatus((sessionId, status) => {
+  const open = status === 'connected';
+  shellChannelOpen.set(sessionId, open);
+  if (!open) dropPendingLine(sessionId);
+});
 
 function setShellStateUnknown(sessionId: string, v: boolean): void {
   if (shellStateUnknown.get(sessionId) === v) return;
@@ -393,6 +428,7 @@ export function destroyTerminal(sessionId: string): void {
     dropTerminalBuffer(sessionId);
     authInterceptors.delete(sessionId);
     clearSessionInputState(sessionId);
+    shellChannelOpen.delete(sessionId);
     c.term.dispose();
     c.container.remove();
     cache.delete(sessionId);
@@ -471,6 +507,7 @@ export function insertText(sessionId: string, rawText: string): void {
   // Тот же фильтр, что у набора с клавиатуры (processCommandChunk): иначе
   // ESC-последовательности из буфера обмена или из пути breadcrumb правят
   // локальное эхо, и показанная строка расходится с отправляемой.
+  if (!acceptsInput(authInterceptors.has(sessionId), hasShellChannel(sessionId))) return;
   const text = stripControlChars(rawText);
   if (isAtPrompt(sessionId)) {
     const buf = commandBuffers.get(sessionId) ?? '';
@@ -565,6 +602,8 @@ function createTerminal(sessionId: string): Cached {
       intercept(data);
       return;
     }
+    // Перехватчик промпта выше уже взял ввод — здесь auth не активен.
+    if (!acceptsInput(false, hasShellChannel(sessionId))) return; // отбрасывается молча
     if (!isAtPrompt(sessionId)) {
       // Внутри интерактивной программы (vim/htop) — сырой посимвольный поток,
       // Enter там значит не «выполнить команду». Кусок может оказаться целой
@@ -690,7 +729,11 @@ export function XtermView({
         'paste',
         (e: ClipboardEvent) => {
           const text = e.clipboardData?.getData('text') ?? '';
-          const route = classifyPaste(text, authInterceptors.has(sessionId));
+          const route = classifyPaste(
+            text,
+            authInterceptors.has(sessionId),
+            hasShellChannel(sessionId)
+          );
           if (route === 'mask' || route === 'preview') {
             e.preventDefault();
             e.stopPropagation();
