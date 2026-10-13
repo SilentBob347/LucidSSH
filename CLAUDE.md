@@ -224,7 +224,7 @@ Default canonical label vocabulary (`needs-triage`, `needs-info`, `ready-for-age
 
 ### Domain docs
 
-Single-context layout, but at a non-default path: `docs/agent/CONTEXT.md` (glossary + decision rationale only — `private/TZ.md` stays the requirements/ID registry) — **not created yet**, appears only when a genuine glossary term needs sharpening (see `docs/agent/domain.md`) — and ADRs split across `docs/agent/adr/` (published, architecture-only) and `private/adr/` (not published, business/legal).
+Single-context layout, but at a non-default path: `docs/agent/CONTEXT.md` (glossary + decision rationale only — `private/TZ.md` stays the requirements/ID registry; new terms are added only when a genuine glossary term needs sharpening, see `docs/agent/domain.md`) — and ADRs split across `docs/agent/adr/` (published, architecture-only) and `private/adr/` (not published, business/legal).
 
 ## graphify
 
