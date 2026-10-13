@@ -156,7 +156,9 @@ describe('listHistoryHosts', () => {
       hostId: 1,
       hostName: 'alpha'
     });
-  });
+    // 2001 отдельная запись в SQLite — на windows-раннере CI не укладывается в
+    // дефолтные 5 с (упало по таймауту 13.10.2026, локально ~1 с).
+  }, 30_000);
 
   it('имя хоста — из самой свежей строки', async () => {
     const repo = await freshRepo();

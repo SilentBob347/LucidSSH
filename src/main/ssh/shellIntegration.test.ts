@@ -4,7 +4,6 @@ import {
   CommandGate,
   EchoGate,
   SHELL_INTEGRATION_SETUP,
-  buildCdCommand,
   detectInteractiveProgram,
   endsWithInputPrompt,
   isShellEscalationCommand,
@@ -426,14 +425,15 @@ describe('BreadcrumbParser — управляющие последователь
     expect(cleaned).toBe('[H[2Jtop frame');
     expect(marks).toHaveLength(1);
   });
-});
 
-describe('buildCdCommand', () => {
-  it('оборачивает путь в кавычки', () => {
-    expect(buildCdCommand('/var/www')).toBe("cd '/var/www'");
-  });
-
-  it('экранирует одинарные кавычки в пути (защита от инъекции, §19)', () => {
-    expect(buildCdCommand("/tmp/a'b")).toBe("cd '/tmp/a'\\''b'");
+  it('поддельный маркер: управляющие символы из полей вырезаются', () => {
+    const parser = new BreadcrumbParser();
+    const forged = mk('ro\x1b[31mot', 'h\x07ost', '/srv/a\nid\r\x1b[2K\x7f\u009b1mb\tc', '1000');
+    const { marks } = parser.push(forged);
+    expect(marks[0]?.crumb).toMatchObject({
+      username: 'ro[31mot',
+      host: 'host',
+      path: '/srv/aid[2K1mbc'
+    });
   });
 });

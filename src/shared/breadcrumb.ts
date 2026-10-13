@@ -9,3 +9,16 @@ export interface Breadcrumb {
   path: string;
   privilege: 'normal' | 'sudo' | 'root';
 }
+
+/**
+ * Безопасное построение команды `cd` по клику на сегмент breadcrumb (BRD-02).
+ * Путь берётся из данных сервера — оборачиваем в одинарные кавычки с
+ * экранированием, чтобы недоверенный путь не расширялся shell'ом. Живёт в
+ * shared: строит команду renderer (BreadcrumbBar), main её не вызывает.
+ * Голый `~` — единственное исключение: в кавычках он перестал бы раскрываться.
+ */
+export function buildCdCommand(path: string): string {
+  if (path === '~') return 'cd ~';
+  const escaped = path.replace(/'/g, `'\\''`);
+  return `cd '${escaped}'`;
+}

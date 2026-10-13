@@ -12,6 +12,7 @@ import { getCurrentConfig } from '@/stores/config';
 import { attachTerminalWriter, dropTerminalBuffer } from '@/stores/terminalBuffer';
 import { Icon } from '@/components/common/Icon';
 import { reconcileEchoLine, redrawEchoLine } from './localEcho';
+import { classifyPaste, stripControlChars } from './pasteInput';
 
 /**
  * xterm.js-вью одной сессии (TERM-01, TERM-04, TERM-07).
@@ -56,13 +57,24 @@ const printedAuthPrompts = new Set<string>();
  * посимвольно, а не нативным вставлением в textarea: иначе секрет виден в
  * терминале открытым текстом (маскирование рассчитано на onData, не на
  * paste-событие) — найдено 22.07.2026 при живой проверке HM-12.
- * Возвращает true, если вставка поглощена перехватчиком (вызывающий останавливается).
+ *
+ *
+ * Точка вставки из буфера обмена для маршрутов, читающих его сами (правый
+ * клик = вставка, пункт «Вставить» контекстного меню, хоткей); решение — в
+ * classifyPaste, им же пользуется нативное paste-событие textarea. Раньше
+ * пункт меню шёл в insertText напрямую, мимо маскирования: пароль печатался
+ * открытым текстом после «Password:».
  */
-function maskPasteIfAuthPrompt(sessionId: string, text: string): boolean {
+export function pasteClipboardText(
+  sessionId: string,
+  text: string,
+  onMultiline: (text: string) => void
+): void {
   const intercept = authInterceptors.get(sessionId);
-  if (!intercept) return false;
-  intercept(text);
-  return true;
+  const route = classifyPaste(text, intercept !== undefined);
+  if (route === 'mask') intercept?.(text);
+  else if (route === 'preview') onMultiline(text);
+  else if (route === 'insert') insertText(sessionId, text);
 }
 
 /**
@@ -363,7 +375,9 @@ function processCommandChunk(sessionId: string, data: string): void {
       }
       continue;
     }
-    if (code >= 0x20 || ch === '\t') {
+    // stripControlChars — единое определение «печатного» с insertText: C1
+    // (U+0080–U+009F) формально ≥ 0x20, но xterm исполняет их как CSI/OSC.
+    if (stripControlChars(ch) !== '') {
       const buf = commandBuffers.get(sessionId) ?? '';
       if (buf.length === 0) markEchoStart(sessionId);
       commandBuffers.set(sessionId, buf + ch);
@@ -453,7 +467,11 @@ export function pasteText(sessionId: string, text: string): void {
  * локальным эхо (пройдёт Стража на следующем Enter, как обычный набор с
  * клавиатуры); вне промпта (внутри vim/htop) — идёт сырым текстом, как раньше.
  */
-export function insertText(sessionId: string, text: string): void {
+export function insertText(sessionId: string, rawText: string): void {
+  // Тот же фильтр, что у набора с клавиатуры (processCommandChunk): иначе
+  // ESC-последовательности из буфера обмена или из пути breadcrumb правят
+  // локальное эхо, и показанная строка расходится с отправляемой.
+  const text = stripControlChars(rawText);
   if (isAtPrompt(sessionId)) {
     const buf = commandBuffers.get(sessionId) ?? '';
     if (buf.length === 0 && text.length > 0) markEchoStart(sessionId);
@@ -660,9 +678,11 @@ export function XtermView({
     }
 
     // Перехват вставки: textarea появляется только после open() — вешаем один раз.
-    // При активном промпте пароля секрет маскируется (maskPasteIfAuthPrompt).
-    // Многострочный текст (вне промпта пароля) уходит в предпросмотр (TERM-05);
-    // одиночная строка (вне промпта пароля) — штатно через xterm.onData.
+    // Решение — тот же classifyPaste, что у остальных маршрутов: при активном
+    // промпте пароля секрет маскируется, многострочный текст уходит в
+    // предпросмотр (TERM-05). Одиночная строка остаётся нативной вставкой
+    // (xterm.onData, с bracketed paste для vim) — её фильтрует
+    // processCommandChunk, как набор с клавиатуры.
     const textarea = cached.term.textarea;
     if (textarea && !cached.pasteAttached) {
       cached.pasteAttached = true;
@@ -670,15 +690,11 @@ export function XtermView({
         'paste',
         (e: ClipboardEvent) => {
           const text = e.clipboardData?.getData('text') ?? '';
-          if (maskPasteIfAuthPrompt(sessionId, text)) {
+          const route = classifyPaste(text, authInterceptors.has(sessionId));
+          if (route === 'mask' || route === 'preview') {
             e.preventDefault();
             e.stopPropagation();
-            return;
-          }
-          if (text.includes('\n') || text.includes('\r')) {
-            e.preventDefault();
-            e.stopPropagation();
-            cbRef.current.onMultilinePaste(text);
+            pasteClipboardText(sessionId, text, cbRef.current.onMultilinePaste);
           }
         },
         true
@@ -704,12 +720,9 @@ export function XtermView({
       e.preventDefault();
       // TERM-04 правый клик = вставка: читаем буфер, многострочное — в предпросмотр
       if (getCurrentConfig()?.terminal.rightClickPaste) {
-        void window.lucidSSH.clipboardRead().then((text) => {
-          if (!text) return;
-          if (maskPasteIfAuthPrompt(sessionId, text)) return;
-          if (text.includes('\n') || text.includes('\r')) cbRef.current.onMultilinePaste(text);
-          else insertText(sessionId, text);
-        });
+        void window.lucidSSH
+          .clipboardRead()
+          .then((text) => pasteClipboardText(sessionId, text, cbRef.current.onMultilinePaste));
         return;
       }
       cbRef.current.onContextMenu(e.clientX, e.clientY);
