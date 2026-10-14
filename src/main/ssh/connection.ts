@@ -2,6 +2,7 @@ import { Client, type ClientChannel } from 'ssh2';
 import type { ConnectionPurpose } from '@shared/ssh';
 import { loadConfig } from '../config/store';
 import { requestHostKeyDecision, HOSTKEY_DECISION_TIMEOUT_MS, type HostKeyDecisionLogger } from './hostKeyDecision';
+import { preferredHostKeyAlgorithms } from './knownHosts';
 
 /**
  * Одно Соединение до `ready` включительно (ADR-0017, `.scratch/open-connection/spec.md`).
@@ -192,6 +193,16 @@ export function openConnection(
     };
 
     if (options.sock) connectConfig.sock = options.sock;
+
+    // Доверенные типы ключа хоста — первыми, остальные не исключаются (ADR-0019):
+    // исключающий список ронял бы handshake вместо модалки смены. `remove` перед
+    // `prepend` обязателен: ssh2 применяет операции по порядку ключей, а prepend
+    // пропускает алгоритм, который уже стоит в списке по умолчанию. Пустой
+    // `append` — только ради @types/ssh2, где все три ключа обязательны.
+    const preferred = preferredHostKeyAlgorithms(target.address, target.port);
+    if (preferred.length > 0) {
+      connectConfig.algorithms = { serverHostKey: { remove: preferred, prepend: preferred, append: [] } };
+    }
 
     // Пустой пароль не передаётся в connectConfig.password (ADR-0017,
     // расхождение 3 спеки PR-1) — иначе ssh2 реально отправляет попытку входа

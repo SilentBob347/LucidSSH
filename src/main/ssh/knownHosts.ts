@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import type { ServerHostKeyAlgorithm } from 'ssh2';
 import { configDir } from '../config/store';
 
 /**
@@ -64,21 +65,46 @@ export function listKnownHosts(): KnownHostEntry[] {
   }
 }
 
-/** Ищет сохранённый ключ данного типа для host:port. */
-export function findKnownKey(
+function matchesHost(hostPattern: string, token: string): boolean {
+  // hostPattern может содержать несколько host'ов через запятую
+  return hostPattern.split(',').some((h) => h === token);
+}
+
+/** Все сохранённые ключи host:port, любого типа (ADR-0019: единица доверия —
+ *  адрес:порт, а не пара адрес:порт + тип ключа). */
+export function findKnownKeys(
   address: string,
-  port: number,
-  keyType: string
-): { keyBase64: string } | null {
+  port: number
+): { keyType: string; keyBase64: string }[] {
   const token = hostToken(address, port);
-  for (const e of listKnownHosts()) {
-    if (e.keyType !== keyType) continue;
-    // hostPattern может содержать несколько host'ов через запятую
-    if (e.hostPattern.split(',').some((h) => h === token)) {
-      return { keyBase64: e.keyBase64 };
-    }
-  }
-  return null;
+  return listKnownHosts()
+    .filter((e) => matchesHost(e.hostPattern, token))
+    .map((e) => ({ keyType: e.keyType, keyBase64: e.keyBase64 }));
+}
+
+/** Тип ключа в known_hosts → алгоритмы подписи ssh2, в порядке его списка по
+ *  умолчанию. RSA-ключ хранится как `ssh-rsa`, а согласуется одним из трёх.
+ *  Мусорный тип после ручной правки отбрасывается: незнакомое ssh2 имя в
+ *  `algorithms` роняет connect(). `ssh-dss` ssh2 знает, но по умолчанию не
+ *  предлагает — отброшен намеренно, чтобы предпочтение не включало DSA обратно. */
+const HOST_KEY_ALGORITHMS: [keyType: string, algorithms: ServerHostKeyAlgorithm[]][] = [
+  ['ssh-ed25519', ['ssh-ed25519']],
+  ['ecdsa-sha2-nistp256', ['ecdsa-sha2-nistp256']],
+  ['ecdsa-sha2-nistp384', ['ecdsa-sha2-nistp384']],
+  ['ecdsa-sha2-nistp521', ['ecdsa-sha2-nistp521']],
+  ['ssh-rsa', ['rsa-sha2-512', 'rsa-sha2-256', 'ssh-rsa']]
+];
+
+/**
+ * Алгоритмы ключа хоста, которые надо предложить серверу первыми: у доверенных
+ * ключей хоста. Честный сервер, у которого просто появился новый тип, согласует
+ * доверенный и тревоги смены не получает; до смены доходит только сервер, у
+ * которого не осталось ни одного доверенного типа (ADR-0019). Пусто — хост
+ * неизвестен, ssh2 согласует по своему списку.
+ */
+export function preferredHostKeyAlgorithms(address: string, port: number): ServerHostKeyAlgorithm[] {
+  const stored = new Set(findKnownKeys(address, port).map((k) => k.keyType));
+  return HOST_KEY_ALGORITHMS.filter(([keyType]) => stored.has(keyType)).flatMap(([, algorithms]) => algorithms);
 }
 
 /** Тип ключа из блоба host key (первое length-prefixed поле). */
@@ -100,8 +126,10 @@ export function addKnownKey(address: string, port: number, keyType: string, rawK
   appendFileSync(knownHostsPath(), line, 'utf8');
 }
 
-/** Замена ключа после ЯВНОГО решения пользователя при смене fingerprint (SSH-04). */
-export function replaceKnownKey(
+/** Замена после ЯВНОГО решения пользователя при смене fingerprint (SSH-04):
+ *  удаляются ВСЕ ключи host:port, любого типа, — у хоста один доверенный ключ
+ *  (ADR-0019). Строка с несколькими host'ами через запятую удаляется целиком. */
+export function replaceHostKeys(
   address: string,
   port: number,
   keyType: string,
@@ -113,8 +141,7 @@ export function replaceKnownKey(
   const kept = lines.filter((line) => {
     const parts = line.trim().split(/\s+/);
     if (parts.length < 3) return true;
-    const sameHost = parts[0]!.split(',').some((h) => h === token);
-    return !(sameHost && parts[1] === keyType);
+    return !matchesHost(parts[0]!, token);
   });
   const content = kept.join('\n').replace(/\n+$/, '');
   writeFileSync(path, (content ? content + '\n' : '') , 'utf8');
