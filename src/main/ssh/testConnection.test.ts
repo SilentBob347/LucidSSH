@@ -15,6 +15,7 @@ vi.mock('./hostKeyDecision', () => ({
   requestHostKeyDecision: vi.fn(),
   HOSTKEY_DECISION_TIMEOUT_MS: 300_000
 }));
+vi.mock('./knownHosts', () => ({ preferredHostKeyAlgorithms: vi.fn((): string[] => []) }));
 // Реального файла ключа в тестовом окружении нет — только один тест
 // (authMethod: 'key' для bastion) задаёт непустой возврат.
 vi.mock('./keys', () => ({

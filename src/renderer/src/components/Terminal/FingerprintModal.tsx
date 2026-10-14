@@ -94,14 +94,19 @@ export function FingerprintModal({
           </div>
         )}
 
-        {changed && prompt.previousFingerprint && (
+        {/* Все прежние ключи с типом — accept удалит их все, а без типа два
+            отпечатка разных типов выглядят как ротация одного ключа (ADR-0019). */}
+        {changed && prompt.previousKeys.length > 0 && (
           <div className="mx-[18px] mt-[14px] rounded-[4px] border border-[rgba(255,255,255,0.1)] bg-bg-panel px-3 py-[10px]">
             <div className="text-[10.5px] font-semibold text-text-dim uppercase">
-              {t('fp.previous')}
+              {t('fp.previous', { count: prompt.previousKeys.length })}
             </div>
-            <div className="mt-1 font-mono text-[12.5px] break-all text-text-muted">
-              {prompt.previousFingerprint}
-            </div>
+            {prompt.previousKeys.map((k, i) => (
+              // Индекс в ключе: после ручной правки файла один ключ может лежать дважды.
+              <div key={`${i}:${k.fingerprint}`} className="mt-1 font-mono text-[12.5px] break-all text-text-muted">
+                {k.keyType} · {k.fingerprint}
+              </div>
+            ))}
           </div>
         )}
 
@@ -119,7 +124,7 @@ export function FingerprintModal({
             <div
               className={`font-mono text-[12.5px] break-all ${changed ? 'text-warning-text' : 'text-success-bright'}`}
             >
-              {prompt.fingerprintSha256}
+              {changed ? `${prompt.keyType} · ${prompt.fingerprintSha256}` : prompt.fingerprintSha256}
             </div>
           </div>
           <button

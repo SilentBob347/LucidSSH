@@ -7,15 +7,18 @@ vi.mock('./hostKeyDecision', () => ({
   requestHostKeyDecision: vi.fn(),
   HOSTKEY_DECISION_TIMEOUT_MS: 300_000
 }));
+vi.mock('./knownHosts', () => ({ preferredHostKeyAlgorithms: vi.fn((): string[] => []) }));
 vi.mock('../config/store', () => ({ loadConfig: vi.fn() }));
 
 import { loadConfig } from '../config/store';
 import { requestHostKeyDecision, type RequestHostKeyDecisionParams } from './hostKeyDecision';
+import { preferredHostKeyAlgorithms } from './knownHosts';
 import { openConnection, __setConnectionFactoryForTest, type ConnectionTarget } from './connection';
 import { makeFakeConnection } from './fakeConnection';
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockRequestHostKeyDecision = vi.mocked(requestHostKeyDecision);
+const mockPreferredHostKeyAlgorithms = vi.mocked(preferredHostKeyAlgorithms);
 
 const fakeConfig = (): AppConfig =>
   ({
@@ -386,5 +389,34 @@ describe('openConnection', () => {
     const negotiated = { kex: 'curve25519-sha256', cs: { cipher: 'aes256-gcm', mac: '' } };
     emit('handshake', negotiated);
     expect(onHandshake).toHaveBeenCalledWith(negotiated);
+  });
+
+  it('у хоста есть доверенные ключи → их алгоритмы первыми (remove + prepend), остальные не исключены', () => {
+    mockPreferredHostKeyAlgorithms.mockReturnValueOnce(['ecdsa-sha2-nistp256']);
+    const { connection } = makeFakeConnection();
+    __setConnectionFactoryForTest(() => connection);
+
+    openConnection(target, { kind: 'password', password: 'pw' }, { purpose: 'session' });
+
+    expect(mockPreferredHostKeyAlgorithms).toHaveBeenCalledWith('10.0.0.5', 22);
+    const connectConfig = vi.mocked(connection.connect).mock.calls[0]?.[0];
+    // Порядок ключей несущий: ssh2 применяет операции по Object.keys, а prepend
+    // пропускает алгоритм, уже стоящий в списке, — без remove перед ним порядок
+    // не изменился бы.
+    expect(Object.keys(connectConfig?.algorithms?.serverHostKey ?? {}).slice(0, 2)).toEqual(['remove', 'prepend']);
+    expect(connectConfig?.algorithms?.serverHostKey).toEqual({
+      remove: ['ecdsa-sha2-nistp256'],
+      prepend: ['ecdsa-sha2-nistp256'],
+      append: []
+    });
+  });
+
+  it('неизвестный хост → algorithms не задаётся, ssh2 согласует по умолчанию', () => {
+    const { connection } = makeFakeConnection();
+    __setConnectionFactoryForTest(() => connection);
+
+    openConnection(target, { kind: 'password', password: 'pw' }, { purpose: 'session' });
+
+    expect(vi.mocked(connection.connect).mock.calls[0]?.[0]?.algorithms).toBeUndefined();
   });
 });

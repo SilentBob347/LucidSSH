@@ -24,8 +24,13 @@ export interface HostKeyPrompt {
   address: string;
   port: number;
   fingerprintSha256: string;
+  /** Тип предъявленного ключа (`ssh-ed25519`, `ssh-rsa`, …) — модалка смены
+   *  подписывает его у отпечатка, ADR-0019. */
+  keyType: string;
   isChanged: boolean; // true → ключ изменился, соединение заблокировано (SSH-04)
-  previousFingerprint?: string;
+  /** Все доверенные ключи хоста — те, что accept в сценарии смены удалит.
+   *  Пусто при первом подключении. */
+  previousKeys: { keyType: string; fingerprint: string }[];
   /** Зачем подняли промпт — влияет только на подписи кнопок (модалка одна и та
    *  же для обоих поводов): 'session' — реальное подключение, 'test' — кнопка
    *  «Проверить соединение» (ADR-0016), где после accept подключение не

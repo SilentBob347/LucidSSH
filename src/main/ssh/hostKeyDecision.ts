@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { ConnectionLogEntry, ConnectionPurpose, HostKeyPrompt } from '@shared/ssh';
 import { IPC } from '@shared/ipc';
 import { emit } from '../ipc/events';
-import { addKnownKey, findKnownKey, keyTypeFromBlob, replaceKnownKey, sha256Fingerprint } from './knownHosts';
+import { addKnownKey, findKnownKeys, keyTypeFromBlob, replaceHostKeys, sha256Fingerprint } from './knownHosts';
 
 /**
  * Доверие ключу хоста — одно решение на каждое Соединение (ADR-0016,
@@ -66,15 +66,18 @@ export function requestHostKeyDecision(params: RequestHostKeyDecisionParams): vo
   const fingerprint = sha256Fingerprint(rawKey);
   logger?.('info', 'clog.hostkeyReceived', { keyType, fingerprint });
 
-  const known = findKnownKey(address, port, keyType);
+  // Совпадение с любым доверенным ключом хоста — совпадение; ключ, не
+  // совпавший ни с одним, — смена, какого бы типа он ни был (ADR-0019).
+  const known = findKnownKeys(address, port);
+  const presented = rawKey.toString('base64');
 
-  if (known && known.keyBase64 === rawKey.toString('base64')) {
+  if (known.some((k) => k.keyBase64 === presented)) {
     logger?.('info', 'clog.hostkeyKnown');
     verify(true);
     return;
   }
 
-  const isChanged = known !== null;
+  const isChanged = known.length > 0;
   const requestId = randomUUID();
   const timeout = setTimeout(() => {
     const p = pending.get(requestId);
@@ -104,8 +107,12 @@ export function requestHostKeyDecision(params: RequestHostKeyDecisionParams): vo
     address,
     port,
     fingerprintSha256: fingerprint,
+    keyType,
     isChanged,
-    previousFingerprint: known ? sha256Fingerprint(Buffer.from(known.keyBase64, 'base64')) : undefined,
+    previousKeys: known.map((k) => ({
+      keyType: k.keyType,
+      fingerprint: sha256Fingerprint(Buffer.from(k.keyBase64, 'base64'))
+    })),
     purpose
   };
   emit(IPC.evHostKeyPrompt, prompt);
@@ -121,7 +128,7 @@ export function applyHostKeyDecision(requestId: string, decision: 'accept' | 're
 
   if (decision === 'accept') {
     if (p.isChanged) {
-      replaceKnownKey(p.address, p.port, p.keyType, p.rawKey);
+      replaceHostKeys(p.address, p.port, p.keyType, p.rawKey);
       p.logger?.('warn', 'clog.hostkeyReplaced');
     } else {
       addKnownKey(p.address, p.port, p.keyType, p.rawKey);

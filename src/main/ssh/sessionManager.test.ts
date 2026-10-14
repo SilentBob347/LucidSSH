@@ -15,9 +15,10 @@ vi.mock('../config/store', () => ({ loadConfig: vi.fn(), updateConfig: vi.fn() }
 vi.mock('../window/mainWindow', () => ({ getMainWindow: vi.fn(() => null) }));
 vi.mock('./knownHosts', () => ({
   addKnownKey: vi.fn(),
-  findKnownKey: vi.fn(() => null),
+  findKnownKeys: vi.fn(() => []),
   keyTypeFromBlob: vi.fn(() => 'ssh-ed25519'),
-  replaceKnownKey: vi.fn(),
+  replaceHostKeys: vi.fn(),
+  preferredHostKeyAlgorithms: vi.fn((): string[] => []),
   sha256Fingerprint: vi.fn(() => 'sha256:fake')
 }));
 vi.mock('./dashboard', () => ({ startDashboard: vi.fn(), stopDashboard: vi.fn() }));
