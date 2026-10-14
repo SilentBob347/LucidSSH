@@ -140,3 +140,13 @@ describe('validateHistoryHostId', () => {
     }
   });
 });
+
+describe('validateHostInput — keyPath', () => {
+  const base = { name: 'a', address: 'h', port: 22, username: 'u', authMethod: 'key', guardEnabled: true, historyEnabled: true };
+  it.each(['\\\\s\\x', '//s/x', '\\\\?\\C:\\k', '\\\\.\\pipe\\x', '\\??\\UNC\\s\\x'])('отклоняет %j', (keyPath) => {
+    expect(() => validateHostInput({ ...base, keyPath })).toThrow('network path');
+  });
+  it.each(['C:\\Users\\me\\.ssh\\id', '~/.ssh/id', 'keys/id'])('пропускает %j', (keyPath) => {
+    expect(validateHostInput({ ...base, keyPath }).keyPath).toBe(keyPath);
+  });
+});

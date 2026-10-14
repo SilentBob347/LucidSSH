@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
 import { utils } from 'ssh2';
+import { isNetworkPath } from '@shared/hosts';
 
 /**
  * Загрузка приватного ключа (SSH-02, §11 гайда):
@@ -20,6 +21,8 @@ export class PrivateKeyError extends Error {
 }
 
 export function loadPrivateKey(keyPath: string, passphrase?: string): Buffer {
+  // Хост из БД мог быть сохранён до запрета сетевых путей — не обращаемся к ФС.
+  if (isNetworkPath(keyPath)) throw new PrivateKeyError('not-found');
   let stat;
   try {
     stat = statSync(keyPath);

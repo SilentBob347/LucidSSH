@@ -1,4 +1,4 @@
-import type { Host, HostGroup, HostInput, ImportPreview } from '@shared/hosts';
+import { isNetworkPath, type Host, type HostGroup, type HostInput, type ImportPreview } from '@shared/hosts';
 import { validateHostInput } from './validate';
 import { keyFileExists } from './keyFile';
 import { resolveHostRefByName } from './resolveByName';
@@ -86,7 +86,12 @@ export class ImportFormatError extends Error {
 }
 
 /** Парсит и валидирует файл импорта. Бросает ImportFormatError с понятной причиной. */
-export function parseImportFile(json: string): { hosts: HostInput[]; groups: string[] } {
+export function parseImportFile(json: string): {
+  hosts: HostInput[];
+  groups: string[];
+  /** Записи с UNC/device-путём к ключу: пропущены, а не роняют весь импорт. */
+  invalidCount: number;
+} {
   if (json.length > 5_000_000) throw new ImportFormatError('file too large');
   let parsed: unknown;
   try {
@@ -109,12 +114,17 @@ export function parseImportFile(json: string): { hosts: HostInput[]; groups: str
   const hosts: HostInput[] = [];
   const hostGroupNames: (string | undefined)[] = [];
   const hostProxyJumpNames: (string | undefined)[] = [];
+  let invalidCount = 0;
 
   for (const rawHost of root['hosts']) {
     if (typeof rawHost !== 'object' || rawHost === null) {
       throw new ImportFormatError('host entry is not an object');
     }
     const rec = rawHost as Record<string, unknown>;
+    if (typeof rec['keyPath'] === 'string' && isNetworkPath(rec['keyPath'])) {
+      invalidCount++;
+      continue;
+    }
     const groupName =
       typeof rec['group'] === 'string' && rec['group'].length > 0 && rec['group'].length <= 60
         ? rec['group']
@@ -157,14 +167,15 @@ export function parseImportFile(json: string): { hosts: HostInput[]; groups: str
           proxyJumpName: hostProxyJumpNames[i]
         }) as HostInputWithGroup
     ),
-    groups: [...groupNames]
+    groups: [...groupNames],
+    invalidCount
   };
 }
 
 export type HostInputWithGroup = HostInput & { groupName?: string; proxyJumpName?: string };
 
 export function previewImport(json: string): ImportPreview {
-  const { hosts } = parseImportFile(json);
+  const { hosts, invalidCount } = parseImportFile(json);
   let toAdd = 0;
   let missingKeyCount = 0;
   const conflicts: ImportPreview['conflicts'] = [];
@@ -178,7 +189,7 @@ export function previewImport(json: string): ImportPreview {
       missingKeyCount++;
     }
   }
-  return { toAdd, toSkip: conflicts.length, conflicts, missingKeyCount };
+  return { toAdd, toSkip: conflicts.length, conflicts, missingKeyCount, invalidCount };
 }
 
 /** Импорт: конфликт (address+username совпали) — пропустить или переименовать (EXP-02). */

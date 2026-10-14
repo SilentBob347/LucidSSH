@@ -1,4 +1,4 @@
-import type { AuthMethod, HostInput } from '@shared/hosts';
+import { isNetworkPath, type AuthMethod, type HostInput } from '@shared/hosts';
 import { QUICK_CONNECT_HOST_ID } from '@shared/quickConnect';
 import { IpcValidationError } from '../ipc/validate';
 
@@ -32,6 +32,15 @@ function str(v: unknown, name: string, maxLen: number, required: boolean): strin
   return v;
 }
 
+/** Путь к ключу: UNC/device-пути отклоняются до любого обращения к ФС (SEC-02). */
+export function validateKeyPath(v: unknown, required: boolean): string | undefined {
+  const keyPath = str(v, 'keyPath', MAX.keyPath, required);
+  if (keyPath !== undefined && isNetworkPath(keyPath)) {
+    throw new IpcValidationError('keyPath: network path not allowed');
+  }
+  return keyPath;
+}
+
 export function validateHostInput(raw: unknown): HostInput {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new IpcValidationError('hostInput: object expected');
@@ -57,7 +66,7 @@ export function validateHostInput(raw: unknown): HostInput {
     throw new IpcValidationError('authMethod: password|key expected');
   }
 
-  const keyPath = str(r['keyPath'], 'keyPath', MAX.keyPath, authMethod === 'key');
+  const keyPath = validateKeyPath(r['keyPath'], authMethod === 'key');
 
   let groupId: number | undefined;
   if (r['groupId'] !== undefined && r['groupId'] !== null) {

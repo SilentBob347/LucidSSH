@@ -941,3 +941,47 @@ describe('пункт 7 — i18nGetResource: путь только из пров�
     expect(relative(join(stand.repoRoot, 'assets', 'locales', 'ru'), calledPath)).toBe('common.json');
   });
 });
+
+describe('UNC/device-путь к ключу отклоняется на каждом входе, ФС и БД не тронуты', () => {
+  const NETWORK_PATHS = [
+    '\\\\evil\\share\\id',
+    '//evil/share/id',
+    '\\\\?\\UNC\\evil\\share',
+    '\\\\.\\pipe\\x',
+    '\\/evil/x',
+    '  \\\\evil\\s'
+  ];
+  const keyHost = (keyPath: string) => validHostInput({ authMethod: 'key', keyPath });
+
+  it.each(NETWORK_PATHS)('hosts:create %j — отказ, createHost не вызван', async (p) => {
+    const result = await invoke(IPC.hostCreate, mainEvent(), keyHost(p), undefined);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBeInstanceOf(IpcValidationError);
+    expect(vi.mocked(hostsRepositoryModule.createHost)).not.toHaveBeenCalled();
+  });
+
+  it.each(NETWORK_PATHS)('hosts:update %j — отказ, updateHost не вызван', async (p) => {
+    const result = await invoke(IPC.hostUpdate, mainEvent(), 1, keyHost(p), undefined);
+    expect(result.ok).toBe(false);
+    expect(vi.mocked(hostsRepositoryModule.updateHost)).not.toHaveBeenCalled();
+  });
+
+  it.each(NETWORK_PATHS)('session:testConnection %j — отказ, testConnection не вызван', async (p) => {
+    const result = await invoke(IPC.sessionTestConnection, mainEvent(), keyHost(p), undefined, undefined);
+    expect(result.ok).toBe(false);
+    expect(vi.mocked(testConnectionModule.testConnection)).not.toHaveBeenCalled();
+  });
+
+  it.each(NETWORK_PATHS)('hosts:keyFileExists %j — отказ, keyFileExists не вызван', async (p) => {
+    const result = await invoke(IPC.hostKeyFileExists, mainEvent(), p);
+    expect(result.ok).toBe(false);
+    expect(vi.mocked(keyFileModule.keyFileExists)).not.toHaveBeenCalled();
+  });
+
+  it('hosts:keyFileExists — обычный путь доходит до keyFileExists (контроль)', async () => {
+    vi.mocked(keyFileModule.keyFileExists).mockReturnValue(true);
+    const result = await invoke(IPC.hostKeyFileExists, mainEvent(), 'C:\\keys\\id');
+    expect(result).toEqual({ ok: true, value: true });
+  });
+});
