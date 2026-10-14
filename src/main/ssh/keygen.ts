@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { KeygenGenerateRequest, KeygenGenerateResult, PendingKeyDeployment } from '@shared/keygen';
 import { loadConfig, updateConfig } from '../config/store';
@@ -41,9 +41,13 @@ export function keyFileSlug(name: string, username: string, address: string): st
   return slug.length > 0 ? slug : 'key';
 }
 
-function execFileP(file: string, args: string[]): Promise<{ stdout: string }> {
+function execFileP(
+  file: string,
+  args: string[],
+  env?: NodeJS.ProcessEnv
+): Promise<{ stdout: string }> {
   return new Promise((resolve, reject) => {
-    execFile(file, args, { windowsHide: true, timeout: EXEC_FILE_TIMEOUT_MS }, (err, stdout) => {
+    execFile(file, args, { windowsHide: true, timeout: EXEC_FILE_TIMEOUT_MS, env }, (err, stdout) => {
       if (err) reject(err);
       else resolve({ stdout });
     });
@@ -123,16 +127,50 @@ function sanitizeComment(s: string): string {
   return s.replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 64);
 }
 
-/** Шаг 2 мастера: навесить passphrase на только что созданный ключ (была пустая). */
+/** askpass-хелпер: печатает passphrase из своего окружения. Delayed expansion
+ *  (`!VAR!`) не разбирает значение повторно — `& | < > ^ % "` выводятся как есть;
+ *  `echo(` — чтобы значение вида `/?` не стало ключом echo. */
+const ASKPASS_VAR = 'LUCIDSSH_ASKPASS';
+const ASKPASS_CMD = `@echo off\r\nsetlocal EnableDelayedExpansion\r\necho(!${ASKPASS_VAR}!\r\n`;
+/** Ответ askpass ssh-keygen читает в буфер 1024 байта: длиннее — молча обрежет,
+ *  и сохранённая полная passphrase ключ не откроет. */
+const ASKPASS_MAX_BYTES = 1023;
+
+/**
+ * Шаг 2 мастера: навесить passphrase на только что созданный ключ (была пустая).
+ * Не через `-N <passphrase>`: командная строка процесса видна любому процессу
+ * пользователя и пишется аудитом (Event 4688, Sysmon, EDR). ssh-keygen сам
+ * спрашивает новую passphrase (дважды) у SSH_ASKPASS, а тот берёт её из
+ * унаследованного окружения — в argv ни ssh-keygen, ни cmd её нет.
+ * Проверено на OpenSSH_for_Windows 9.5p1; SSH_ASKPASS_REQUIRE — с OpenSSH 8.4.
+ */
 export async function applyPassphrase(keyPath: string, passphrase: string): Promise<boolean> {
   if (!generatedThisRun.has(keyPath)) return false;
+  if (Buffer.byteLength(passphrase, 'utf8') > ASKPASS_MAX_BYTES) return false;
   const bin = await findSshKeygen();
   if (!bin) return false;
+  let dir: string | undefined;
   try {
-    await execFileP(bin, ['-q', '-p', '-P', '', '-N', passphrase, '-f', keyPath]);
+    dir = mkdtempSync(join(tmpdir(), 'lucidssh-askpass-'));
+    const askpass = join(dir, 'askpass.cmd');
+    writeFileSync(askpass, ASKPASS_CMD);
+    await execFileP(bin, ['-q', '-p', '-P', '', '-f', keyPath], {
+      ...process.env,
+      SSH_ASKPASS: askpass,
+      SSH_ASKPASS_REQUIRE: 'force',
+      [ASKPASS_VAR]: passphrase
+    });
     return true;
   } catch {
     return false;
+  } finally {
+    // Ключ уже зашифрован — неудача уборки (антивирус держит .cmd) не должна
+    // превращать успех в отказ; в скрипте нет секрета, остаток в %TEMP% безвреден.
+    try {
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* см. выше */
+    }
   }
 }
 
