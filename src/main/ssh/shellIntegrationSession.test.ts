@@ -170,6 +170,69 @@ describe('ShellIntegrationSession — запрос пароля (TERM-09)', () =
     const afterMark = box.feed(mk('u', 'h', '/', '1000', '0'));
     expect(afterMark.events.some((e) => e.kind === 'password-prompt')).toBe(false);
   });
+
+  it('запрос пароля после маркера в том же чанке (многострочная вставка) — событие после breadcrumb', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.sendRawInput('cd /tmp\nsudo apt update\n');
+    const result = box.feed(`${mk('u', 'h', '/tmp', '1000', '0')}$ sudo apt update\r\n[sudo] password for u: `);
+    // renderer применяет события по порядку: breadcrumb возвращает «на промпт»,
+    // запрос пароля обязан прийти ПОСЛЕ него, иначе пароль уйдёт с эхом
+    const kinds = result.events.map((e) => e.kind);
+    expect(kinds.indexOf('password-prompt')).toBeGreaterThan(kinds.indexOf('breadcrumb'));
+    expect(kinds.indexOf('breadcrumb')).toBeGreaterThanOrEqual(0);
+  });
+
+  it('запрос пароля до маркера в том же чанке уже завершён — события нет', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    const result = box.feed(`Password: \r\nsu: Authentication failure\r\n${mk('u', 'h', '/', '1000', '1')}`);
+    expect(result.events.some((e) => e.kind === 'password-prompt')).toBe(false);
+  });
+
+  it('ответ на запрос пароля через конвейер команд не попадает в историю и не становится командой', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    // многострочная вставка: команда уходит сырой, renderer считает себя на промпте
+    box.sendRawInput('sudo apt update\n');
+    box.feed('sudo apt update\r\n[sudo] password for u: ');
+
+    const sent = box.writeCommand('hunter2');
+    expect(sent.toWrite).toBe('hunter2\n');
+    expect(box.runningCommand()).toBeNull();
+
+    const done = box.feed(`\r\nok\r\n${mk('u', 'h', '/', '1000', '0')}`);
+    expect(done.events).toContainEqual(expect.objectContaining({ kind: 'command-finished', command: '' }));
+  });
+
+  it('реинжект после пароля без маркера не оставляет сессию в режиме «ответ на пароль»', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.writeCommand('sudo -i');
+    box.feed('sudo -i\r\n[sudo] password for u: ');
+    box.sendRawInput('hunter2\n');
+    box.feed('\r\n');
+    box.tick('reinject');
+    // маркер так и не пришёл — renderer по integration-unconfirmed снова на промпте
+    expect(box.tick('echo-flush').events).toContainEqual({ kind: 'integration-unconfirmed' });
+
+    box.writeCommand('ls');
+    expect(box.runningCommand()).toBe('ls');
+  });
+
+  it('запрос пароля после набранной команды — в историю идёт команда, не пароль', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.writeCommand('sudo apt update');
+    box.feed('sudo apt update\r\n[sudo] password for u: ');
+    box.writeCommand('hunter2');
+    expect(box.runningCommand()).toBe('sudo apt update');
+
+    const done = box.feed(`\r\nok\r\n${mk('u', 'h', '/', '1000', '0')}`);
+    expect(done.events).toContainEqual(
+      expect.objectContaining({ kind: 'command-finished', command: 'sudo apt update' })
+    );
+  });
 });
 
 describe('ShellIntegrationSession — ash/BusyBox (маркер через PS1, без PROMPT_COMMAND)', () => {

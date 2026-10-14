@@ -149,9 +149,10 @@ function hasShellChannel(sessionId: string): boolean {
   return shellChannelOpen.get(sessionId) ?? true;
 }
 
-/** Потеря Канала: Набранная строка и режим «внутри программы» не переживают
- *  его — новый Канал начинает с пустой строки на промпте. Локальную историю
- *  стрелок (commandHistories) не трогаем: это память сессии, не Канала. */
+/** Потеря Канала (и запрос пароля, см. markPasswordPrompt): Набранная строка
+ *  и режим «внутри программы» не переживают его — новый Канал начинает с
+ *  пустой строки на промпте. Локальную историю стрелок (commandHistories) не
+ *  трогаем: это память сессии, не Канала. */
 function dropPendingLine(sessionId: string): void {
   commandBuffers.delete(sessionId);
   atPromptState.delete(sessionId);
@@ -193,12 +194,22 @@ function markIntegrationUnconfirmed(sessionId: string): void {
   setShellStateUnknown(sessionId, true);
 }
 
+/** Сервер спросил пароль (TERM-09, детекция в main) — сигнал авторитетен:
+ *  до следующего маркера ввод сырой, без локального эха и мимо конвейера
+ *  команд (иначе пароль печатается открыто и уходит в историю). Набранное
+ *  до запроса отбрасываем — иначе оно приклеится к следующей команде. */
+function markPasswordPrompt(sessionId: string): void {
+  dropPendingLine(sessionId);
+  atPromptState.set(sessionId, false);
+}
+
 let breadcrumbSubscribed = false;
 function ensureBreadcrumbSubscription(): void {
   if (breadcrumbSubscribed) return;
   breadcrumbSubscribed = true;
   window.lucidSSH.onBreadcrumb((sessionId) => markAtPrompt(sessionId));
   window.lucidSSH.onIntegrationUnconfirmed((sessionId) => markIntegrationUnconfirmed(sessionId));
+  window.lucidSSH.onPasswordPrompt((sessionId) => markPasswordPrompt(sessionId));
 }
 
 /** Отменяет отложенную сверку (таймер-страховку) — вызывается после того,
@@ -529,7 +540,15 @@ export function insertText(sessionId: string, rawText: string): void {
  *  открывает DangerGuardModal, как заблокированная команда на промпте. */
 async function sendRawChecked(sessionId: string, text: string): Promise<void> {
   const result = await window.lucidSSH.sendTerminalInput(sessionId, text);
-  if (result.status === 'blocked') {
+  if (result.status === 'sent') {
+    // Ушёл перевод строки — шелл что-то запускает: до следующего маркера мы
+    // не на промпте (программа может спросить секрет без эха — sudo, gpg,
+    // read -s). Только по 'sent': заблокированная Стражем вставка ничего не
+    // запустила, а сырой посимвольный ввод Стража не проходит. Маркер не
+    // обгонит этот ответ: main пишет в канал синхронно в обработчике, ответ
+    // invoke уходит раньше, чем сервер успеет ответить по сети.
+    if (text.includes('\n')) atPromptState.set(sessionId, false);
+  } else if (result.status === 'blocked') {
     dangerListeners.get(sessionId)?.(result.prompt);
   } else if (result.status === 'access-risk') {
     accessRiskListeners.get(sessionId)?.(result.prompt);

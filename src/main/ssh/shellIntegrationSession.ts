@@ -145,15 +145,6 @@ export class ShellIntegrationSession {
       }
     }
 
-    // TERM-09: явный запрос пароля — событие только на нарастающем фронте.
-    if (display) {
-      this.passwordPromptTail = (this.passwordPromptTail + display).slice(-256);
-      if (!this.passwordPromptActive && matchesPasswordPromptPattern(this.passwordPromptTail)) {
-        this.passwordPromptActive = true;
-        result.events.push({ kind: 'password-prompt' });
-      }
-    }
-
     // Приписываем вывод СВОЕМУ маркеру: effective[i] — то, что пришло между
     // (i-1)-м и i-м маркером в этом чанке (несколько маркеров могут прийти
     // в одном chunk).
@@ -166,13 +157,32 @@ export class ShellIntegrationSession {
       this.passwordPromptActive = false;
       this.passwordPromptTail = '';
     }
-    this.appendOutput(effective[effective.length - 1] ?? '');
+    const afterLastMark = effective[effective.length - 1] ?? '';
+    this.appendOutput(afterLastMark);
+
+    // TERM-09: явный запрос пароля — событие только на нарастающем фронте.
+    // Смотрим лишь вывод после последнего маркера: запрос до маркера уже
+    // отвечен, а событие обязано идти ПОСЛЕ breadcrumb того же чанка —
+    // renderer по нему уходит из «на промпте» (многострочная вставка
+    // `cd /tmp\nsudo …` приносит маркер и запрос одним чанком).
+    if (afterLastMark) {
+      this.passwordPromptTail = (this.passwordPromptTail + afterLastMark).slice(-256);
+      if (!this.passwordPromptActive && matchesPasswordPromptPattern(this.passwordPromptTail)) {
+        this.passwordPromptActive = true;
+        result.events.push({ kind: 'password-prompt' });
+      }
+    }
 
     return result;
   }
 
   /** Команда уходит на сервер (композер/Страж/каталог/сниппеты/история). */
   writeCommand(command: string, guardStatus?: GuardStatus): ShellIntegrationResult {
+    // Активен запрос пароля — это ответ на него, а не команда: уходит сырым,
+    // не трогая lastCommand (история, WIN-04, детектор) — HIST-07, §4 CLAUDE.md.
+    // Renderer в этот момент уже не на промпте; сюда пароль попадает, только
+    // если сигнал до него не дошёл.
+    if (this.passwordPromptActive) return this.sendRawInput(`${command}\n`);
     const result = emptyResult();
     this.lastCommand = command.trim();
     this.lastCommandStartedAt = Date.now();
@@ -315,6 +325,11 @@ export class ShellIntegrationSession {
 
   /** Общее тело первичной настройки и реинжекта: подавление эха + страховка. */
   private emitSetupWrite(result: ShellIntegrationResult): void {
+    // Реинжект придерживается, пока висит запрос ввода, — раз настройка
+    // уходит, запрос пароля уже отвечен. Без сброса сессия, где маркер так и
+    // не пришёл, слала бы все команды сырыми (writeCommand).
+    this.passwordPromptActive = false;
+    this.passwordPromptTail = '';
     this.echoGate.arm();
     this.awaitingFirstMarkAfterSetup = true;
     result.toWrite += SHELL_INTEGRATION_SETUP;
