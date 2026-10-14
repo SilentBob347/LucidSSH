@@ -100,13 +100,21 @@ export function registerHostIpcHandlers(): void {
       const id = validateId(rawId, 'hostId');
       const input = validateHostInput(rawInput);
       const secret = validateSecret(rawSecret);
-      if (!repo.getHost(id)) throw new IpcValidationError('hostId: not found');
+      const existing = repo.getHost(id);
+      if (!existing) throw new IpcValidationError('hostId: not found');
       if (input.groupId !== undefined && !repo.groupExists(input.groupId)) {
         throw new IpcValidationError('groupId: group not found');
       }
       if (input.proxyJumpHostId !== undefined) {
         const rejection = repo.checkJumpHost(input.proxyJumpHostId, id);
         if (rejection) throw new IpcValidationError(`proxyJumpHostId: ${rejection}`);
+      }
+      // В keychain один нетипизированный секрет на хост: после смены метода
+      // без нового секрета старая passphrase ушла бы серверу как пароль (и
+      // наоборот). Удаляем — следующее подключение спросит заново (SEC-01).
+      // До updateHost: упавший keychain не оставит новый метод со старым секретом.
+      if (secret === undefined && input.authMethod !== existing.authMethod) {
+        await keychain.deleteSecret(id);
       }
       repo.updateHost(id, input);
       if (secret !== undefined) await keychain.setSecret(id, secret);

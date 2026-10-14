@@ -286,6 +286,10 @@ export function NewConnectionDrawer(): JSX.Element | null {
   const secretOrUndef = (): string | undefined =>
     form.secret.length > 0 ? form.secret : undefined;
 
+  // Сохранённый секрет привязан к методу, под которым сохранён: при сохранении
+  // с другим методом main его удалит (SEC-01) — не обещаем то, чего не будет.
+  const secretSaved = hasSavedSecret && form.authMethod === editHost?.authMethod;
+
   const deleteSecret = async (): Promise<void> => {
     if (!editHost) return;
     await window.lucidSSH.hostDeleteSecret(editHost.id);
@@ -478,10 +482,10 @@ export function NewConnectionDrawer(): JSX.Element | null {
               />
               {showHints && (
                 <div className={helper}>
-                  {hasSavedSecret ? t('conn.passwordSavedHelper') : t('conn.passwordHelper')}
+                  {secretSaved ? t('conn.passwordSavedHelper') : t('conn.passwordHelper')}
                 </div>
               )}
-              {hasSavedSecret && (
+              {secretSaved && (
                 <button
                   type="button"
                   onClick={() => setDeleteSecretConfirmOpen(true)}
@@ -543,10 +547,10 @@ export function NewConnectionDrawer(): JSX.Element | null {
                 />
                 {showHints && (
                   <div className={helper}>
-                    {hasSavedSecret ? t('conn.passwordSavedHelper') : t('conn.passphraseHelper')}
+                    {secretSaved ? t('conn.passwordSavedHelper') : t('conn.passphraseHelper')}
                   </div>
                 )}
-                {hasSavedSecret && (
+                {secretSaved && (
                   <button
                     type="button"
                     onClick={() => setDeleteSecretConfirmOpen(true)}

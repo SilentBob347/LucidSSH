@@ -24,6 +24,7 @@ import type { SubmitResult } from '@shared/guard';
 import { validateHostInput, validateId, validateSecret } from '../hosts/validate';
 import { testConnection } from '../ssh/testConnection';
 import { getSecretForConnection } from '../keychain';
+import { getHost } from '../hosts/repository';
 import { assertSenderIsMainWindow, assertString, IpcValidationError } from './validate';
 
 /**
@@ -127,7 +128,10 @@ export function registerSessionIpcHandlers(): void {
 
   // Пробное подключение из формы (кнопка «Проверить соединение»): проверяет
   // достижимость + аутентификацию, сессию не создаёт (§9.9). При редактировании
-  // без нового секрета берём сохранённый из keychain.
+  // без нового секрета берём сохранённый из keychain — но только если ввод
+  // совпадает с записью хоста: иначе renderer мог бы отправить сохранённый
+  // секрет на адрес (или через bastion) по своему выбору (SEC-01). Пользователь,
+  // поменявший адрес в форме, вводит секрет заново.
   ipcMain.handle(
     IPC.sessionTestConnection,
     async (
@@ -141,9 +145,19 @@ export function registerSessionIpcHandlers(): void {
       let secret = validateSecret(rawSecret);
       const hostId =
         rawHostId !== undefined && rawHostId !== null ? validateId(rawHostId, 'hostId') : undefined;
-      if (secret === undefined && hostId !== undefined) {
+      const stored = hostId !== undefined ? getHost(hostId) : null;
+      if (
+        secret === undefined &&
+        stored &&
+        stored.address === input.address &&
+        stored.port === input.port &&
+        stored.username === input.username &&
+        stored.authMethod === input.authMethod &&
+        stored.keyPath === input.keyPath &&
+        stored.proxyJumpHostId === input.proxyJumpHostId
+      ) {
         try {
-          secret = (await getSecretForConnection(hostId)) ?? undefined;
+          secret = (await getSecretForConnection(stored.id)) ?? undefined;
         } catch {
           secret = undefined;
         }

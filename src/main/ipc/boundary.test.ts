@@ -908,6 +908,125 @@ describe('пункт 6 — hostCreate/hostUpdate не пишут при отка
   });
 });
 
+describe('сохранённый секрет используется только для того, для чего сохранён (SEC-01)', () => {
+  const mockGetHost = vi.mocked(hostsRepositoryModule.getHost);
+  const mockSetSecret = vi.mocked(keychainModule.setSecret);
+  const mockDeleteSecret = vi.mocked(keychainModule.deleteSecret);
+  const mockGetSecret = vi.mocked(keychainModule.getSecretForConnection);
+  const mockTest = vi.mocked(testConnectionModule.testConnection);
+
+  describe('hosts:update — смена метода аутентификации', () => {
+    it('key → password без нового секрета — passphrase удалён, setSecret не вызван', async () => {
+      mockGetHost.mockReturnValue(fakeHost({ id: 7, authMethod: 'key', keyPath: 'C:\\k\\id' }));
+
+      const result = await invoke(IPC.hostUpdate, mainEvent(), 7, validHostInput(), undefined);
+
+      expect(result.ok).toBe(true);
+      expect(mockDeleteSecret).toHaveBeenCalledWith(7);
+      expect(mockSetSecret).not.toHaveBeenCalled();
+    });
+
+    it('password → key без нового секрета — пароль удалён', async () => {
+      mockGetHost.mockReturnValue(fakeHost({ id: 7 }));
+
+      const result = await invoke(
+        IPC.hostUpdate,
+        mainEvent(),
+        7,
+        validHostInput({ authMethod: 'key', keyPath: 'C:\\k\\id' }),
+        undefined
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mockDeleteSecret).toHaveBeenCalledWith(7);
+    });
+
+    it('смена метода с новым секретом — секрет перезаписан, не удалён (контроль)', async () => {
+      mockGetHost.mockReturnValue(fakeHost({ id: 7, authMethod: 'key', keyPath: 'C:\\k\\id' }));
+
+      await invoke(IPC.hostUpdate, mainEvent(), 7, validHostInput(), 'newpass');
+
+      expect(mockSetSecret).toHaveBeenCalledWith(7, 'newpass');
+      expect(mockDeleteSecret).not.toHaveBeenCalled();
+    });
+
+    it('метод не менялся, секрета нет — сохранённый не тронут (контроль)', async () => {
+      mockGetHost.mockReturnValue(fakeHost({ id: 7 }));
+
+      await invoke(IPC.hostUpdate, mainEvent(), 7, validHostInput(), undefined);
+
+      expect(mockDeleteSecret).not.toHaveBeenCalled();
+      expect(mockSetSecret).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('session:testConnection — сохранённый секрет только для той же записи хоста', () => {
+    const stored = fakeHost({ id: 7 });
+
+    it('ввод совпадает с записью хоста — секрет из keychain передан в testConnection (контроль)', async () => {
+      mockGetHost.mockReturnValue(stored);
+      mockGetSecret.mockResolvedValue('stored');
+
+      await invoke(IPC.sessionTestConnection, mainEvent(), validHostInput(), undefined, 7);
+
+      expect(mockTest).toHaveBeenCalledWith(expect.anything(), 'stored', 7);
+    });
+
+    it.each([
+      ['address', { address: 'evil.example' }],
+      ['port', { port: 2222 }],
+      ['username', { username: 'admin' }],
+      ['authMethod', { authMethod: 'key', keyPath: 'C:\\k\\id' }],
+      ['proxyJumpHostId', { proxyJumpHostId: 3 }]
+    ])('%s отличается — keychain не читается, testConnection без секрета', async (_f, patch) => {
+      mockGetHost.mockReturnValue(stored);
+      mockGetSecret.mockResolvedValue('stored');
+
+      await invoke(IPC.sessionTestConnection, mainEvent(), validHostInput(patch), undefined, 7);
+
+      expect(mockGetSecret).not.toHaveBeenCalled();
+      expect(mockTest).toHaveBeenCalledWith(expect.anything(), undefined, 7);
+    });
+
+    it('keyPath отличается у key-хоста — keychain не читается', async () => {
+      mockGetHost.mockReturnValue(fakeHost({ id: 7, authMethod: 'key', keyPath: 'C:\\k\\id' }));
+
+      await invoke(
+        IPC.sessionTestConnection,
+        mainEvent(),
+        validHostInput({ authMethod: 'key', keyPath: 'C:\\k\\other' }),
+        undefined,
+        7
+      );
+
+      expect(mockGetSecret).not.toHaveBeenCalled();
+    });
+
+    it('хост не найден — keychain не читается', async () => {
+      mockGetHost.mockReturnValue(null);
+
+      await invoke(IPC.sessionTestConnection, mainEvent(), validHostInput(), undefined, 7);
+
+      expect(mockGetSecret).not.toHaveBeenCalled();
+    });
+
+    it('новый секрет из формы — используется он, keychain не читается (контроль)', async () => {
+      mockGetHost.mockReturnValue(stored);
+
+      await invoke(
+        IPC.sessionTestConnection,
+        mainEvent(),
+        validHostInput({ address: 'other.example' }),
+        'fresh',
+        7
+      );
+
+      expect(mockGetSecret).not.toHaveBeenCalled();
+      expect(mockTest).toHaveBeenCalledWith(expect.anything(), 'fresh', 7);
+    });
+  });
+});
+
 describe('пункт 7 — i18nGetResource: путь только из провалидированных сегментов', () => {
   const mockReadFile = vi.mocked(fsPromisesModule.readFile);
 
