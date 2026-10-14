@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync, rmSync } from 'node:fs';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { utils } from 'ssh2';
 import type { PendingKeyDeployment } from '@shared/keygen';
 
 // keygen.ts персистирует «ожидающие дозаписи» ключи в config.json (переживает
@@ -18,10 +20,32 @@ vi.mock('../config/store', () => {
   };
 });
 
+// Мастер пишет ключ в ~/.ssh — в тесте домашняя папка подменяется временной.
+// execFile обёрнут шпионом (поведение настоящее): по нему проверяется, что
+// passphrase не попадает в аргументы дочерних процессов.
+const fakeHome = await vi.hoisted(async () => {
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  return mkdtempSync(join(tmpdir(), 'lucidssh-keygen-test-'));
+});
+vi.mock('node:os', async (importOriginal) => {
+  const os = await importOriginal<typeof import('node:os')>();
+  return { ...os, homedir: () => fakeHome };
+});
+vi.mock('node:child_process', async (importOriginal) => {
+  const cp = await importOriginal<typeof import('node:child_process')>();
+  return { ...cp, execFile: vi.fn(cp.execFile) };
+});
+
+import { execFile } from 'node:child_process';
 import {
   __clearPendingDeploymentsForTest,
+  applyPassphrase,
   authorizedKeysContains,
   buildAppendCommand,
+  findSshKeygen,
+  generateKeyPair,
   hasPendingDeployment,
   isSafePublicKeyLine,
   keyFileSlug,
@@ -129,4 +153,53 @@ describe('реестр ожидающих дозаписей', () => {
     };
     expect(__state.pendingKeyDeployments).toHaveLength(1);
   });
+});
+
+// Живой ssh-keygen.exe: без него (CI не на Windows, песочница) — пропуск.
+const hasKeygen = (await findSshKeygen()) !== null;
+
+afterAll(() => rmSync(fakeHome, { recursive: true, force: true }));
+
+describe.skipIf(!hasKeygen)('applyPassphrase (живой ssh-keygen)', () => {
+  // Спецсимволы cmd, пробелы по краям и не-ASCII: хелпер askpass — .cmd,
+  // любая из них сломала бы наивный `echo %VAR%` или кодировку вывода.
+  const PASSPHRASE = '  a&b|c<d>e^f %PATH% !x! "q" пароль 日本  ';
+
+  it('passphrase не попадает в argv, ключ расшифровывается ею и только ею', async () => {
+    const gen = await generateKeyPair({ name: 'pp-test', address: 'h', port: 22, username: 'u' });
+    if (!gen.ok) throw new Error(`generateKeyPair: ${gen.reason}`);
+    vi.mocked(execFile).mockClear();
+
+    expect(await applyPassphrase(gen.keyPath, PASSPHRASE)).toBe(true);
+
+    const argvs = vi.mocked(execFile).mock.calls.map((c) => JSON.stringify(c[1]));
+    expect(argvs.length).toBeGreaterThan(0);
+    for (const argv of argvs) expect(argv).not.toContain(JSON.stringify(PASSPHRASE).slice(1, -1));
+
+    const pem = readFileSync(gen.keyPath);
+    expect(utils.parseKey(pem, PASSPHRASE)).not.toBeInstanceOf(Error);
+    expect(utils.parseKey(pem, 'wrong-pass')).toBeInstanceOf(Error);
+    expect(utils.parseKey(pem)).toBeInstanceOf(Error);
+  }, 30_000);
+
+  // askpass читается в буфер 1024 байта: длиннее — ssh-keygen молча обрезал бы,
+  // и сохранённая полная passphrase ключ бы не открывала.
+  it('passphrase до 1023 байт UTF-8 проходит целиком, длиннее — отказ без изменения ключа', async () => {
+    const fits = await generateKeyPair({ name: 'pp-1023', address: 'h', port: 22, username: 'u' });
+    const tooLong = await generateKeyPair({ name: 'pp-1024', address: 'h', port: 22, username: 'u' });
+    if (!fits.ok || !tooLong.ok) throw new Error('generateKeyPair failed');
+
+    const max = 'я'.repeat(511) + 'z'; // 1023 байта
+    expect(await applyPassphrase(fits.keyPath, max)).toBe(true);
+    expect(utils.parseKey(readFileSync(fits.keyPath), max)).not.toBeInstanceOf(Error);
+
+    expect(await applyPassphrase(tooLong.keyPath, 'я'.repeat(512))).toBe(false);
+    expect(utils.parseKey(readFileSync(tooLong.keyPath))).not.toBeInstanceOf(Error);
+  }, 30_000);
+
+  it('без шага 2 ключ остаётся без passphrase', async () => {
+    const gen = await generateKeyPair({ name: 'no-pp-test', address: 'h', port: 22, username: 'u' });
+    if (!gen.ok) throw new Error(`generateKeyPair: ${gen.reason}`);
+    expect(utils.parseKey(readFileSync(gen.keyPath))).not.toBeInstanceOf(Error);
+  }, 30_000);
 });
