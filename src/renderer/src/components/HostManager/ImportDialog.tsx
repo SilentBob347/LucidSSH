@@ -70,6 +70,11 @@ export function ImportDialog({
               {t('hosts.import.conflictHint')}
             </div>
           )}
+          {!result && preview.invalidCount > 0 && (
+            <div className="mt-2 text-[11.5px] text-text-dim">
+              {t('hosts.import.invalidKeyPathHint', { count: preview.invalidCount })}
+            </div>
+          )}
           {!result && preview.missingKeyCount > 0 && (
             <div className="mt-2 text-[11.5px] text-text-dim">
               {t('hosts.import.missingKeyHint', { count: preview.missingKeyCount })}

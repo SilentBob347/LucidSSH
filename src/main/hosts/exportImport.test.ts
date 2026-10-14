@@ -256,3 +256,14 @@ describe('importHosts — резолв jump-хоста по имени (тике
     expect(fakeHosts.find((h) => h.name === 'solo')?.proxyJumpHostId).toBeUndefined();
   });
 });
+
+describe('previewImport — UNC/device-путь к ключу', () => {
+  it('запись пропускается и считается invalid, остальные импортируются; ФС не трогается', () => {
+    const bad = { ...host, id: 2, address: 'bad.example', keyPath: '\\\\evil\\share\\id' };
+    const file = JSON.stringify(buildExport([host, bad as Host], [group]));
+    const preview = previewImport(file);
+    expect(preview.invalidCount).toBe(1);
+    expect(preview.toAdd).toBe(1);
+    expect(preview.missingKeyCount).toBe(0);
+  });
+});

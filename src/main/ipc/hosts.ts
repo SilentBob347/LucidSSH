@@ -13,6 +13,7 @@ import {
   validateGroupName,
   validateHostInput,
   validateId,
+  validateKeyPath,
   validateSecret
 } from '../hosts/validate';
 import {
@@ -169,7 +170,7 @@ export function registerHostIpcHandlers(): void {
     if (typeof rawPath !== 'string' || rawPath.length > 500) {
       throw new IpcValidationError('keyPath: string expected');
     }
-    return keyFileExists(rawPath);
+    return keyFileExists(validateKeyPath(rawPath, false) ?? '');
   });
 
   // --- Мастер создания SSH-ключа (HM-12) ---

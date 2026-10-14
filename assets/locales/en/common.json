@@ -78,6 +78,8 @@
       "previewTitle": "Import hosts",
       "previewBody": "To add: {{toAdd}} · conflicts (same address and user): {{toSkip}}",
       "conflictHint": "Conflicting hosts can be skipped or imported under a new name.",
+      "invalidKeyPathHint_one": "{{count}} host with a network key path (\\\\server\\share) was skipped.",
+      "invalidKeyPathHint_other": "{{count}} hosts with a network key path (\\\\server\\share) were skipped.",
       "missingKeyHint_one": "{{count}} host will need a new key on this PC.",
       "missingKeyHint_other": "{{count}} hosts will need a new key on this PC.",
       "applySkip": "Skip duplicates",

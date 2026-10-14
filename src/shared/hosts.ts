@@ -49,10 +49,21 @@ export interface HostInput {
   historyEnabled: boolean;
 }
 
+/**
+ * UNC- и device-пути (`\\server\share`, `//server`, `\\?\`, `\\.\`): обращение к ним
+ * заставляет Windows аутентифицироваться на чужом SMB-сервере (утечка NTLM-хеша).
+ * Windows считает любую пару слэшей в начале сетевым путём, в т.ч. смешанную.
+ */
+export function isNetworkPath(path: string): boolean {
+  return /^([\\/]{2}|\\\?\?\\)/.test(path.trim());
+}
+
 export interface ImportPreview {
   toAdd: number;
   toSkip: number;
   conflicts: Array<{ name: string; address: string; username: string }>;
   /** Хостов с методом «ключ», чей файл ключа не найден на этом ПК (тикет 03). */
   missingKeyCount: number;
+  /** Записей с недопустимым путём к ключу (UNC/device) — не импортируются. */
+  invalidCount: number;
 }
