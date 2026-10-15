@@ -32,8 +32,11 @@ function substitute(command: string, original: string, target: string): string {
 
 /** Обрезка фрагмента stderr для fallback/логов после маскирования секретов. */
 export function excerpt(text: string, max = 500): string {
-  const trimmed = text.replace(/\s+$/g, '').slice(-max);
-  return trimmed;
+  // Сначала срез, потом trim без регэкспа: /\s+$/ по всему выводу (до 64 КБ)
+  // квадратичен на длинной серии пробелов.
+  let end = text.length;
+  while (end > 0 && /\s/.test(text[end - 1]!)) end--;
+  return text.slice(Math.max(0, end - max), end);
 }
 
 /**

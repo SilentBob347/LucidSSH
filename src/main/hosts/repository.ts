@@ -200,9 +200,15 @@ export function listHostsReferencingProxyJump(hostId: number): Host[] {
   return rows.map(rowToHost);
 }
 
-export function hostNameExists(name: string): boolean {
-  const row = openHostsDb().prepare('SELECT 1 FROM hosts WHERE name = ? LIMIT 1').get(name);
-  return row !== undefined;
+/** Все имена хостов одним запросом — для подбора свободного имени в памяти. */
+export function listHostNames(): Set<string> {
+  const rows = openHostsDb().prepare('SELECT name FROM hosts').all() as Array<{ name: string }>;
+  return new Set(rows.map((r) => r.name));
+}
+
+/** Выполнить fn в одной транзакции (откат при исключении). */
+export function runInTransaction<T>(fn: () => T): T {
+  return openHostsDb().transaction(fn)();
 }
 
 // --- Группы ---

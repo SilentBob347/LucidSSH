@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectError, isEmptyOutput, isNonErrorExitCode } from './detector';
+import { detectError, excerpt, isEmptyOutput, isNonErrorExitCode } from './detector';
 import type { ErrorPattern } from '@shared/content';
 
 const patterns: ErrorPattern[] = [
@@ -158,5 +158,15 @@ describe('isNonErrorExitCode (исключения из ERR-01, найдены �
 
   it('exitCode null — не триггерит ни одно исключение', () => {
     expect(isNonErrorExitCode('systemctl status foo', 'inactive', null)).toBe(false);
+  });
+});
+
+describe('excerpt — патологический ввод', () => {
+  it('длинная серия пробелов обрабатывается за линейное время', () => {
+    const t = performance.now();
+    expect(excerpt('err' + ' '.repeat(65_000) + 'x' + ' '.repeat(65_000))).toHaveLength(500);
+    expect(excerpt('abc  \n ')).toBe('abc');
+    expect(excerpt('   ')).toBe('');
+    expect(performance.now() - t).toBeLessThan(500);
   });
 });
