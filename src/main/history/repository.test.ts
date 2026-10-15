@@ -32,6 +32,16 @@ describe('prepareOutput', () => {
     expect(result.outputTruncated).toBe(true);
   });
 
+  it('секрет на границе усечения маскируется, результат не длиннее лимита', () => {
+    const cut = prepareOutput('x'.repeat(3980) + ' PASSWORD="my secret phrase"', false);
+    expect(cut.output).not.toContain('secret');
+    expect(cut.outputHasSecret).toBe(true);
+    // маска длиннее короткого значения — после маскирования лимит всё равно соблюдён
+    const grown = prepareOutput('KEY=a '.repeat(1000), false);
+    expect(grown.output!.length).toBeLessThanOrEqual(4000);
+    expect(grown.output).not.toContain('KEY=a');
+  });
+
   it('не усекает вывод ровно на границе лимита', () => {
     const exact = 'x'.repeat(4000);
     const result = prepareOutput(exact, false);

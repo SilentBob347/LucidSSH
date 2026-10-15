@@ -69,10 +69,12 @@ export function prepareOutput(
   commandHasSecret: boolean
 ): { output: string | null; outputTruncated: boolean; outputHasSecret: boolean } {
   if (!raw || commandHasSecret) return { output: null, outputTruncated: false, outputHasSecret: false };
-  const { masked, hasSecret } = maskSecrets(raw);
-  const truncated = masked.length > OUTPUT_LIMIT;
+  // усекаем до маскирования: маскеру незачем сканировать то, что не сохранится;
+  // и после — маска длиннее короткого значения (KEY=a → KEY=••••••••)
+  const truncated = raw.length > OUTPUT_LIMIT;
+  const { masked, hasSecret } = maskSecrets(truncated ? raw.slice(0, OUTPUT_LIMIT) : raw);
   return {
-    output: truncated ? masked.slice(0, OUTPUT_LIMIT) : masked,
+    output: masked.slice(0, OUTPUT_LIMIT),
     outputTruncated: truncated,
     outputHasSecret: hasSecret
   };

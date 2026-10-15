@@ -3,52 +3,52 @@
  * Обязательно покрывается тестами на реальных примерах утечек (§10 CLAUDE.md).
  * Замаскированное значение нигде не восстанавливается и не попадает в
  * поиск/экспорт. Это не исчерпывающий детектор, а защита от типичных утечек.
+ *
+ * Текст бывает выводом сервера (до 64 КБ, недоверенный), поэтому каждое правило
+ * линейно: регэксп ищет только префикс с одним неограниченным классом, значение
+ * читается отдельным sticky-регэкспом без отката.
  */
 
 const MASK = '••••••••';
 
+/**
+ * Значение секрета — одно shell-слово: в кавычках целиком (с пробелами внутри)
+ * вместе с приклеенным хвостом (`"p1"$SUFFIX`), или до пробела. Незакрытая
+ * кавычка (вывод обрезан посреди значения) прячет остаток строки, а не первое слово.
+ */
+const VALUE = /(?:'[^']*'|"[^"]*"|'[^'\n]*|"[^"\n]*)\S*|\S+/y;
+
+const KEYWORDS = 'KEY|TOKEN|SECRET|PASS|PWD|CREDENTIAL|AUTH';
+/**
+ * Имя переменной секретное, если ключевое слово стоит внутри (API_KEY, PGPASSWORD,
+ * MYSQL_PWD) или имя само — голое ключевое слово (PASSWORD=, TOKEN=, KEY=).
+ * Не секрет: KEYMAP=, AUTHOR=, PASSWORD_FILE= (ключевое слово лишь начало имени)
+ * и голый PWD= — это рабочий каталог shell, он есть в каждом выводе `env`.
+ */
+const SECRET_NAME = new RegExp(`^(?:PASSWORD|TOKEN|SECRET|PASS|KEY|AUTH)=|.(?:${KEYWORDS})`);
+
 interface MaskRule {
-  re: RegExp;
-  /** Сборка замены из совпадения — сохраняем «безопасный» префикс, прячем значение. */
-  replace: (m: RegExpMatchArray) => string;
+  /** Безопасный префикс перед значением — он остаётся, значение после него прячется. */
+  prefix: RegExp;
+  /** Доп. проверка префикса (эвристика по имени переменной). */
+  isSecret?: (prefix: string) => boolean;
 }
 
 const RULES: MaskRule[] = [
   // Authorization: Bearer <token> (в т.ч. в кавычках, curl -H "...")
-  {
-    re: /(Authorization:\s*Bearer\s+)(\S+)/gi,
-    replace: (m) => `${m[1]}${MASK}`
-  },
+  { prefix: /Authorization:\s*Bearer\s+/gi },
   // Authorization: Basic <base64>
-  {
-    re: /(Authorization:\s*Basic\s+)(\S+)/gi,
-    replace: (m) => `${m[1]}${MASK}`
-  },
+  { prefix: /Authorization:\s*Basic\s+/gi },
   // --password=value / --pass=value / --token=value / --secret=value / --api-key=value
-  {
-    re: /(--(?:password|pass|token|secret|api[-_]?key|access[-_]?key)=)(\S+)/gi,
-    replace: (m) => `${m[1]}${MASK}`
-  },
+  { prefix: /--(?:password|pass|token|secret|api[-_]?key|access[-_]?key)=/gi },
   // --password value / --pass value (значение через пробел)
-  {
-    re: /(--(?:password|pass|token)\s+)(?!-)(\S+)/gi,
-    replace: (m) => `${m[1]}${MASK}`
-  },
+  { prefix: /--(?:password|pass|token)\s+(?!-)/gi },
   // -p<value> без пробела (mysql/curl стиль): -psecret. НЕ трогаем одиночный -p.
-  {
-    re: /(\s-p)(\S+)/g,
-    replace: (m) => `${m[1]}${MASK}`
-  },
+  { prefix: /\s-p/g },
   // export KEY=value / KEY=value перед командой (эвристика по UPPER_SNAKE-имени)
-  {
-    re: /\b([A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASS|PASSWORD|PWD|CREDENTIAL|AUTH)[A-Z0-9_]*)=(\S+)/g,
-    replace: (m) => `${m[1]}=${MASK}`
-  },
+  { prefix: /\b[A-Z][A-Z0-9_]*=/g, isSecret: (p) => SECRET_NAME.test(p) },
   // sshpass -p 'value'
-  {
-    re: /(sshpass\s+-p\s*)('[^']*'|"[^"]*"|\S+)/gi,
-    replace: (m) => `${m[1]}${MASK}`
-  }
+  { prefix: /sshpass\s+-p\s*/gi }
 ];
 
 export interface MaskResult {
@@ -64,16 +64,23 @@ export function maskSecrets(command: string): MaskResult {
   let masked = command;
   let hasSecret = false;
   for (const rule of RULES) {
-    masked = masked.replace(rule.re, (...args) => {
-      // args: match, ...groups, offset, string
-      const groups = args.slice(0, -2) as string[];
-      const m = groups as RegExpMatchArray;
-      const value = m[m.length - 1];
-      // не считаем секретом пустое/уже замаскированное значение
-      if (!value || value.includes('•')) return m[0]!;
-      hasSecret = true;
-      return rule.replace(m);
-    });
+    let out = '';
+    let last = 0;
+    for (const m of masked.matchAll(rule.prefix)) {
+      // префикс внутри уже обработанного значения или несекретное имя — пропускаем
+      if (m.index < last || (rule.isSecret && !rule.isSecret(m[0]))) continue;
+      const start = m.index + m[0].length;
+      VALUE.lastIndex = start;
+      const value = VALUE.exec(masked)?.[0];
+      if (!value) continue;
+      // уже замаскированное значение оставляем как есть и секретом не считаем;
+      // маска внутри кавычек (от другого правила) не делает значение замаскированным
+      const already = value.startsWith('•');
+      out += masked.slice(last, start) + (already ? value : MASK);
+      last = start + value.length;
+      hasSecret ||= !already;
+    }
+    masked = out + masked.slice(last);
   }
   return { masked, hasSecret };
 }
