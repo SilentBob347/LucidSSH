@@ -459,6 +459,13 @@ describe('stripCmdPrefix — переиспользуется детекторо
     expect(stripCmdPrefix('env FOO=bar systemctl status ssh')).toBe('systemctl status ssh');
   });
 
+  it('env-присваивание — токен с `=` не на краю', () => {
+    expect(stripCmdPrefix('env A==b env C=d= rm x')).toBe('rm x');
+    expect(stripCmdPrefix('env =b rm x')).toBe('env =b rm x');
+    expect(stripCmdPrefix('env a= rm x')).toBe('env a= rm x');
+    expect(stripCmdPrefix('sudo env A=b sudo rm x')).toBe('rm x');
+  });
+
   it('команду без префикса не меняет', () => {
     expect(stripCmdPrefix('systemctl status ssh')).toBe('systemctl status ssh');
   });
@@ -559,5 +566,65 @@ describe('rm-recursive — хвост из редиректов без эксп�
 
   it('цель по-прежнему берётся до серии редиректов', () => {
     expect(analyzeCommand('rm -rf /var/www >>a.log 2>>err.log &>/dev/null 2>&1')?.target).toBe('/var/www');
+  });
+});
+
+/**
+ * ReDoS: паттерны `имя\s+[^\n]*хвост` перебирались с каждого вхождения имени — O(n²) на одной
+ * строке, повторяющей имя (1–23 с main process на 100 000 символов сырого канала).
+ */
+describe('паттерны линейны на длинной строке-повторе (security-scan-2026-10 #07)', () => {
+  const N = 100_000;
+  const line = (unit: string, tail = ''): string =>
+    unit.repeat(Math.ceil(N / unit.length)).slice(0, N - tail.length) + tail;
+  const cases: Record<string, string> = {
+    'dd-write': line('dd '),
+    'dd-write, серия пробелов': `dd${' '.repeat(N - 3)}x`,
+    truncate: line('truncate '),
+    'rm-recursive': line('rm -v ', ' -x'),
+    'rm-recursive, серия пробелов': `rm${' '.repeat(N - 4)}-r`,
+    'rm-recursive, U+2028': line('rm -r ', '\u2028 -x'),
+    'chmod-777, серия R': `chmod -${'R'.repeat(N - 7)}`,
+    'chmod-777, серия R после 777': `chmod 777 -${'R'.repeat(N - 11)}`,
+    'shred, U+2028': line('shred ', ' \u2028x'),
+    'wipefs, U+2028': line('wipefs ', ' \u2028x'),
+    'sshd-config, редактор': line('vim '),
+    'sshd-config, sed': line('sed '),
+    'firewall, iptables': line('iptables '),
+    'firewall, firewall-cmd': line('firewall-cmd '),
+    'sshd-service, systemctl': line('systemctl stop '),
+    'env-префикс, серия =': `env ${'='.repeat(N - 4)}`,
+    'env-префикс, a=a=…': `env ${line('a=', 'a').slice(4)}`,
+    'цель rm-recursive, серия /': `rm -r a ${'/'.repeat(N - 9)}x`,
+    'цель dd-write, серия /': `dd of=${'/'.repeat(N - 7)}x`,
+    'цель mkfs, серия /': `mkfs ${'/'.repeat(N - 6)}x`,
+    'цель shred, серия /': `shred ${'/'.repeat(N - 7)}x`
+  };
+  for (const [name, input] of Object.entries(cases)) {
+    it(`${name}: 100 000 символов — в пределах бюджета`, () => {
+      const start = performance.now();
+      analyzeDangers(input);
+      analyzeAccessRisk(input);
+      expect(performance.now() - start).toBeLessThan(200);
+    });
+  }
+
+  it('первое вхождение имени покрывает поздние: цель та же', () => {
+    expect(analyzeCommand('dd dd if=/dev/zero of=/dev/sda')?.target).toBe('/dev/sda');
+    expect(analyzeCommand('truncate truncate -s 0 /var/log/x')?.target).toBe('/var/log/x');
+    expect(analyzeCommand('rm rm -rf /var/www')?.target).toBe('/var/www');
+    expect(analyzeAccessRisk('vim vim /etc/ssh/sshd_config')?.riskId).toBe('sshd-config');
+    expect(analyzeAccessRisk('iptables iptables -A INPUT -j DROP')?.riskId).toBe('firewall');
+  });
+
+  it('systemctl: позднее «systemctl stop» после неподходящего раннего срабатывает', () => {
+    expect(analyzeAccessRisk('systemctl status x systemctl stop sshd')?.riskId).toBe('sshd-service');
+    expect(analyzeAccessRisk('systemctl stop nginx #x systemctl stop sshd')?.riskId).toBe('sshd-service');
+    expect(analyzeAccessRisk('systemctl stop x systemctl --a#b stop ssh')?.riskId).toBe('sshd-service');
+    expect(analyzeAccessRisk('systemctl stop nginx a#b sshd')).toBeNull();
+  });
+
+  it('U+2028 внутри аргументов — пробел, как и в токенах: shred не теряется', () => {
+    expect(analyzeCommand('shred -u a\u2028/dev/sdb')).toMatchObject({ patternId: 'shred', target: '/dev/sdb' });
   });
 });

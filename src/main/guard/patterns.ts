@@ -80,12 +80,27 @@ function rmTarget(args: string | undefined): string | null {
   return tokens[i] ?? null;
 }
 
+/**
+ * Исходник регекспа `lead` + `tail`, который проверяется только от ПЕРВОГО вхождения `lead`.
+ * Для паттернов `(?:^|\s)имя\s…[^\n]*хвост` более позднее вхождение имени видит лишь суффикс
+ * того, что видит первое: не совпало от первого — не совпадёт ни от какого, а совпало — оно
+ * и так самое левое, т.е. результат тот же. Движок же перепробовал бы каждое вхождение, всякий
+ * раз сканируя до конца строки: O(n²) на `dd dd dd …` — секунды main process на 100 000 символов
+ * сырого канала (ReDoS). Префикс доходит до первого `lead` и при неудаче откатывается линейно:
+ * раньше него `lead` не совпадает нигде. Верно для фрагмента без перевода строки (splitCompound):
+ * иначе позднее вхождение могло бы стоять на строке, недоступной `[^\n]*` первого.
+ */
+function fromFirst(lead: string, tail: string): string {
+  return String.raw`^(?:(?!${lead})[^])*${lead}${tail}`;
+}
+
 /** Последний сегмент пути — им подтверждают удаление («www» для /var/www).
  *  У корня сегмента нет: `/` подтверждается самим собой, иначе текст подтверждения
  *  оказался бы пустым — кнопка активна при пустом поле, и самая опасная команда
  *  набора не требует вовсе. */
 function lastSegment(path: string): string {
-  const cleaned = path.replace(/["']/g, '').replace(/\/+$/, '');
+  // `(?<!\/)`: иначе `\/+$` пробовался с каждого `/` длинной серии `////…x` — O(n²).
+  const cleaned = path.replace(/["']/g, '').replace(/(?<!\/)\/+$/, '');
   const seg = cleaned.split('/').filter(Boolean).pop();
   return seg ?? (cleaned.length > 0 ? cleaned : path.replace(/["']/g, ''));
 }
@@ -102,8 +117,16 @@ const PATTERNS: GuardPattern[] = [
     // rm с рекурсивным или форсированным флагом: rm -rf X, rm -r X, rm --recursive X
     // Регексп захватывает аргументы (≥2, последний — не флаг); цель из них выбирает
     // rmTarget мимо хвоста `2>&1`/`>file` — иначе им же и подтверждали бы удаление.
+    // `(?=\S)` — лукахед флага проверяется только у начала аргументов, а не с каждой
+    // позиции серии пробелов после rm (квадратично). `[^\n]`, не `.`: U+2028/2029 для
+    // Стража пробел, как и для `\s`, — иначе первое вхождение rm не покрывало бы поздние.
     id: 'rm-recursive',
-    re: /(?:^|\s)rm\s+(?=[^\n]*(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive))(\S+\s(?:.*\s)?(?!-)\S+)\s*$/,
+    re: new RegExp(
+      fromFirst(
+        String.raw`(?:^|\s)rm\s`,
+        String.raw`\s*(?=\S)(?=[^\n]*(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive))(\S+\s(?:[^\n]*\s)?(?!-)\S+)\s*$`
+      )
+    ),
     scope: (m) => {
       const target = rmTarget(m[1]);
       return target === '/' || target === '/*' ? 'disk' : 'directory';
@@ -113,7 +136,8 @@ const PATTERNS: GuardPattern[] = [
   {
     // dd с записью в устройство или файл: dd if=... of=/dev/sda
     id: 'dd-write',
-    re: /(?:^|\s)dd\s+[^\n]*of=(\S+)/,
+    // `dd\s`, не `dd\s+`: `\s+[^\n]*` делят пробелы и перебирают их серию квадратично.
+    re: new RegExp(fromFirst(String.raw`(?:^|\s)dd\s`, String.raw`[^\n]*of=(\S+)`)),
     scope: (m) => (m[1]?.startsWith('/dev/') ? 'disk' : 'file'),
     target: (m) => m[1] ?? null
   },
@@ -127,14 +151,16 @@ const PATTERNS: GuardPattern[] = [
   {
     // chmod -R 777 (полностью открытые права рекурсивно)
     id: 'chmod-777',
-    re: /(?:^|\s)chmod\s+(?:-[a-zA-Z]*R[a-zA-Z]*\s+)0?777\s+(\S+)|(?:^|\s)chmod\s+0?777\s+(-[a-zA-Z]*R[a-zA-Z]*)\s+(\S+)/,
+    // Флаг — `-(?=[a-zA-Z]*R)[a-zA-Z]+`, не `-[a-zA-Z]*R[a-zA-Z]*`: та форма перебирала
+    // каждое R длинной серии `-RRR…` квадратично.
+    re: /(?:^|\s)chmod\s+(?:-(?=[a-zA-Z]*R)[a-zA-Z]+\s+)0?777\s+(\S+)|(?:^|\s)chmod\s+0?777\s+(-(?=[a-zA-Z]*R)[a-zA-Z]+)\s+(\S+)/,
     scope: 'directory',
     target: (m) => m[1] ?? m[3] ?? null
   },
   {
     // truncate существующего файла до 0: truncate -s 0 file
     id: 'truncate',
-    re: /(?:^|\s)truncate\s+[^\n]*-s\s*0\s+(\S+)/,
+    re: new RegExp(fromFirst(String.raw`(?:^|\s)truncate\s`, String.raw`[^\n]*-s\s*0\s+(\S+)`)),
     scope: 'file',
     target: (m) => m[1] ?? null
   },
@@ -151,14 +177,15 @@ const PATTERNS: GuardPattern[] = [
     // shred устройства или файла: цель — последний аргумент (флаги могут иметь
     // отдельные значения вроде «-n 3»)
     id: 'shred',
-    re: /(?:^|\s)shred\s+(.+)$/,
+    // `[^\n]`, не `.`: на U+2028 `.+$` срывался и перебирался с каждого `shred` (O(n²)).
+    re: /(?:^|\s)shred\s+([^\n]+)$/,
     scope: (m) => (lastToken(m[1]) ?? '').startsWith('/dev/') ? 'disk' : 'file',
     target: (m) => lastToken(m[1])
   },
   {
     // wipefs — стирание сигнатур ФС
     id: 'wipefs',
-    re: /(?:^|\s)wipefs\s+(.+)$/,
+    re: /(?:^|\s)wipefs\s+([^\n]+)$/,
     scope: 'disk',
     target: (m) => lastToken(m[1])
   },
@@ -201,14 +228,45 @@ export interface AccessRiskMatch {
  *  Граница (?=\s|$) в конце — чтобы sshd_config.bak и т.п. не матчились. */
 const SSHD_CONFIG_PATH = String.raw`\/etc\/ssh\/sshd_config(?:\.d\/\S+)?(?=\s|$)`;
 
-const ACCESS_RISK_PATTERNS: { id: AccessRiskId; re: RegExp }[] = [
+/** systemctl stop|restart|disable … ssh — по токенам за один проход. Регекспом
+ *  `systemctl\s+…(?:[^#\s]+\s+)*(?:ssh|sshd)` каждое `systemctl stop` пересканировало хвост
+ *  до `#` или конца строки — O(n²) на `systemctl stop systemctl stop …` (ReDoS). Условие то же:
+ *  токен `systemctl`, опции `--x`, подкоманда, затем до юнита ssh ни одного токена с `#`
+ *  (хвостовой комментарий). Новый `systemctl stop` снова «взводит» поиск — в т.ч. когда в его
+ *  опциях есть `#`, как и у регекспа, который начал бы матч с него. */
+function stopsSshUnit(command: string): boolean {
+  const tokens = command.split(/\s+/);
+  let armed = false;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!;
+    if (token === 'systemctl') {
+      let j = i + 1;
+      while (j < tokens.length && /^--\S/.test(tokens[j]!)) j++;
+      if (/^(?:stop|restart|disable)$/.test(tokens[j] ?? '')) {
+        armed = true;
+        i = j;
+        continue;
+      }
+    }
+    if (token.includes('#')) armed = false;
+    else if (armed && /^(?:ssh|sshd)(?:\.service|\.socket)?$/.test(token)) return true;
+  }
+  return false;
+}
+
+const SSH_SERVICE_RE = /(?:^|\s)service\s+(?:ssh|sshd)\s+(?:stop|restart)(?:\s|$)/;
+
+const ACCESS_RISK_PATTERNS: { id: AccessRiskId; re: Pick<RegExp, 'test'> }[] = [
   {
     // Write-доступ к sshd_config: редакторы, sed -i, перенаправление >/>>, tee.
     // Просмотровые команды (cat/grep/less/tail, sed без -i) не матчатся намеренно.
     id: 'sshd-config',
     re: new RegExp(
-      `(?:^|\\s)(?:vi|vim|nvim|nano|pico|emacs|ed|joe|mcedit|micro|sudoedit)\\s+[^\\n]*${SSHD_CONFIG_PATH}` +
-        `|(?:^|\\s)sed(?=[^\\n]*\\s-[a-zA-Z]*i)[^\\n]*${SSHD_CONFIG_PATH}` +
+      fromFirst(
+        String.raw`(?:^|\s)(?:vi|vim|nvim|nano|pico|emacs|ed|joe|mcedit|micro|sudoedit)\s`,
+        String.raw`[^\n]*${SSHD_CONFIG_PATH}`
+      ) +
+        `|${fromFirst(String.raw`(?:^|\s)sed`, String.raw`(?=[^\n]*\s-[a-zA-Z]*i)[^\n]*${SSHD_CONFIG_PATH}`)}` +
         `|>{1,2}\\s*${SSHD_CONFIG_PATH}` +
         `|(?:^|\\s)tee\\s+(?:-\\S+\\s+)*${SSHD_CONFIG_PATH}`
     )
@@ -219,8 +277,14 @@ const ACCESS_RISK_PATTERNS: { id: AccessRiskId; re: RegExp }[] = [
     id: 'firewall',
     re: new RegExp(
       String.raw`(?:^|\s)ufw\s+(?:--\S+\s+)*(?:enable|disable|reload|reset|default|logging|allow|deny|reject|limit|delete|insert|prepend|route)(?:\s|$)` +
-        String.raw`|(?:^|\s)(?:iptables|ip6tables)(?=[^\n]*\s(?:-[ADIRFXPN]|--(?:append|delete|insert|replace|flush|policy|new-chain|delete-chain))(?:\s|$))` +
-        String.raw`|(?:^|\s)firewall-cmd(?=[^\n]*\s--(?:add-|remove-|set-|new-|delete-|change-|reload(?:\s|$)|panic-(?:on|off)|runtime-to-permanent))`
+        `|${fromFirst(
+          String.raw`(?:^|\s)(?:iptables|ip6tables)`,
+          String.raw`(?=[^\n]*\s(?:-[ADIRFXPN]|--(?:append|delete|insert|replace|flush|policy|new-chain|delete-chain))(?:\s|$))`
+        )}` +
+        `|${fromFirst(
+          String.raw`(?:^|\s)firewall-cmd`,
+          String.raw`(?=[^\n]*\s--(?:add-|remove-|set-|new-|delete-|change-|reload(?:\s|$)|panic-(?:on|off)|runtime-to-permanent))`
+        )}`
     )
   },
   {
@@ -231,13 +295,10 @@ const ACCESS_RISK_PATTERNS: { id: AccessRiskId; re: RegExp }[] = [
   },
   {
     // Остановка/перезапуск/отключение службы SSH. enable/status не матчатся.
+    // Токены с # (хвостовой комментарий) обрывают список юнитов: слово «ssh»
+    // в комментарии не даёт ложного срабатывания (stopsSshUnit).
     id: 'sshd-service',
-    re: new RegExp(
-      // (?:[^#\s]+\s+)* — список юнитов до ssh/sshd; # исключён, чтобы слово
-      // «ssh» в хвостовом комментарии не давало ложного срабатывания.
-      String.raw`(?:^|\s)systemctl\s+(?:--\S+\s+)*(?:stop|restart|disable)\s+(?:[^#\s]+\s+)*(?:ssh|sshd)(?:\.service|\.socket)?(?:\s|$)` +
-        String.raw`|(?:^|\s)service\s+(?:ssh|sshd)\s+(?:stop|restart)(?:\s|$)`
-    )
+    re: { test: (command) => SSH_SERVICE_RE.test(command) || stopsSshUnit(command) }
   }
 ];
 
@@ -295,9 +356,8 @@ export function analyzeDangers(command: string): DangerMatch[] {
   const trimmed = command.trim();
   if (trimmed.length === 0) return [];
   // Длина не ограничивается: пропуск длинного ввода без проверки был обходом Стража
-  // (сырой канал принимает намного больше прежнего порога, см. ipc/sessions.ts).
-  // Известный предел: паттерны вида `имя\s+[^\n]*хвост` квадратичны на одной строке,
-  // повторяющей имя команды тысячи раз (`dd dd dd …` — секунды на ~100 000 символов).
+  // (сырой канал принимает намного больше прежнего порога, см. ipc/sessions.ts) —
+  // поэтому паттерны обязаны оставаться линейными (fromFirst, stopsSshUnit).
 
   const matches: DangerMatch[] = [];
   const seen = new Set<string>();
@@ -330,7 +390,9 @@ export function analyzeCommand(command: string): DangerMatch | null {
 }
 
 /** sudo/env-префиксы не должны прятать команду. */
-const CMD_PREFIX_RE = /^(?:sudo\s+|env\s+\S+=\S+\s+)+/;
+// env-присваивание — токен с `=` не на краю: `\S(?=\S*=\S)\S*`, а не `\S+=\S+` — та форма
+// перебирала каждое `=` длинного токена до конца строки (O(n²) на `env =====…`).
+const CMD_PREFIX_RE = /^(?:sudo\s+|env\s+\S(?=\S*=\S)\S*\s+)+/;
 
 /** Снять sudo/env-префикс — переиспользуется вне Стража (детектор ошибок). */
 export function stripCmdPrefix(command: string): string {
