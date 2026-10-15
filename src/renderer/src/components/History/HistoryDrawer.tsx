@@ -6,6 +6,7 @@ import { isSignalExitCode } from '@shared/ssh';
 import { insertIntoComposer } from '@/stores/composerBus';
 import { usePanels } from '@/stores/panels';
 import { useHosts } from '@/stores/hosts';
+import { useConfig } from '@/stores/config';
 import { Icon } from '@/components/common/Icon';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useBackdropClose } from '@/hooks/useBackdropClose';
@@ -21,6 +22,8 @@ import { resolveClearTarget, showsSessionChip, type HostFilter } from './history
  * заменено кнопкой-закладкой → SnippetSaveDialog, отдельный список снипетов
  * уже есть в панели «Команды» (CatalogPanel), дублировать здесь не нужно.
  */
+
+const HINT_LIMIT = 3; // §5.1: подсказка показывается не более 3 раз
 
 function relativeTime(iso: string, t: (k: string, o?: Record<string, number>) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -46,6 +49,10 @@ export function HistoryDrawer({
   const { t } = useTranslation();
   const { closeHistory, openSnippetDialog, historyRevision, snippetsRevision } = usePanels();
   const { hosts } = useHosts();
+  const { config, markHint } = useConfig();
+  const saveOutput = config?.history.saveOutput ?? false;
+  const expertMode = config?.ui.expertMode ?? false;
+  const shownCounts = config?.shownCounts ?? {};
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [query, setQuery] = useState('');
@@ -302,15 +309,24 @@ export function HistoryDrawer({
                 </div>
               ) : (
                 visible.map((e) => {
-                  const expandable = e.guardStatus !== 'blocked';
                   const expanded = expandedId === e.id;
+                  // HIST-09: при выключенном сохранении запись без вывода раскрывается
+                  // в подсказку — пока не исчерпан лимит показов (§5.1) и нет Режима эксперта
+                  const outputOffHint = !saveOutput && !e.output;
+                  const hintLeft = !expertMode && (shownCounts['historyOutputHint'] ?? 0) < HINT_LIMIT;
+                  const expandable =
+                    e.guardStatus !== 'blocked' && (!outputOffHint || hintLeft || expanded);
                   return (
                   <div key={e.id} className="border-b border-border-hairline py-[10px]">
                     <div className="flex items-center gap-[10px]">
                       <button
                         type="button"
                         disabled={!expandable}
-                        onClick={() => expandable && setExpandedId(expanded ? null : e.id)}
+                        onClick={() => {
+                          if (!expandable) return;
+                          if (!expanded && outputOffHint) void markHint('historyOutputHint');
+                          setExpandedId(expanded ? null : e.id);
+                        }}
                         className="flex min-w-0 flex-1 items-center gap-[6px] text-left font-mono text-[12.5px] text-text-strong hover:text-lavender disabled:cursor-default disabled:hover:text-text-strong"
                       >
                         {expandable && (
@@ -475,7 +491,11 @@ export function HistoryDrawer({
                           </>
                         ) : (
                           <div className="text-[11.5px] text-text-dim">
-                            {e.hasSecret ? t('history.output.hiddenSecret') : t('history.output.empty')}
+                            {outputOffHint
+                              ? t('history.output.disabledHint')
+                              : e.hasSecret
+                                ? t('history.output.hiddenSecret')
+                                : t('history.output.empty')}
                           </div>
                         )}
                       </div>

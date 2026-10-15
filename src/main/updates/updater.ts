@@ -1,11 +1,10 @@
-import { existsSync, mkdirSync, copyFileSync } from 'node:fs';
-import { join } from 'node:path';
 import electronUpdater from 'electron-updater';
 import { IPC } from '@shared/ipc';
 import type { UpdateInfo, UpdateProgress, UpdateStatus } from '@shared/updates';
 import { app } from 'electron';
 import { emit } from '../ipc/events';
-import { loadConfig, configDir } from '../config/store';
+import { loadConfig } from '../config/store';
+import { writePreUpdateBackup } from '../history/backups';
 
 /**
  * Автообновление (UPD-01…04, SEC-06/07). Обновление тянется только с публичного
@@ -123,13 +122,7 @@ export function getStatus(): UpdateStatus {
 /** Копия БД и config перед обновлением (UPD-04). Секреты в keychain не затрагиваются. */
 function backupDatabases(): void {
   try {
-    const dir = configDir();
-    const backupDir = join(dir, 'backups', `pre-update-${Date.now()}`);
-    mkdirSync(backupDir, { recursive: true });
-    for (const name of ['hosts.db', 'history.db', 'config.json']) {
-      const src = join(dir, name);
-      if (existsSync(src)) copyFileSync(src, join(backupDir, name));
-    }
+    writePreUpdateBackup(['hosts.db', 'history.db', 'config.json']);
   } catch {
     // Бэкап — «лучшее усилие»; при сбое обновление всё равно возможно
   }

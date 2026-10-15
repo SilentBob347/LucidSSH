@@ -564,6 +564,7 @@
     "output": {
       "empty": "No output saved",
       "hiddenSecret": "Output not saved — command contained a secret",
+      "disabledHint": "Output is not saved — turn it on in Settings → Security",
       "truncated": "Showing first {{limit}} characters, output truncated"
     }
   },
@@ -653,6 +654,8 @@
       "guardDesc": "Asks for confirmation before rm -rf, kill -9 and similar, requiring the object name. Turning it off removes all warnings.",
       "history": "Command history",
       "historyDesc": "Store executed commands. Passwords and tokens are always masked. Turning it off stops recording.",
+      "saveOutput": "Save command output",
+      "saveOutputDesc": "Needed to expand an entry in history. URL passwords and secret values are masked; output with a private key or password hash is not saved. Turning it off erases the output already saved, along with history backup copies.",
       "knownHosts": "Known servers (known_hosts)",
       "knownHostsDesc": "Fingerprints of servers you've already connected to and confirmed.",
       "knownEmpty": "No saved server fingerprints yet.",

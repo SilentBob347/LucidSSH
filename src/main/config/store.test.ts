@@ -149,6 +149,7 @@ describe('resetConfig (SET-08)', () => {
     expect(fresh.ui.expertMode).toBe(false);
     expect(fresh.terminal.fontSize).toBe(13);
     expect(fresh.history.enabled).toBe(true);
+    expect(fresh.history.saveOutput).toBe(false); // HIST-09: opt-in
     expect(fresh.updates.autoCheck).toBe(true);
   });
 });
@@ -161,7 +162,7 @@ describe('projectSettings', () => {
     expect(Object.keys(settings).sort()).toEqual(
       ['connection', 'guard', 'history', 'hotkeys', 'shownCounts', 'terminal', 'ui', 'updates'].sort()
     );
-    expect(Object.keys(settings.history)).toEqual(['enabled']);
+    expect(Object.keys(settings.history)).toEqual(['enabled', 'saveOutput']);
     expect(Object.keys(settings.updates)).toEqual(['autoCheck']);
   });
 });

@@ -61,6 +61,7 @@ export interface Settings {
   hotkeys: Record<HotkeyAction, string>;
   history: {
     enabled: boolean; // HIST-07
+    saveOutput: boolean; // HIST-09: вывод команд в истории, opt-in
   };
   /** id подсказки → сколько раз показана (лимит 3, §5.1 ТЗ). */
   shownCounts: Record<string, number>;
@@ -99,7 +100,7 @@ export function projectSettings(cfg: AppConfig): Settings {
     connection: cfg.connection,
     guard: cfg.guard,
     hotkeys: cfg.hotkeys,
-    history: { enabled: cfg.history.enabled },
+    history: { enabled: cfg.history.enabled, saveOutput: cfg.history.saveOutput },
     shownCounts: cfg.shownCounts,
     updates: { autoCheck: cfg.updates.autoCheck }
   };

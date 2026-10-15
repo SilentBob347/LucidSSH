@@ -8,11 +8,13 @@ import type { JSX, ReactNode } from 'react';
 export function Toggle({
   on,
   onChange,
-  label
+  label,
+  disabled
 }: {
   on: boolean;
   onChange: (v: boolean) => void;
   label?: string;
+  disabled?: boolean;
 }): JSX.Element {
   return (
     <button
@@ -20,8 +22,9 @@ export function Toggle({
       role="switch"
       aria-checked={on}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onChange(!on)}
-      className={`relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors ${
+      className={`relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         on ? 'bg-accent' : 'bg-bg-elevated-2'
       }`}
     >
@@ -39,12 +42,14 @@ export function ToggleRow({
   title,
   desc,
   on,
-  onChange
+  onChange,
+  disabled
 }: {
   title: string;
   desc: string;
   on: boolean;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
 }): JSX.Element {
   return (
     <div className="flex items-center justify-between gap-[14px] rounded-[8px] border border-border-default bg-bg-panel px-[17px] py-[14px]">
@@ -52,7 +57,7 @@ export function ToggleRow({
         <div className="text-[13.5px] font-semibold text-text-strong">{title}</div>
         <div className="mt-[3px] text-[12px] leading-[1.5] text-text-muted">{desc}</div>
       </div>
-      <Toggle on={on} onChange={onChange} label={title} />
+      <Toggle on={on} onChange={onChange} label={title} disabled={disabled} />
     </div>
   );
 }

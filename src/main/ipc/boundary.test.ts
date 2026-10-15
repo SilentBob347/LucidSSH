@@ -106,6 +106,7 @@ vi.mock('../history/repository', () => ({
   clearHistory: vi.fn(),
   clearHistoryForHost: vi.fn(),
   deleteHistoryEntry: vi.fn(),
+  eraseStoredOutput: vi.fn(),
   historyCountForHost: vi.fn(),
   listHistory: vi.fn(),
   listHistoryHosts: vi.fn(),
@@ -423,7 +424,7 @@ function createConfigFixture(): AppConfig {
     connection: { autoreconnect: true, keepaliveIntervalSec: 30, connectTimeoutSec: 15 },
     guard: { globalEnabled: true },
     hotkeys: { ...DEFAULT_HOTKEYS },
-    history: { enabled: true },
+    history: { enabled: true, saveOutput: false },
     shownCounts: {},
     updates: { autoCheck: true, source: '' }
   };
@@ -786,6 +787,75 @@ describe('пункт 5 — allow-list configUpdate', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect((result.value as { terminal: { fontSize: number } }).terminal.fontSize).toBe(14);
+  });
+});
+
+describe('HIST-09 — history.saveOutput: allow-list и стирание вывода при выключении', () => {
+  const mockErase = vi.mocked(historyRepositoryModule.eraseStoredOutput);
+  const mockSaveConfig = vi.mocked(configStoreModule.saveConfig);
+
+  it.each(['yes', 1, null, undefined])(
+    'значение %p не boolean — отказ, saveConfig и стирание не вызваны',
+    async (value) => {
+      const result = await invoke(IPC.configUpdate, mainEvent(), 'history.saveOutput', value);
+
+      expect(result.ok).toBe(false);
+      expect(mockSaveConfig).not.toHaveBeenCalled();
+      expect(mockErase).not.toHaveBeenCalled();
+    }
+  );
+
+  it('false → true — настройка записана, вывод не стирается', async () => {
+    const result = await invoke(IPC.configUpdate, mainEvent(), 'history.saveOutput', true);
+
+    expect(result.ok).toBe(true);
+    expect(configFixture.cfg.history.saveOutput).toBe(true);
+    expect(mockErase).not.toHaveBeenCalled();
+  });
+
+  it('true → false — настройка записана, весь сохранённый вывод стёрт (один раз)', async () => {
+    configFixture.cfg.history.saveOutput = true;
+
+    const result = await invoke(IPC.configUpdate, mainEvent(), 'history.saveOutput', false);
+
+    expect(result.ok).toBe(true);
+    expect(configFixture.cfg.history.saveOutput).toBe(false);
+    expect(mockErase).toHaveBeenCalledTimes(1);
+  });
+
+  it('false → false — стирать нечего, вызова нет', async () => {
+    await invoke(IPC.configUpdate, mainEvent(), 'history.saveOutput', false);
+
+    expect(mockErase).not.toHaveBeenCalled();
+  });
+
+  it('сброс до заводских (SET-08) при включённой настройке стирает вывод', async () => {
+    configFixture.cfg.history.saveOutput = true;
+    vi.mocked(configStoreModule.resetConfig).mockImplementationOnce(() => {
+      configFixture.cfg = createConfigFixture();
+      return configFixture.cfg;
+    });
+
+    const result = await invoke(IPC.configReset, mainEvent());
+
+    expect(result.ok).toBe(true);
+    expect(mockErase).toHaveBeenCalledTimes(1);
+  });
+
+  it('сброс до заводских при выключенной настройке — без стирания', async () => {
+    await invoke(IPC.configReset, mainEvent());
+
+    expect(mockErase).not.toHaveBeenCalled();
+  });
+
+  it('каналы удаления истории доходят до репозитория, где очищаются копии (HIST-08)', async () => {
+    await invoke(IPC.historyClear, mainEvent());
+    await invoke(IPC.historyClearForHost, mainEvent(), 3);
+    await invoke(IPC.historyDelete, mainEvent(), 5);
+
+    expect(historyRepositoryModule.clearHistory).toHaveBeenCalledTimes(1);
+    expect(historyRepositoryModule.clearHistoryForHost).toHaveBeenCalledWith(3);
+    expect(historyRepositoryModule.deleteHistoryEntry).toHaveBeenCalledWith(5);
   });
 });
 

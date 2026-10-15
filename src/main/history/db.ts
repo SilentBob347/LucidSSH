@@ -1,7 +1,8 @@
 import Database from 'better-sqlite3';
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { configDir } from '../config/store';
+import { purgeHistoryBackups, writeDbBackup } from './backups';
 
 /**
  * history.db — история команд и сниппеты (Data_Structures §3–4).
@@ -10,6 +11,9 @@ import { configDir } from '../config/store';
  */
 
 let db: Database.Database | null = null;
+
+/** Стирание сохранённого вывода (HIST-09, Data_Structures §3.5); has_secret не трогаем. */
+export const ERASE_OUTPUT_SQL = 'UPDATE history SET output = NULL, output_truncated = 0;';
 
 const MIGRATIONS: string[] = [
   // v1 — история + сниппеты
@@ -60,8 +64,15 @@ const MIGRATIONS: string[] = [
   // скан snippets на каждую строку history.
   `
   CREATE INDEX IF NOT EXISTS idx_snippets_command ON snippets(command, host_id);
-  `
+  `,
+  // v5 — HIST-09: вывод команд теперь opt-in; вывод, накопленный прежними
+  // версиями (писались всегда), стирается. Копии history.db и checkpoint WAL —
+  // после транзакции, в openHistoryDb (PRAGMA wal_checkpoint в транзакции нельзя).
+  ERASE_OUTPUT_SQL
 ];
+
+/** Номер миграции, стирающей вывод (v5): копии БД версий ниже содержат его. */
+const ERASE_OUTPUT_VERSION = 5;
 
 export function historyDbPath(): string {
   return join(configDir(), 'history.db');
@@ -73,19 +84,32 @@ export function openHistoryDb(): Database.Database {
   const path = historyDbPath();
   db = new Database(path);
   db.pragma('journal_mode = WAL');
+  db.pragma('secure_delete = ON'); // HIST-08: освобождённые страницы затираются, VACUUM не нужен
 
   const current = db.pragma('user_version', { simple: true }) as number;
   if (current < MIGRATIONS.length) {
     if (current > 0 && existsSync(path)) {
-      copyFileSync(path, `${path}.backup-v${current}`); // UPD-04
+      writeDbBackup(path, current); // UPD-04
     }
     const migrate = db.transaction(() => {
       for (let v = current; v < MIGRATIONS.length; v++) db!.exec(MIGRATIONS[v]!);
       db!.pragma(`user_version = ${MIGRATIONS.length}`);
     });
     migrate();
+    // v5 стёрла вывод: копии, включая только что сделанную, хранят его же
+    if (current > 0 && current < ERASE_OUTPUT_VERSION) purgeHistoryTraces(db);
   }
   return db;
+}
+
+/**
+ * После удаления из истории по действию пользователя (HIST-08/09): WAL
+ * схлопывается в файл БД, копии history.db удаляются целиком. FIFO-вытеснение
+ * (HIST-06) и выключатели истории сюда не приходят.
+ */
+export function purgeHistoryTraces(d: Database.Database = openHistoryDb()): void {
+  d.pragma('wal_checkpoint(TRUNCATE)');
+  purgeHistoryBackups(historyDbPath());
 }
 
 export function closeHistoryDb(): void {

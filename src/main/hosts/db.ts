@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DASHBOARD_ALERT_ISSUES } from '@shared/dashboard';
 import { configDir } from '../config/store';
+import { writeDbBackup } from '../history/backups';
 import { resolveHostRefByName } from './resolveByName';
 
 /**
@@ -163,7 +164,7 @@ export function openHostsDb(): Database.Database {
   if (current < MIGRATIONS.length) {
     // Резервная копия перед изменением схемы существующей БД (UPD-04)
     if (current > 0 && existsSync(path)) {
-      copyFileSync(path, `${path}.backup-v${current}`);
+      writeDbBackup(path, current);
     }
     const migrate = db.transaction(() => {
       for (let v = current; v < MIGRATIONS.length; v++) {
