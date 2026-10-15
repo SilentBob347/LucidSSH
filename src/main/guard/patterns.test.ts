@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { DangerPatternId } from '@shared/guard';
 import {
   analyzeAccessRisk,
   analyzeCommand,
@@ -460,5 +461,103 @@ describe('stripCmdPrefix — переиспользуется детекторо
 
   it('команду без префикса не меняет', () => {
     expect(stripCmdPrefix('systemctl status ssh')).toBe('systemctl status ssh');
+  });
+});
+
+/**
+ * Многострочный ввод (вставка, сниппет, запись истории): перевод строки — такой же
+ * разделитель команд, как `;`. Сырой путь (вставка мимо промпта) приносит `\r`,
+ * набранная команда/сниппет — `\n` или `\r\n`; все три вида — разделители.
+ */
+describe('analyzeDangers — многострочный ввод (security-scan-2026-10 #07)', () => {
+  const dangerous: { line: string; patternId: DangerPatternId; target: string | null }[] = [
+    { line: 'rm -rf /var/www', patternId: 'rm-recursive', target: '/var/www' },
+    { line: 'rm -rf /var/www 2>&1', patternId: 'rm-recursive', target: '/var/www' },
+    { line: 'shred -n 3 /dev/sdb', patternId: 'shred', target: '/dev/sdb' },
+    { line: 'wipefs -a /dev/sdc', patternId: 'wipefs', target: '/dev/sdc' },
+    { line: 'dd if=/dev/zero of=/dev/sda', patternId: 'dd-write', target: '/dev/sda' },
+    { line: 'mkfs.ext4 /dev/sdb1', patternId: 'mkfs', target: '/dev/sdb1' },
+    { line: 'truncate -s 0 /var/log/syslog', patternId: 'truncate', target: '/var/log/syslog' },
+    { line: 'kill -9 1', patternId: 'kill-init', target: null }
+  ];
+
+  for (const eol of ['\n', '\r\n', '\r']) {
+    for (const { line, patternId, target } of dangerous) {
+      it(`${patternId} на непоследней строке (${JSON.stringify(eol)}): ${line}`, () => {
+        const ms = analyzeDangers(`cd /tmp${eol}${line}${eol}echo done`);
+        expect(ms).toHaveLength(1);
+        expect(ms[0]?.patternId).toBe(patternId);
+        if (target !== null) expect(ms[0]?.target).toBe(target);
+      });
+    }
+  }
+
+  it('опасные команды на нескольких строках — все в списке', () => {
+    expect(analyzeDangers('rm -rf /a\nls\nrm -rf /b').map((m) => m.target)).toEqual(['/a', '/b']);
+  });
+
+  it('безопасный многострочный текст — пустой список', () => {
+    expect(analyzeDangers('cd /var/www\nls -la\r\ngit pull\rnpm ci')).toEqual([]);
+  });
+
+  it('риск доступа на непоследней строке', () => {
+    expect(analyzeAccessRisk('systemctl restart sshd\necho ok')?.riskId).toBe('sshd-service');
+    expect(analyzeAccessRisk('cd /etc\rpasswd\rls')?.riskId).toBe('passwd');
+  });
+});
+
+/** Длинный ввод не пропускается из-за длины: сырой канал принимает до 100 000 символов. */
+describe('analyzeDangers — ввод длиннее 10 000 символов (security-scan-2026-10 #07)', () => {
+  const filler = Array.from({ length: 3_000 }, (_, i) => `echo line ${i}`).join('\n');
+
+  it('опасная строка посреди длинной вставки распознаётся', () => {
+    const input = `${filler}\nrm -rf /var/www\n${filler}`;
+    expect(input.length).toBeGreaterThan(10_000);
+    expect(input.length).toBeLessThan(100_000);
+    expect(analyzeDangers(input).map((m) => m.target)).toEqual(['/var/www']);
+  });
+
+  it('опасная команда в конце одной длинной строки распознаётся', () => {
+    const input = `echo ${'a'.repeat(20_000)}; rm -rf /var/www`;
+    expect(analyzeCommand(input)?.target).toBe('/var/www');
+  });
+
+  it('риск доступа в длинной вставке распознаётся', () => {
+    expect(analyzeAccessRisk(`${filler}\nsystemctl restart sshd`)?.riskId).toBe('sshd-service');
+  });
+
+  it('вставка в 100 000 символов анализируется в пределах бюджета времени', () => {
+    const input = `${filler}\n${filler}\n${filler}\nrm -rf /var/www`.slice(-100_000);
+    const start = performance.now();
+    analyzeDangers(input);
+    analyzeAccessRisk(input);
+    expect(performance.now() - start).toBeLessThan(500);
+  });
+});
+
+/**
+ * ReDoS: хвостовой редирект с неоднозначным разбором (`>>a` = `>`+`>a` или `>>`+`a`)
+ * давал экспоненциальный перебор на команде в ~200 символов и вешал main process.
+ */
+describe('rm-recursive — хвост из редиректов без экспоненциального перебора (security-scan-2026-10 #07)', () => {
+  const runs = [' >>a', ' &>>a', ' 2>&1'];
+  for (const run of runs) {
+    // ~200 символов вешали экспоненциально; ~100 000 (предел сырого канала) — квадратично.
+    for (const reps of [50, 20_000]) {
+      it(`серия ${JSON.stringify(run)} ×${reps} с не-редиректом в конце — в пределах бюджета`, () => {
+        const start = performance.now();
+        analyzeDangers(`rm -rf /tmp/x${run.repeat(reps)} -v`);
+        analyzeDangers(`shred /tmp/x${run.repeat(reps)}`);
+        expect(performance.now() - start).toBeLessThan(200);
+      });
+    }
+  }
+
+  it('один аргумент без флага рекурсии — не rm -r, даже с лишними пробелами', () => {
+    expect(analyzeCommand('rm    foo-r')).toBeNull();
+  });
+
+  it('цель по-прежнему берётся до серии редиректов', () => {
+    expect(analyzeCommand('rm -rf /var/www >>a.log 2>>err.log &>/dev/null 2>&1')?.target).toBe('/var/www');
   });
 });

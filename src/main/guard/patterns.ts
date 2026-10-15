@@ -41,31 +41,43 @@ interface GuardPattern {
   target: (m: RegExpMatchArray) => string | null;
 }
 
-/** Хвостовое перенаправление без пробела внутри токена: `2>&1`, `>&2`, `&>file`, `&>>file`,
- *  `>file`, `2>>file`. Требует пробела ПЕРЕД собой — не трогает слитные случаи вроде
- *  `/var/www2>&1` (консервативно: как и с кавычками, не пытаемся разобрать всё).
+/** Хвостовое перенаправление — один токен без пробела внутри: `2>&1`, `>&2`, `&>file`,
+ *  `&>>file`, `>file`, `2>>file`. Только отдельный токен — слитные случаи вроде
+ *  `/var/www2>&1` не трогаются (консервативно: как и с кавычками, не пытаемся разобрать всё).
  *  Применяется только при извлечении цели (rm/shred/wipefs) — НЕ к фрагменту, который
  *  матчат сами паттерны: `redirect-device` (`echo x >/dev/sda`) как раз ищет `>` + путь,
- *  и снимать редирект до его проверки — значит спрятать от Стража ровно то, что он ищет. */
-const TRAILING_REDIRECT_RE = /\s+(?:\d*>{1,2}&\d+|&>{1,2}\S*|\d*>{1,2}\S+)$/;
+ *  и снимать редирект до его проверки — значит спрятать от Стража ровно то, что он ищет.
+ *  Хвост редиректов разбирается по токенам в коде, а не регекспом: регексп с повторяемой
+ *  группой редиректов в rm-recursive давал экспоненциальный (после упрощения — квадратичный)
+ *  перебор на серии `>>a >>a …` и вешал main process (ReDoS). */
+const REDIRECT_TOKEN_RE = /^(?:&>\S*|\d*>\S+)$/;
 
-/** Снять один или несколько хвостовых редиректов подряд (`cmd > out.log 2>&1`). */
-function stripTrailingRedirects(s: string): string {
-  let result = s;
-  for (let next = result.replace(TRAILING_REDIRECT_RE, ''); next !== result; ) {
-    result = next;
-    next = result.replace(TRAILING_REDIRECT_RE, '');
-  }
-  return result;
+/** Начало хвоста редиректов: индекс первого токена серии, идущей до конца. Нулевой
+ *  токен (сама цель/первый аргумент, перед ним нет пробела) редиректом не считается. */
+function redirectTailStart(tokens: string[]): number {
+  let i = tokens.length;
+  while (i > 1 && REDIRECT_TOKEN_RE.test(tokens[i - 1]!)) i--;
+  return i;
 }
 
 /** Последний токен строки аргументов (цель команд вида shred/wipefs). Хвостовой
- *  редирект снимается до разбиения на токены — иначе целью станет `2>&1`, а не файл. */
+ *  редирект снимается до выбора токена — иначе целью станет `2>&1`, а не файл. */
 function lastToken(args: string | undefined): string | null {
   if (!args) return null;
-  const tokens = stripTrailingRedirects(args.trim()).trim().split(/\s+/);
-  const last = tokens[tokens.length - 1];
+  const tokens = args.trim().split(/\s+/);
+  const last = tokens[redirectTailStart(tokens) - 1];
   return last && !last.startsWith('-') ? last : null;
+}
+
+/** Цель rm -r из аргументов после `rm`: самый левый аргумент (не первый и не флаг),
+ *  за которым идут только редиректы. Регексп паттерна уже гарантирует ≥2 аргумента и
+ *  последний — не флаг, так что цель находится всегда. */
+function rmTarget(args: string | undefined): string | null {
+  if (!args) return null;
+  const tokens = args.trim().split(/\s+/);
+  let i = Math.max(1, redirectTailStart(tokens) - 1);
+  while (i < tokens.length && tokens[i]!.startsWith('-')) i++;
+  return tokens[i] ?? null;
 }
 
 /** Последний сегмент пути — им подтверждают удаление («www» для /var/www).
@@ -88,15 +100,15 @@ const CONFIRM_WORD = 'ПОДТВЕРЖДАЮ';
 const PATTERNS: GuardPattern[] = [
   {
     // rm с рекурсивным или форсированным флагом: rm -rf X, rm -r X, rm --recursive X
-    // Хвост вида `2>&1`/`>file` после цели опционально поглощается без захвата —
-    // иначе им же и подтверждали бы удаление (см. TRAILING_REDIRECT_RE выше).
+    // Регексп захватывает аргументы (≥2, последний — не флаг); цель из них выбирает
+    // rmTarget мимо хвоста `2>&1`/`>file` — иначе им же и подтверждали бы удаление.
     id: 'rm-recursive',
-    re: new RegExp(
-      String.raw`(?:^|\s)rm\s+(?=[^\n]*(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive))[^\n]*?\s(?!-)(\S+)` +
-        String.raw`(?:\s+(?:\d*>{1,2}&\d+|&>{1,2}\S*|\d*>{1,2}\S+))*\s*$`
-    ),
-    scope: (m) => (m[1] === '/' || m[1] === '/*' ? 'disk' : 'directory'),
-    target: (m) => m[1] ?? null
+    re: /(?:^|\s)rm\s+(?=[^\n]*(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive))(\S+\s(?:.*\s)?(?!-)\S+)\s*$/,
+    scope: (m) => {
+      const target = rmTarget(m[1]);
+      return target === '/' || target === '/*' ? 'disk' : 'directory';
+    },
+    target: (m) => rmTarget(m[1])
   },
   {
     // dd с записью в устройство или файл: dd if=... of=/dev/sda
@@ -129,7 +141,9 @@ const PATTERNS: GuardPattern[] = [
   {
     // Перенаправление в блочное устройство: > /dev/sda, >> /dev/nvme0n1
     id: 'redirect-device',
-    re: />+\s*(\/dev\/(?:sd[a-z]\d*|hd[a-z]\d*|nvme\d+n\d+(?:p\d+)?|vd[a-z]\d*|mmcblk\d+(?:p\d+)?))/,
+    // Один `>`, не `>+`: `>>` всё равно совпадает (по последнему `>`), а серия `>>>>…`
+    // не перебирается квадратично с каждой позиции.
+    re: />\s*(\/dev\/(?:sd[a-z]\d*|hd[a-z]\d*|nvme\d+n\d+(?:p\d+)?|vd[a-z]\d*|mmcblk\d+(?:p\d+)?))/,
     scope: 'disk',
     target: (m) => m[1] ?? null
   },
@@ -234,7 +248,7 @@ const ACCESS_RISK_PATTERNS: { id: AccessRiskId; re: RegExp }[] = [
  */
 export function analyzeAccessRisk(command: string): AccessRiskMatch | null {
   const trimmed = command.trim();
-  if (trimmed.length === 0 || trimmed.length > 10_000) return null;
+  if (trimmed.length === 0) return null;
   for (const part of splitCompound(trimmed)) {
     const unprefixed = part.replace(CMD_PREFIX_RE, '');
     for (const pattern of ACCESS_RISK_PATTERNS) {
@@ -255,10 +269,12 @@ export function analyzeAccessRisk(command: string): AccessRiskMatch | null {
  *  как раз матчит `>`+путь, и снимать его здесь означало бы прятать цель от самого Стража
  *  (см. spec .scratch/guard-background-ampersand). Кавычки по-прежнему не учитываются —
  *  осознанное упрощение.
+ *  Перевод строки (`\n`, `\r` — сырая вставка шлёт `\r`) — тоже разделитель: иначе в
+ *  многострочной вставке/сниппете паттерны с якорем `$` видели только последнюю строку.
  *  Экспорт: переиспользуется детекцией эскалации шелла (shellIntegration.ts). */
 export function splitCompound(command: string): string[] {
   return command
-    .split(/;|&&|\|\||\||(?<!>)&(?!>)/)
+    .split(/[\r\n]|;|&&|\|\||\||(?<!>)&(?!>)/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 }
@@ -277,7 +293,11 @@ export function splitCompound(command: string): string[] {
  */
 export function analyzeDangers(command: string): DangerMatch[] {
   const trimmed = command.trim();
-  if (trimmed.length === 0 || trimmed.length > 10_000) return [];
+  if (trimmed.length === 0) return [];
+  // Длина не ограничивается: пропуск длинного ввода без проверки был обходом Стража
+  // (сырой канал принимает намного больше прежнего порога, см. ipc/sessions.ts).
+  // Известный предел: паттерны вида `имя\s+[^\n]*хвост` квадратичны на одной строке,
+  // повторяющей имя команды тысячи раз (`dd dd dd …` — секунды на ~100 000 символов).
 
   const matches: DangerMatch[] = [];
   const seen = new Set<string>();
