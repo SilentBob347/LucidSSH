@@ -293,6 +293,7 @@ describe('isShellEscalationCommand — команды, сменяющие про
     'exec su -',
     'doas -s',
     'cd /tmp && sudo -i',
+    'cd /tmp\nsudo -i', // перевод строки — тоже разделитель (splitCompound)
     'long_task & sudo -i' // guard-background-ampersand: & тоже разделитель
   ])('эскалация: %s', (cmd) => {
     expect(isShellEscalationCommand(cmd)).toBe(true);
