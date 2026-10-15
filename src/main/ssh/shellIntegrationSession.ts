@@ -9,7 +9,8 @@ import {
   detectInteractiveProgram,
   endsWithInputPrompt,
   isShellEscalationCommand,
-  matchesPasswordPromptPattern
+  matchesPasswordPromptPattern,
+  stripTerminalControls
 } from './shellIntegration';
 
 /**
@@ -97,6 +98,9 @@ export class ShellIntegrationSession {
   private pendingGuardStatus: GuardStatus | undefined;
   /** Первый маркер после подключения — приветствие, не результат команды. */
   private firstMarkSeen = false;
+  /** Был ли ввод с прошлого маркера: первый ввод означает «приглашение
+   *  дописано» — всё накопленное до него (OSC-заголовок + prompt) отбрасывается. */
+  private inputSinceMark = false;
   /** Взводится при каждой отправке настройки (первичной и реинжекте),
    *  снимается любым пришедшим маркером — «ждём ли мы ещё маркер после
    *  ПОСЛЕДНЕЙ отправки настройки». Отдельно от firstMarkSeen: реинжект
@@ -270,8 +274,9 @@ export class ShellIntegrationSession {
   }
 
   private handleCommandFinished(exitCode: number | null, result: ShellIntegrationResult): void {
-    const output = this.outputSinceMark;
+    const output = stripTerminalControls(this.outputSinceMark);
     this.outputSinceMark = '';
+    this.inputSinceMark = false;
 
     if (!this.firstMarkSeen) {
       this.firstMarkSeen = true;
@@ -304,6 +309,11 @@ export class ShellIntegrationSession {
    *  первой, если ещё не отправлена, дальше — сам ввод, с учётом кредита Enter. */
   private writeRaw(data: string, result: ShellIntegrationResult): void {
     this.armSetupIfNeeded(result);
+    // ponytail: приглашение, пришедшее ПОСЛЕ первого нажатия клавиши, не отрезается.
+    if (this.firstMarkSeen && !this.inputSinceMark) {
+      this.inputSinceMark = true;
+      this.outputSinceMark = '';
+    }
     this.commandGate.noteInput(data);
     result.toWrite += data;
   }

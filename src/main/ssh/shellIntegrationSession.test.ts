@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ShellIntegrationSession } from './shellIntegrationSession';
 import { SHELL_INTEGRATION_SETUP } from './shellIntegration';
+import { excerpt, isEmptyOutput, isNonErrorExitCode } from '../errors/detector';
+import { hasBlockSecret } from '../secrets/maskers';
 
 const US = '\x1f';
 const mk = (u: string, h: string, p: string, e: string, c = '0', sudoUser = ''): string =>
@@ -363,5 +365,99 @@ describe('ShellIntegrationSession.writeCommand — запуск интеракт
     const box = new ShellIntegrationSession();
     const result = box.writeCommand('htop');
     expect(result.events).toEqual([]);
+  });
+});
+
+describe('ShellIntegrationSession — приглашение и escape-ы не попадают в output (HIST-09)', () => {
+  const prompt = '\x1b]0;root@h: ~\x07root@h:~# ';
+  const finished = (r: ReturnType<ShellIntegrationSession['feed']>): string => {
+    const e = r.events.find((x) => x.kind === 'command-finished');
+    if (e?.kind !== 'command-finished') throw new Error('no command-finished');
+    return e.output;
+  };
+
+  it('команда с выводом: ровно то, что напечатала команда', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.feed(prompt);
+    box.writeCommand('ls');
+    const r = box.feed(`\x1b[Kmoduli\r\nssh_config\r\n${mk('u', 'h', '/', '0', '0')}`);
+    expect(finished(r)).toBe('moduli\r\nssh_config\r\n');
+  });
+
+  it('команда без вывода и набранный ввод (sendRawInput)', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.feed(prompt);
+    box.sendRawInput('false\n');
+    expect(finished(box.feed(mk('u', 'h', '/', '0', '1')))).toBe('');
+  });
+
+  it('приглашение, разрезанное на два чанка, не дублируется', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.feed(prompt.slice(0, 7));
+    box.feed(prompt.slice(7));
+    box.writeCommand('true');
+    expect(finished(box.feed(`ok\r\n${mk('u', 'h', '/', '0', '0')}`))).toBe('ok\r\n');
+  });
+
+  it('ввод раньше приглашения: не падает, приглашение не режется (известный потолок)', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.writeCommand('true');
+    box.feed(prompt);
+    expect(finished(box.feed(mk('u', 'h', '/', '0', '0')))).toBe('root@h:~# ');
+  });
+
+  it('детектор: `false` даёт пустой вывод, а не приглашение (ERR-06)', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.feed(prompt);
+    box.writeCommand('false');
+    const out = finished(box.feed(mk('u', 'h', '/', '0', '1')));
+    expect(isEmptyOutput(out)).toBe(true);
+  });
+
+  it('детектор: исключение `2>/dev/null` срабатывает на реальном потоке', () => {
+    const cmd = 'true 2>/dev/null && false 2>/dev/null';
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.feed(prompt);
+    box.writeCommand(cmd);
+    const out = finished(box.feed(mk('u', 'h', '/', '0', '1')));
+    expect(isNonErrorExitCode(cmd, out, 1)).toBe(true);
+  });
+
+  it('детектор: excerpt ошибки без escape-ов', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.feed(prompt);
+    box.writeCommand('ls /nonexist');
+    const out = finished(
+      box.feed(`ls: cannot access '/nonexist': No such file or directory\r\n${mk('u', 'h', '/', '0', '2')}`)
+    );
+    expect(excerpt(out)).toBe("ls: cannot access '/nonexist': No such file or directory\r\n".trimEnd());
+    expect(out).not.toContain('\x1b');
+  });
+
+  it('ls --color: в output нет ESC', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.feed(prompt);
+    box.writeCommand('ls --color=always');
+    const out = finished(box.feed(`\x1b[0m\x1b[01;34mdir\x1b[0m  file\r\n${mk('u', 'h', '/', '0', '0')}`));
+    expect(out).toBe('dir  file\r\n');
+  });
+
+  it('PEM с SGR-кодами: после зачистки hasBlockSecret его видит', () => {
+    const box = new ShellIntegrationSession();
+    warmUp(box);
+    box.feed(prompt);
+    box.writeCommand('cat key.pem');
+    const out = finished(
+      box.feed(`-----\x1b[1mBEGIN OPENSSH PRIVATE KEY-----\r\nabc\r\n-----END OPENSSH PRIVATE KEY-----\r\n${mk('u', 'h', '/', '0', '0')}`)
+    );
+    expect(hasBlockSecret(out)).toBe(true);
   });
 });
