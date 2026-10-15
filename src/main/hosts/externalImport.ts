@@ -2,7 +2,7 @@ import { userInfo } from 'node:os';
 import type { ExternalImportApplyResult, ImportedHost } from '@shared/import';
 import type { HostInput } from '@shared/hosts';
 import { validateHostInput } from './validate';
-import { resolveHostRefByName } from './resolveByName';
+import { createNamePicker, resolveHostRefByName } from './resolveByName';
 import * as repo from './repository';
 
 /**
@@ -54,29 +54,33 @@ export function applyExternalImport(
   // позже него самого).
   const pendingProxyJump: Array<{ id: number; name: string; alias: string }> = [];
 
-  for (const h of hosts) {
-    let input: HostInput;
-    try {
-      input = validateHostInput(toRawInput(h, defaultUser));
-    } catch {
-      skipped++; // невалидная запись (например, адрес с недопустимыми символами)
-      continue;
-    }
-
-    if (repo.hostExists(input.address, input.username)) {
-      if (conflictStrategy === 'skip') {
-        skipped++;
+  // Имена в памяти + одна транзакция (см. importHosts в exportImport.ts).
+  const usedNames = repo.listHostNames();
+  const pickName = createNamePicker(usedNames);
+  repo.runInTransaction(() => {
+    for (const h of hosts) {
+      let input: HostInput;
+      try {
+        input = validateHostInput(toRawInput(h, defaultUser));
+      } catch {
+        skipped++; // невалидная запись (например, адрес с недопустимыми символами)
         continue;
       }
-      let candidate = input.name;
-      let n = 2;
-      while (repo.hostNameExists(candidate)) candidate = `${input.name} (${n++})`;
-      input.name = candidate;
+
+      if (repo.hostExists(input.address, input.username)) {
+        if (conflictStrategy === 'skip') {
+          skipped++;
+          continue;
+        }
+        input.name = pickName(input.name);
+      } else {
+        usedNames.add(input.name);
+      }
+      const id = repo.createHost(input);
+      imported++;
+      if (h.proxyJump) pendingProxyJump.push({ id, name: input.name, alias: h.proxyJump });
     }
-    const id = repo.createHost(input);
-    imported++;
-    if (h.proxyJump) pendingProxyJump.push({ id, name: input.name, alias: h.proxyJump });
-  }
+  });
 
   const unresolvedProxyJump: string[] = [];
   if (pendingProxyJump.length > 0) {

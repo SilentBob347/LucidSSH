@@ -160,3 +160,29 @@ describe('applyExternalImport — резолв ProxyJump', () => {
     expect(res.unresolvedProxyJump).toEqual([]);
   });
 });
+
+describe('applyExternalImport — rename на большом батче', () => {
+  it('10 000 дублей: уникальные имена «dup (N)», быстро', async () => {
+    const { applyExternalImport, repo } = await fresh();
+    repo.createHost({
+      name: 'dup',
+      address: '203.0.113.9',
+      port: 22,
+      username: 'root',
+      authMethod: 'password',
+      guardEnabled: true,
+      historyEnabled: true
+    });
+    const t = performance.now();
+    const res = applyExternalImport(
+      Array.from({ length: 10_000 }, () => host({ name: 'dup', address: '203.0.113.9' })),
+      'rename'
+    );
+    expect(res.imported).toBe(10_000);
+    const names = repo.listHosts().map((h) => h.name);
+    expect(new Set(names).size).toBe(10_001);
+    expect(names).toContain('dup (2)');
+    expect(names).toContain('dup (10001)');
+    expect(performance.now() - t).toBeLessThan(10_000);
+  }, 30_000);
+});

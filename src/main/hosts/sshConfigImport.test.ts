@@ -72,3 +72,23 @@ Match exec "hostname | grep work"
     expect(hosts[0]!.port).toBe(22);
   });
 });
+
+describe('parseSshConfig — патологический ввод и формы записи', () => {
+  it('Key value / Key=value / Key = value', () => {
+    const r = parseSshConfig('Host a\n HostName=1.2.3.4\n User = bob\n Port 2200', '/h');
+    expect(r.hosts[0]).toMatchObject({ name: 'a', address: '1.2.3.4', username: 'bob', port: 2200 });
+  });
+  it('длинная серия "=" и одинокие CR не вешают парсер', () => {
+    const t = performance.now();
+    parseSshConfig('Host a\n' + 'k' + '='.repeat(60_000) + '\n', '/h');
+    const r = parseSshConfig('Host a\rHostName 9.9.9.9\r' + 'x '.repeat(50_000), '/h');
+    expect(r.hosts[0]?.address).toBe('9.9.9.9');
+    expect(performance.now() - t).toBeLessThan(500);
+  });
+  it('пропущенная сверхдлинная Host-строка не отдаёт свои директивы предыдущему хосту', () => {
+    const long = 'Host ' + 'x'.repeat(5000);
+    const r = parseSshConfig(['Host a', ' HostName 1.1.1.1', long, ' HostName 6.6.6.6'].join('\n'), '/h');
+    expect(r.hosts).toHaveLength(1);
+    expect(r.hosts[0]?.address).toBe('1.1.1.1');
+  });
+});

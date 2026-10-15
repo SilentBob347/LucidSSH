@@ -230,7 +230,6 @@ vi.mock('../hosts/repository', () => ({
   setProxyJumpHostId: vi.fn(),
   checkJumpHost: vi.fn(),
   listHostsReferencingProxyJump: vi.fn(),
-  hostNameExists: vi.fn(),
   listGroups: vi.fn(),
   createGroup: vi.fn(),
   renameGroup: vi.fn(),

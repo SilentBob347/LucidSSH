@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ExternalImportResult, ImportedHost, UnsupportedDirective } from '@shared/import';
@@ -16,6 +16,10 @@ const EXECUTABLE_DIRECTIVES = new Set([
   'permitlocalcommand',
   'knownhostscommand'
 ]);
+
+/** Потолки для недоверенного файла: реальные ssh_config — единицы КБ. */
+const MAX_CONFIG_BYTES = 1_000_000;
+const MAX_LINE_LENGTH = 4096;
 
 function expandHome(path: string, home: string): string {
   if (path === '~') return home;
@@ -58,11 +62,19 @@ export function parseSshConfig(content: string, home: string): ExternalImportRes
     block = null;
   };
 
-  for (const raw of content.split(/\r?\n/)) {
+  // Одинокий CR тоже разделитель строк; сверхдлинные строки пропускаем.
+  for (const raw of content.split(/\r\n|\r|\n/)) {
+    if (raw.length > MAX_LINE_LENGTH) {
+      // Пропущенная строка могла открывать блок — закрываем текущий, чтобы
+      // следующие директивы не прилипли к предыдущему хосту.
+      flush();
+      continue;
+    }
     const line = raw.trim();
     if (line === '' || line.startsWith('#')) continue;
-    // keyword и значение разделяются пробелом или '='
-    const m = line.match(/^(\S+)[=\s]+(.*)$/);
+    // keyword и значение разделяются пробелом или '='; классы не пересекаются —
+    // нет суперлинейного бэктрекинга на длинной серии '='
+    const m = line.match(/^([^\s=]+)[\s=]+(.*)$/);
     if (!m) continue;
     const keyword = m[1]!.toLowerCase();
     const value = m[2]!.trim().replace(/^["']|["']$/g, '');
@@ -125,6 +137,7 @@ export async function importSshConfigPreview(filePath?: string): Promise<Externa
   const home = homedir();
   const path = filePath ?? join(home, '.ssh', 'config');
   try {
+    if ((await stat(path)).size > MAX_CONFIG_BYTES) throw new Error('ssh_config too large');
     const content = await readFile(path, 'utf8');
     return parseSshConfig(content, home);
   } catch {

@@ -14,7 +14,8 @@ let nextGroupId = 1;
 
 vi.mock('./repository', () => ({
   hostExists: (address: string, username: string) => hostExists(address, username),
-  hostNameExists: (name: string) => fakeHosts.some((h) => h.name === name),
+  listHostNames: () => new Set(fakeHosts.map((h) => h.name)),
+  runInTransaction: <T>(fn: () => T): T => fn(),
   listGroups: () => fakeGroups,
   createGroup: (name: string) => {
     const id = nextGroupId++;
@@ -265,5 +266,29 @@ describe('previewImport — UNC/device-путь к ключу', () => {
     expect(preview.invalidCount).toBe(1);
     expect(preview.toAdd).toBe(1);
     expect(preview.missingKeyCount).toBe(0);
+  });
+});
+
+describe('importHosts — rename на большом батче', () => {
+  it('10 000 дублей: уникальные имена, малый вход даёт «name (2)»…', () => {
+    fakeHosts = [{ id: 999, name: 'dup' }];
+    hostExists.mockReturnValue(true);
+    const entry = { name: 'dup', address: '203.0.113.9', port: 22, username: 'root', authMethod: 'password' };
+    const file = (n: number): string =>
+      JSON.stringify({
+        format: EXPORT_FORMAT,
+        version: EXPORT_VERSION,
+        exportedAt: '',
+        groups: [],
+        hosts: Array.from({ length: n }, () => ({ ...entry, guardEnabled: true, historyEnabled: true }))
+      });
+    importHosts(file(2), 'rename');
+    expect(fakeHosts.map((h) => h.name)).toEqual(['dup', 'dup (2)', 'dup (3)']);
+
+    fakeHosts = [{ id: 999, name: 'dup' }];
+    const t = performance.now();
+    expect(importHosts(file(10_000), 'rename').imported).toBe(10_000);
+    expect(new Set(fakeHosts.map((h) => h.name)).size).toBe(10_001);
+    expect(performance.now() - t).toBeLessThan(5_000);
   });
 });

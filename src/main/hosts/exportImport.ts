@@ -1,7 +1,7 @@
 import { isNetworkPath, type Host, type HostGroup, type HostInput, type ImportPreview } from '@shared/hosts';
 import { validateHostInput } from './validate';
 import { keyFileExists } from './keyFile';
-import { resolveHostRefByName } from './resolveByName';
+import { createNamePicker, resolveHostRefByName } from './resolveByName';
 import * as repo from './repository';
 
 /**
@@ -211,28 +211,31 @@ export function importHosts(
   // весь батч уже записан в БД (jump-хост мог идти в файле после зависимого).
   const pendingProxyJump: Array<{ id: number; proxyJumpName: string }> = [];
 
-  for (const h of hosts as HostInputWithGroup[]) {
-    const { groupName, proxyJumpName, ...input } = h;
-    if (repo.hostExists(input.address, input.username)) {
-      if (conflictStrategy === 'skip') {
-        skipped++;
-        continue;
+  // Имена в памяти + одна транзакция: запрос на каждого кандидата «name (N)»
+  // делал импорт 10 000 одинаковых хостов квадратичным.
+  const usedNames = repo.listHostNames();
+  const pickName = createNamePicker(usedNames);
+  repo.runInTransaction(() => {
+    for (const h of hosts as HostInputWithGroup[]) {
+      const { groupName, proxyJumpName, ...input } = h;
+      if (repo.hostExists(input.address, input.username)) {
+        if (conflictStrategy === 'skip') {
+          skipped++;
+          continue;
+        }
+        // rename: подобрать свободное имя «name (2)», «name (3)»…
+        input.name = pickName(input.name);
+      } else {
+        usedNames.add(input.name);
       }
-      // rename: подобрать свободное имя «name (2)», «name (3)»…
-      let candidate = input.name;
-      let n = 2;
-      while (repo.hostNameExists(candidate)) {
-        candidate = `${input.name} (${n++})`;
-      }
-      input.name = candidate;
+      const id = repo.createHost({
+        ...input,
+        groupId: groupName ? groupIdByName.get(groupName) : undefined
+      });
+      if (proxyJumpName) pendingProxyJump.push({ id, proxyJumpName });
+      imported++;
     }
-    const id = repo.createHost({
-      ...input,
-      groupId: groupName ? groupIdByName.get(groupName) : undefined
-    });
-    if (proxyJumpName) pendingProxyJump.push({ id, proxyJumpName });
-    imported++;
-  }
+  });
 
   // Резолв jump-хоста по имени — среди уже имеющихся хостов и хостов, только что
   // импортированных в этом же батче (их итоговые, возможно переименованные, имена).
