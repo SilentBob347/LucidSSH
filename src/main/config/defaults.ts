@@ -50,7 +50,8 @@ export function createDefaultConfig(appVersion: string): AppConfig {
     },
     hotkeys: { ...DEFAULT_HOTKEYS },
     history: {
-      enabled: true
+      enabled: true,
+      saveOutput: false // HIST-09: opt-in
     },
     shownCounts: {},
     pendingKeyDeployments: [],

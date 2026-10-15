@@ -4,8 +4,8 @@ import type {
   HistoryQuery,
   HistoryRecordInput
 } from '@shared/history';
-import { openHistoryDb } from './db';
-import { maskSecrets } from '../secrets/maskers';
+import { ERASE_OUTPUT_SQL, openHistoryDb, purgeHistoryTraces } from './db';
+import { hasBlockSecret, maskSecrets } from '../secrets/maskers';
 
 /**
  * Репозиторий истории (HIST-01…07). Команда маскируется ПЕРЕД записью (HIST-07);
@@ -59,16 +59,27 @@ function rowToEntry(r: HistoryRow): HistoryEntry {
 }
 
 /**
- * Готовит вывод команды к сохранению (HIST-07): маскирует теми же правилами,
- * что и команду, и усекает до OUTPUT_LIMIT. Если сама команда уже содержала
- * секрет (commandHasSecret) — вывод не сохраняется вовсе (двойная защита:
- * например `export API_KEY=...; env` — секрет мог утечь в echo вывода тоже).
+ * Готовит вывод команды к сохранению (HIST-09, Data_Structures §3.5): маскирует
+ * теми же правилами, что и команду, и усекает до OUTPUT_LIMIT. Если сама
+ * команда уже содержала секрет (commandHasSecret) — вывод не сохраняется вовсе
+ * (двойная защита: например `export API_KEY=...; env` — секрет мог утечь в
+ * echo вывода тоже). Так же — при блочном секрете в выводе (приватный ключ,
+ * crypt-хэш): запись получает признак секрета, текст не сохраняется.
+ * Включена ли запись вывода (history.saveOutput) — решает вызывающий.
+ *
+ * ponytail: `password: x` в нижнем регистре не маскируется — слово слишком
+ * частое в обычном выводе, правило давало бы шквал ложных срабатываний.
+ * Потолок: такой секрет попадёт в историю при включённой настройке; поднять
+ * можно только правилом с контекстом строки (маскер остаётся линейным).
  */
 export function prepareOutput(
   raw: string | undefined,
   commandHasSecret: boolean
 ): { output: string | null; outputTruncated: boolean; outputHasSecret: boolean } {
   if (!raw || commandHasSecret) return { output: null, outputTruncated: false, outputHasSecret: false };
+  // по всему сырому тексту, а не по усечённому: это линейный поиск маркера,
+  // а блок за пределами 4000 символов тоже означает «вывод — не для истории»
+  if (hasBlockSecret(raw)) return { output: null, outputTruncated: false, outputHasSecret: true };
   // усекаем до маскирования: маскеру незачем сканировать то, что не сохранится;
   // и после — маска длиннее короткого значения (KEY=a → KEY=••••••••)
   const truncated = raw.length > OUTPUT_LIMIT;
@@ -180,12 +191,22 @@ export function addHistoryNote(id: number, note: string): void {
   openHistoryDb().prepare('UPDATE history SET note = ? WHERE id = ?').run(note, id);
 }
 
+// Удаления по действию пользователя заканчиваются purgeHistoryTraces: копии
+// history.db и WAL хранят удалённое (HIST-08). FIFO в recordHistory — нет.
 export function deleteHistoryEntry(id: number): void {
   openHistoryDb().prepare('DELETE FROM history WHERE id = ?').run(id);
+  purgeHistoryTraces();
 }
 
 export function clearHistory(): void {
   openHistoryDb().prepare('DELETE FROM history').run();
+  purgeHistoryTraces();
+}
+
+/** Стереть весь сохранённый вывод (HIST-09): выключение «Сохранять вывод команд». */
+export function eraseStoredOutput(): void {
+  openHistoryDb().exec(ERASE_OUTPUT_SQL);
+  purgeHistoryTraces();
 }
 
 /** Число записей одного хоста (HIST-08) — не зависит от текстового поиска. */
@@ -200,6 +221,7 @@ export function historyCountForHost(hostId: number): number {
 /** Очистить историю только одного хоста, не трогая записи остальных (HIST-08). */
 export function clearHistoryForHost(hostId: number): void {
   openHistoryDb().prepare('DELETE FROM history WHERE host_id = ?').run(hostId);
+  purgeHistoryTraces();
 }
 
 /**

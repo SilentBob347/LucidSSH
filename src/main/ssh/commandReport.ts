@@ -141,7 +141,8 @@ export function recordCommand(
     username: host?.username ?? session.quickConnectUsername ?? '',
     exitCode: exitCode ?? undefined,
     guardStatus,
-    output
+    // HIST-09: вывод пишется только при явном включении в Настройках → Безопасность
+    output: cfg.history.saveOutput ? output : undefined
   });
   // HistoryDrawer, если уже открыт, не перечитывает список сам по себе —
   // нужен явный сигнал (тот же баг чинили для сниппетов, snippetsRevision).

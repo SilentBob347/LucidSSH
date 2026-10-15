@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { maskSecrets } from './maskers';
+import { hasBlockSecret, maskSecrets } from './maskers';
 
 /**
  * Обязательное покрытие маскирования (§10) на реальных примерах утечек (§16).
@@ -170,12 +170,100 @@ describe('maskSecrets — линейное время на 64 КБ (тикет 0
     'повтор X_KEY=" без закрытия': 'X_KEY="'.repeat(N / 7),
     "повтор --password ' ": "--password '".repeat(N / 12),
     'повтор " -p"': ' -p'.repeat(N / 3),
-    "повтор KEY=' без закрытия и строк": "KEY='a".repeat(N / 6)
+    "повтор KEY=' без закрытия и строк": "KEY='a".repeat(N / 6),
+    'повтор :// без пароля': '://u'.repeat(N / 4),
+    'повтор ://user:p без @': '://user:p'.repeat(N / 9),
+    'длинный логин после ://': `://${'u'.repeat(N)}`,
+    'повтор ://u:p@ с маскированием каждого': '://u:p@'.repeat(N / 7),
+    'повтор ://u:p без @ одним токеном': '://u:pp'.repeat(N / 7),
+    'один пароль из «a@» до конца токена': `://u:${'a@'.repeat(N / 2)}`,
+    'один пароль из «a/» без @': `://u:${'a/'.repeat(N / 2)}`
   };
   for (const [name, input] of Object.entries(inputs)) {
     it(name, () => {
       const start = performance.now();
       maskSecrets(input);
+      expect(performance.now() - start).toBeLessThan(200);
+    });
+  }
+});
+
+describe('maskSecrets — пароль в URL (HIST-09)', () => {
+  it.each([
+    ['https://user:p4ss@host/path', 'https://user:••••••••@host/path'],
+    [
+      'git clone https://deploy:s3cr3t@github.com/o/r.git',
+      'git clone https://deploy:••••••••@github.com/o/r.git'
+    ],
+    ['postgres://app:pw:with:colons@db:5432/x', 'postgres://app:••••••••@db:5432/x'],
+    ['ftp://u:p@h и ssh://root:toor@10.0.0.1', 'ftp://u:••••••••@h и ssh://root:••••••••@10.0.0.1'],
+    // пароль тянется до последнего «@» токена, «/» и «@» внутри пароля допустимы
+    ['https://u:p@ss@host/x', 'https://u:••••••••@host/x'],
+    ['https://u:pa/ss@host', 'https://u:••••••••@host'],
+    ['https://u:a/b@c/d@host/path', 'https://u:••••••••@host/path'],
+    ['curl "https://u:p@ss@host" -o x', 'curl "https://u:••••••••@host" -o x']
+  ])('%s', (input, expected) => {
+    const r = maskSecrets(input);
+    expect(r.masked).toBe(expected);
+    expect(r.hasSecret).toBe(true);
+  });
+
+  it.each([
+    'curl http://localhost:8080/health',
+    'http://example.com:8080',
+    'https://user@host/path',
+    'ssh://root@10.0.0.1:22',
+    'http://host:8080 user@host',
+    'https://user@host:8080/x',
+    'в логе: ://'
+  ])('не трогает %s', (input) => {
+    expect(maskSecrets(input)).toEqual({ masked: input, hasSecret: false });
+  });
+});
+
+describe('hasBlockSecret — приватный ключ и crypt-хэш (HIST-09)', () => {
+  it.each([
+    '-----BEGIN RSA PRIVATE KEY-----\nMIIEow...',
+    '-----BEGIN OPENSSH PRIVATE KEY-----',
+    '-----BEGIN ENCRYPTED PRIVATE KEY-----',
+    '-----BEGIN PRIVATE KEY-----',
+    '-----BEGIN PGP PRIVATE KEY BLOCK-----',
+    'root:$6$rounds=5000$saltsalt$Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78St90Uv12:19000:0:99999:7:::',
+    'bin:$1$salt1234$abcdefghijklmnopqrstuv:19000:0:99999:7:::',
+    'u:$5$saltsalt$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQ:1:2',
+    'u:$y$j9T$F5Jx5fExrKuPp53xLKQ..1$Z2XBmj5mCKiu3sbSOxX.ZPQ0v0yo2:19000',
+    'u:$2b$12$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ01234:1',
+    'u:$7$CU..../....oqPGLQ1JdDp6Dn1r0vvfV1$FOo7cv1JgTbNzW5JhbDCs:1'
+  ])('срабатывает: %s', (text) => {
+    expect(hasBlockSecret(`before\n${text}\nafter`)).toBe(true);
+  });
+
+  it.each([
+    'total 12\ndrwxr-xr-x 2 root root 4096 .ssh',
+    '-----BEGIN CERTIFICATE-----\nMIIC...',
+    '-----BEGIN PUBLIC KEY-----',
+    '-----BEGIN PGP PUBLIC KEY BLOCK-----',
+    "awk '{print $1$2}' file",
+    'echo $5$ and $1$2$3',
+    'costs $6$ or $y$ apiece',
+    'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5 user@host',
+    ''
+  ])('не срабатывает: %s', (text) => {
+    expect(hasBlockSecret(text)).toBe(false);
+  });
+
+  const N = 64 * 1024;
+  const inputs: Record<string, string> = {
+    'повтор $1$ без второго $': '$1$a'.repeat(N / 4),
+    'повтор $6$a$b с коротким хвостом': '$6$a$b'.repeat(N / 6),
+    'повтор -----BEGIN A без ключа': '-----BEGIN A'.repeat(N / 12),
+    'длинный хвост после BEGIN': `-----BEGIN ${'A'.repeat(N)}`,
+    'длинное тело после $1$': `$1$${'a'.repeat(N)}`
+  };
+  for (const [name, input] of Object.entries(inputs)) {
+    it(`линейно на 64 КБ: ${name}`, () => {
+      const start = performance.now();
+      hasBlockSecret(input);
       expect(performance.now() - start).toBeLessThan(200);
     });
   }

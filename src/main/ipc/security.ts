@@ -6,6 +6,7 @@ import type { KnownHostView } from '@shared/ssh';
 import { listKnownHosts, parseHostToken, removeKnownHostLine, sha256Fingerprint } from '../ssh/knownHosts';
 import { findHostByAddressPort } from '../hosts/repository';
 import { resetConfig } from '../config/store';
+import { applyConfigChange } from './saveOutputChange';
 import { assertSenderIsMainWindow, IpcValidationError } from './validate';
 
 /**
@@ -41,6 +42,7 @@ export function registerSecurityIpcHandlers(): void {
 
   ipcMain.handle(IPC.configReset, (event): Settings => {
     assertSenderIsMainWindow(event);
-    return projectSettings(resetConfig());
+    // SET-08 возвращает saveOutput к false — вывод стирается, как при выключении (HIST-09)
+    return projectSettings(applyConfigChange(resetConfig));
   });
 }

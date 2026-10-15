@@ -30,6 +30,8 @@ const SECRET_NAME = new RegExp(`^(?:PASSWORD|TOKEN|SECRET|PASS|KEY|AUTH)=|.(?:${
 interface MaskRule {
   /** Безопасный префикс перед значением — он остаётся, значение после него прячется. */
   prefix: RegExp;
+  /** Свой sticky-регэксп значения вместо VALUE (когда значение — не shell-слово). */
+  value?: RegExp;
   /** Доп. проверка префикса (эвристика по имени переменной). */
   isSecret?: (prefix: string) => boolean;
 }
@@ -48,7 +50,13 @@ const RULES: MaskRule[] = [
   // export KEY=value / KEY=value перед командой (эвристика по UPPER_SNAKE-имени)
   { prefix: /\b[A-Z][A-Z0-9_]*=/g, isSecret: (p) => SECRET_NAME.test(p) },
   // sshpass -p 'value'
-  { prefix: /sshpass\s+-p\s*/gi }
+  { prefix: /sshpass\s+-p\s*/gi },
+  // scheme://user:password@host (HIST-09). Якорь — «://», схему не проверяем:
+  // `[a-z][a-z0-9+.-]*://` на недоверенном тексте даёт квадратичный перебор.
+  // Пароль тянется до ПОСЛЕДНЕГО «@» своего токена (в нём бывают «@» и «/»); без «@»
+  // и `user@host` без «:» не трогаем. Чтение останавливается на следующем «://» —
+  // каждый префикс сканирует свой отрезок, поэтому проход линейный.
+  { prefix: /:\/\/[^\s:@/]+:/g, value: /(?:(?!:\/\/)\S)+(?=@)/y }
 ];
 
 export interface MaskResult {
@@ -70,8 +78,9 @@ export function maskSecrets(command: string): MaskResult {
       // префикс внутри уже обработанного значения или несекретное имя — пропускаем
       if (m.index < last || (rule.isSecret && !rule.isSecret(m[0]))) continue;
       const start = m.index + m[0].length;
-      VALUE.lastIndex = start;
-      const value = VALUE.exec(masked)?.[0];
+      const valueRe = rule.value ?? VALUE;
+      valueRe.lastIndex = start;
+      const value = valueRe.exec(masked)?.[0];
       if (!value) continue;
       // уже замаскированное значение оставляем как есть и секретом не считаем;
       // маска внутри кавычек (от другого правила) не делает значение замаскированным
@@ -83,4 +92,19 @@ export function maskSecrets(command: string): MaskResult {
     masked = out + masked.slice(last);
   }
   return { masked, hasSecret };
+}
+
+// Хэш пароля в формате crypt: $1$/$5$/$6$/$y$/$7$ и bcrypt $2a/b/y$ — `$id$соль$хэш`.
+// Требуем второй «$» и хвост ≥6 символов: `awk '{print $1$2}'` и `$5$` в прозе не срабатывают.
+// Классы не содержат «$», поэтому каждый префикс читает свой отрезок один раз — линейно.
+const CRYPT_HASH = /\$(?:[156y7]|2[aby])\$[./0-9A-Za-z,=-]+\$[./0-9A-Za-z]{6,}/;
+const PRIVATE_KEY_BLOCK = /-----BEGIN (?:[A-Z0-9 ]*PRIVATE KEY|PGP PRIVATE KEY BLOCK)-----/;
+
+/**
+ * Блочный секрет в тексте (HIST-09): приватный ключ или crypt-хэш. Многострочный
+ * блок не маскируется — вывод с ним не сохраняется вовсе, поэтому достаточно
+ * однострочного маркера, и проверка остаётся линейной по недоверенному выводу.
+ */
+export function hasBlockSecret(text: string): boolean {
+  return PRIVATE_KEY_BLOCK.test(text) || CRYPT_HASH.test(text);
 }

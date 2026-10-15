@@ -68,7 +68,7 @@ const fakeConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
     version: '0.0.0',
     language: 'ru',
     ui: { hints: { errorPanel: true } },
-    history: { enabled: true },
+    history: { enabled: true, saveOutput: false },
     ...overrides
   }) as unknown as AppConfig;
 
@@ -172,6 +172,23 @@ describe('commandReport — handleCommandFinished', () => {
     handleCommandFinished(fakeIdentity({ hostId: 1 }), fakeEvent({ exitCode: 0 }));
 
     expect(mockRecordHistory).not.toHaveBeenCalled();
+  });
+
+  it('сохранение вывода выключено (по умолчанию) → recordHistory получает output undefined (HIST-09)', () => {
+    handleCommandFinished(fakeIdentity(), fakeEvent({ exitCode: 0, output: 'total 12' }));
+
+    expect(mockRecordHistory).toHaveBeenCalledTimes(1);
+    expect(mockRecordHistory.mock.calls[0]![0].output).toBeUndefined();
+  });
+
+  it('сохранение вывода включено → вывод уходит в recordHistory (HIST-09)', () => {
+    mockLoadConfig.mockReturnValue(
+      fakeConfig({ history: { enabled: true, saveOutput: true } } as Partial<AppConfig>)
+    );
+
+    handleCommandFinished(fakeIdentity(), fakeEvent({ exitCode: 0, output: 'total 12' }));
+
+    expect(mockRecordHistory).toHaveBeenCalledWith(expect.objectContaining({ output: 'total 12' }));
   });
 
   it('Quick Connect (хост с нулевым идентификатором) → имя пользователя берётся из фоллбэка сессии, а не из репозитория хостов', () => {

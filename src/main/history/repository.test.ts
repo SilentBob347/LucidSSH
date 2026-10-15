@@ -56,6 +56,34 @@ describe('prepareOutput', () => {
     expect(result.outputHasSecret).toBe(false);
   });
 
+  it.each([
+    '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXk...\n-----END OPENSSH PRIVATE KEY-----',
+    'root:$6$salt$Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78St90Uv12:19000:0:99999:7:::'
+  ])('блочный секрет в выводе → вывод не сохраняется, запись помечена секретом (HIST-09)', (raw) => {
+    const result = prepareOutput(raw, false);
+    expect(result.output).toBeNull();
+    expect(result.outputTruncated).toBe(false);
+    expect(result.outputHasSecret).toBe(true);
+  });
+
+  it('блочный секрет за пределами первых 4000 символов тоже отбрасывает вывод', () => {
+    const result = prepareOutput('x'.repeat(5000) + '\n-----BEGIN RSA PRIVATE KEY-----', false);
+    expect(result.output).toBeNull();
+    expect(result.outputHasSecret).toBe(true);
+  });
+
+  it('пароль в URL маскируется, остальной вывод сохраняется (HIST-09)', () => {
+    const result = prepareOutput('origin\thttps://deploy:p4ssw0rd@github.com/o/r.git (fetch)', false);
+    expect(result.output).toBe('origin\thttps://deploy:••••••••@github.com/o/r.git (fetch)');
+    expect(result.outputHasSecret).toBe(true);
+  });
+
+  it('password: в нижнем регистре сознательно не маскируется (потолок HIST-09)', () => {
+    const result = prepareOutput('password: hunter2', false);
+    expect(result.output).toBe('password: hunter2');
+    expect(result.outputHasSecret).toBe(false);
+  });
+
   it('пустой/отсутствующий вывод -> null, не падает', () => {
     expect(prepareOutput(undefined, false).output).toBeNull();
     expect(prepareOutput('', false).output).toBeNull();

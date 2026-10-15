@@ -10,6 +10,7 @@ import {
   type HotkeyAction
 } from '@shared/hotkeys';
 import { loadConfig, updateConfig } from '../config/store';
+import { applyConfigChange } from './saveOutputChange';
 import { assertSenderIsMainWindow, assertString, IpcValidationError } from './validate';
 
 /**
@@ -57,6 +58,7 @@ const WRITABLE: Record<string, (v: unknown, cfg: Settings) => void> = {
     setNum(v, 3, 120, (n) => (cfg.connection.connectTimeoutSec = n)),
   'guard.globalEnabled': (v, cfg) => setBool(v, (b) => (cfg.guard.globalEnabled = b)),
   'history.enabled': (v, cfg) => setBool(v, (b) => (cfg.history.enabled = b)),
+  'history.saveOutput': (v, cfg) => setBool(v, (b) => (cfg.history.saveOutput = b)),
   'updates.autoCheck': (v, cfg) => setBool(v, (b) => (cfg.updates.autoCheck = b))
 };
 
@@ -83,7 +85,7 @@ export function registerConfigIpcHandlers(): void {
       throw new IpcValidationError('path: unknown setting');
     }
     const setter = WRITABLE[rawPath]!;
-    return projectSettings(updateConfig((cfg) => setter(value as Primitive, cfg)));
+    return projectSettings(applyConfigChange(() => updateConfig((cfg) => setter(value as Primitive, cfg))));
   });
 
   // SET-10 (issue #1): перепривязка редактируемого хоткея — с проверкой
@@ -156,6 +158,8 @@ const KNOWN_HINTS = new Set([
   'snippetPaletteHint',
   'rootHint',
   'passwordHint',
+  // HIST-09: подсказка в HistoryDrawer про выключенное сохранение вывода
+  'historyOutputHint',
   // BRD-06: счётчик показов хоткеев — отдельный на каждую интерактивную программу.
   ...INTERACTIVE_PROGRAMS.map((program) => `interactiveHotkeys.${program}`)
 ]);

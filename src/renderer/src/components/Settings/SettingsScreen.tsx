@@ -406,6 +406,14 @@ function SecuritySection({ config, update }: { config: Settings; update: UpdateF
         onChange={(v) => void update('history.enabled', v)}
       />
 
+      <ToggleRow
+        title={t('settings.security.saveOutput')}
+        desc={t('settings.security.saveOutputDesc')}
+        on={config.history.saveOutput}
+        disabled={!config.history.enabled}
+        onChange={(v) => void update('history.saveOutput', v)}
+      />
+
       <div className="rounded-[8px] border border-border-default bg-bg-panel px-[17px] py-[15px]">
         <div className="mb-[3px] text-[13.5px] font-semibold text-text-strong">
           {t('settings.security.knownHosts')}
