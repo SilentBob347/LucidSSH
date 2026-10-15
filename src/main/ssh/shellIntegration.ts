@@ -384,3 +384,18 @@ export function matchesPasswordPromptPattern(output: string): boolean {
   const lastLine = output.slice(output.lastIndexOf('\n') + 1).replace(/[ \t\r]+$/, '');
   return PASSWORD_PROMPT_RE.test(lastLine);
 }
+
+/**
+ * Вырезает из захваченного вывода управляющие последовательности терминала:
+ * OSC (ESC ] … BEL | ESC \), CSI (SGR, ESC[K) и прочие ESC-последовательности,
+ * включая одиночный ESC в конце. CR, LF и TAB не трогает (HIST-09, ERR-06).
+ * Регулярка линейна: у каждой альтернативы один неперекрывающийся класс символов,
+ * незавершённый OSC не даёт совпадения и не перебирается заново (ограничение PR #73).
+ */
+const TERMINAL_CONTROL_RE =
+  // eslint-disable-next-line no-control-regex
+  /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b(?![[\]])[ -/]*[0-~]?|\x1b/g;
+
+export function stripTerminalControls(text: string): string {
+  return text.replace(TERMINAL_CONTROL_RE, '');
+}

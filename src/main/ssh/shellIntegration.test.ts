@@ -7,7 +7,8 @@ import {
   detectInteractiveProgram,
   endsWithInputPrompt,
   isShellEscalationCommand,
-  matchesPasswordPromptPattern
+  matchesPasswordPromptPattern,
+  stripTerminalControls
 } from './shellIntegration';
 
 const US = '\x1f';
@@ -436,5 +437,29 @@ describe('BreadcrumbParser — управляющие последователь
       host: 'host',
       path: '/srv/aid[2K1mbc'
     });
+  });
+});
+
+describe('stripTerminalControls (HIST-09)', () => {
+  it('OSC с BEL и с ESC-backslash, SGR, ESC[K, одиночный ESC в конце', () => {
+    expect(stripTerminalControls('\x1b]0;t\x07a\x1b]0;t\x1b\\b')).toBe('ab');
+    expect(stripTerminalControls('\x1b[1;31mred\x1b[0m\x1b[K!')).toBe('red!');
+    expect(stripTerminalControls('x\x1b')).toBe('x');
+  });
+  it('CRLF и TAB не трогает', () => {
+    expect(stripTerminalControls('a\r\n\tb\n')).toBe('a\r\n\tb\n');
+  });
+  it('незавершённый OSC с длинным хвостом — за линейное время', () => {
+    const t = Date.now();
+    const a = stripTerminalControls('\x1b]0;' + 'a'.repeat(200000));
+    const b = stripTerminalControls('\x1b]'.repeat(100000));
+    expect(Date.now() - t).toBeLessThan(2000);
+    expect(a.startsWith(']0;a')).toBe(true);
+    expect(b).toBe(']'.repeat(100000));
+  });
+  it('оборванные последовательности не оставляют ESC-байт', () => {
+    expect(stripTerminalControls('a\x1b]0;aaa')).not.toContain('\x1b');
+    expect(stripTerminalControls('a\x1b[1;3')).not.toContain('\x1b');
+    expect(stripTerminalControls('a\x1b[')).toBe('a[');
   });
 });
