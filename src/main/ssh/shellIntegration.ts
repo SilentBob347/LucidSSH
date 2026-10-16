@@ -12,6 +12,11 @@ import { splitCompound } from '../guard/patterns';
  * удалённый shell из своих переменных — недоверенный текст в команду не
  * вставляется. Маркер обёрнут в APC-последовательность (ESC _ … ESC \\) и
  * ВЫРЕЗАЕТСЯ из потока в main до попадания в xterm, поэтому на экране не виден.
+ *
+ * Маркер несёт nonce сессии (тикет 14): маркер-образную последовательность
+ * может напечатать любой вывод сервера (`cat` файла, лог, MOTD, `wall`), а
+ * nonce знает только наш shell — он вшит литералом в настройку. Маркер без
+ * nonce или с чужим вырезается, но ни на что не влияет.
  */
 
 // Разделитель полей — Unit Separator (0x1f), не встречается в путях/именах.
@@ -52,8 +57,11 @@ const APC_END = '\x1b\\';
  * quoted-словом, содержимое кавычек не разбирается как грамматика и не может
  * сломать парсинг ash — а выполнится оно только если сам eval будет вызван
  * (т.е. только в zsh, где ZSH_VERSION непуст).
+ *
+ * `nonce` — hex (см. ShellIntegrationSession), поэтому безопасен литералом в
+ * формате printf: ни `%`, ни `\`, ни кавычек. Первая строка с ним ~256 байт.
  */
-export const SHELL_INTEGRATION_SETUP =
+export const shellIntegrationSetup = (nonce: string): string =>
   // __lc=$? — код возврата последней команды снимается ПЕРВЫМ, до любых операций (ERR-01).
   // Разделитель US — октавой \037 ВНУТРИ формата printf (как \033 для ESC), НЕ сырым
   // байтом в команде: сырой 0x1f — это Ctrl+_, в интерактивном bash readline
@@ -62,7 +70,7 @@ export const SHELL_INTEGRATION_SETUP =
   // 6-е поле — SUDO_USER удалённого шелла: отличает root-через-sudo (амбер
   // «sudo», BRD-03) от настоящего root-логина (красный). sudo проставляет её
   // сам даже при env_reset; `su -` окружение чистит — там поле пустое → root.
-  ` __lucidssh_mark() { __lc=$?; printf '\\033_lucidssh\\037%s\\037%s\\037%s\\037%s\\037%s\\037%s\\033\\\\' ` +
+  ` __lucidssh_mark() { __lc=$?; printf '\\033_lucidssh${nonce}\\037%s\\037%s\\037%s\\037%s\\037%s\\037%s\\033\\\\' ` +
   `"\${USER:-$(id -un 2>/dev/null)}" "\${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD" "$(id -u 2>/dev/null)" "$__lc" "\${SUDO_USER:-}"; }\n` +
   ` if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __lucidssh_mark 2>/dev/null || eval 'precmd_functions+=(__lucidssh_mark)'; ` +
   // bash: маркер через PROMPT_COMMAND, НЕ через встраивание в PS1. Маркер в PS1
@@ -110,6 +118,9 @@ export interface ParseResult {
 export class BreadcrumbParser {
   private pending = '';
 
+  /** nonce — тот же, что вшит в shellIntegrationSetup этой сессии. */
+  constructor(private readonly nonce: string) {}
+
   push(chunk: string): ParseResult {
     let buf = this.pending + chunk;
     this.pending = '';
@@ -135,7 +146,7 @@ export class BreadcrumbParser {
       }
       cur += buf.slice(0, startIdx);
       const marker = buf.slice(startIdx, endIdx + APC_END.length);
-      const mark = parseMarker(marker);
+      const mark = parseMarker(marker, this.nonce);
       if (mark) {
         marks.push(mark);
         pieces.push(cur);
@@ -161,7 +172,7 @@ export class BreadcrumbParser {
 /**
  * Гейт подавления эха setup-команды (MOTD виден сразу, без прокрутки).
  *
- * Между отправкой SHELL_INTEGRATION_SETUP и первым маркером поток содержит
+ * Между отправкой shellIntegrationSetup и первым маркером поток содержит
  * только эхо самой настройки — arm() включает подавление, filter() копит этот
  * текст вместо пересылки в xterm. Первый маркер завершает подавление: эхо
  * отбрасывается, вместо него в xterm уходит `\r ESC[K` — стирает устаревшее
@@ -258,23 +269,24 @@ export class CommandGate {
   }
 }
 
-function parseMarker(marker: string): ShellMark | null {
+function parseMarker(marker: string, nonce: string): ShellMark | null {
   const m = marker.match(MARKER_RE);
   if (!m || !m[1]) return null;
-  // Формат: US u US h US p US euid US exit US sudoUser → split даёт ['', u, h, p, euid, exit, su].
-  const parts = m[1].split(US);
-  const fields = parts[0] === '' ? parts.slice(1) : parts;
-  if (fields.length < 4) return null;
+  // Формат: nonce US u US h US p US euid US exit US sudoUser.
+  // Старого 5-полевого формата (без sudoUser) больше нет: каждый маркер
+  // печатает настройка этой же сессии, а маркер старой версии nonce не несёт.
+  const [markNonce, ...fields] = m[1].split(US);
+  if (!nonce || markNonce !== nonce || fields.length < 6) return null;
   const [username, host, path, euidStr, exitStr, sudoUser] = fields;
   const euid = Number(euidStr);
-  const exitNum = exitStr === undefined ? NaN : Number(exitStr);
+  const exitNum = Number(exitStr);
   // sudo = root с сохранённым SUDO_USER удалённого шелла (6-е поле маркера);
   // root без него — настоящий root-логин или `su -` (окружение вычищено).
   const privilege: Breadcrumb['privilege'] =
     euid === 0 ? (sudoUser ? 'sudo' : 'root') : 'normal';
-  // Маркер не аутентифицирован — его может подделать любой вывод сервера
-  // (`cat` файла, строка лога). Управляющие символы (C0, DEL, C1) из полей
-  // вырезаются: путь попадает в `cd` по клику и в отображение breadcrumb.
+  // Даже настоящий маркер несёт текст сервера: каталог может называться как
+  // угодно. Управляющие символы (C0, DEL, C1) из полей вырезаются: путь
+  // попадает в `cd` по клику и в отображение breadcrumb.
   const clean = (field: string | undefined): string => (field ?? '').replace(CONTROL_CHARS_RE, '');
   const crumb: Breadcrumb = {
     username: clean(username).slice(0, 64),
@@ -291,7 +303,7 @@ function parseMarker(marker: string): ShellMark | null {
 // экспортируется, а sudo и так чистит окружение): маркеры перестают приходить,
 // breadcrumb замирает, а renderer навсегда считает «выполняется программа» —
 // Страж/детектор/история молча отключаются. Лечение: распознать команду
-// эскалации при отправке и повторить SHELL_INTEGRATION_SETUP, когда новый шелл
+// эскалации при отправке и повторить настройку (с тем же nonce), когда новый шелл
 // покажет промпт (см. ReinjectGate-логику в sessionManager.ts).
 // ---------------------------------------------------------------------------
 

@@ -23,6 +23,7 @@ function fakeStream(): {
   feedData: (chunk: string) => void;
 } {
   const setWindow = vi.fn();
+  const write = vi.fn();
   const dataHandlers: Array<(data: Buffer) => void> = [];
   const stream = {
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
@@ -30,14 +31,18 @@ function fakeStream(): {
       return stream;
     }),
     stderr: { on: vi.fn() },
-    write: vi.fn(),
+    write,
     setWindow
   };
   return {
     stream: stream as unknown as ClientChannel,
     setWindow,
     feedData: (chunk: string) => {
-      for (const handler of dataHandlers) handler(Buffer.from(chunk, 'utf8'));
+      // Маркер в тестах пишется с nonce из отправленной каналом настройки.
+      const sent = write.mock.calls.map((c) => String(c[0])).join('');
+      const nonce = /_lucidssh([0-9a-f]+)\\037/.exec(sent)?.[1] ?? '';
+      const data = chunk.replaceAll(NONCE_SLOT, nonce);
+      for (const handler of dataHandlers) handler(Buffer.from(data, 'utf8'));
     }
   };
 }
@@ -67,9 +72,11 @@ function makeChannel(
 }
 
 const US = '\x1f';
+/** Место nonce в маркере — feedData подставляет nonce настройки этого канала. */
+const NONCE_SLOT = '<nonce>';
 /** Тот же формат маркера shell-интеграции, что и в shellIntegrationSession.test.ts. */
 const mk = (u: string, h: string, p: string, e: string, c = '0', sudoUser = ''): string =>
-  `\x1b_lucidssh${US}${u}${US}${h}${US}${p}${US}${e}${US}${c}${US}${sudoUser}\x1b\\`;
+  `\x1b_lucidssh${NONCE_SLOT}${US}${u}${US}${h}${US}${p}${US}${e}${US}${c}${US}${sudoUser}\x1b\\`;
 
 /** Доводит канал до состояния «первый маркер уже виден» (аналог warmUp() из
  *  shellIntegrationSession.test.ts) — без этого detectInteractiveProgram не

@@ -3,21 +3,23 @@ import {
   BreadcrumbParser,
   CommandGate,
   EchoGate,
-  SHELL_INTEGRATION_SETUP,
   detectInteractiveProgram,
   endsWithInputPrompt,
   isShellEscalationCommand,
   matchesPasswordPromptPattern,
+  shellIntegrationSetup,
   stripTerminalControls
 } from './shellIntegration';
 
 const US = '\x1f';
-const mk = (u: string, h: string, p: string, e: string, c = '0', sudoUser = ''): string =>
-  `\x1b_lucidssh${US}${u}${US}${h}${US}${p}${US}${e}${US}${c}${US}${sudoUser}\x1b\\`;
+const NONCE = '0123456789abcdef0123456789abcdef';
+const SETUP = shellIntegrationSetup(NONCE);
+const mk = (u: string, h: string, p: string, e: string, c = '0', sudoUser = '', nonce = NONCE): string =>
+  `\x1b_lucidssh${nonce}${US}${u}${US}${h}${US}${p}${US}${e}${US}${c}${US}${sudoUser}\x1b\\`;
 
 describe('BreadcrumbParser', () => {
   it('вырезает маркер и извлекает breadcrumb + exit code', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const { cleaned, marks } = parser.push(`before${mk('root', 'web-01', '/var/www', '0', '0')}after`);
     expect(cleaned).toBe('beforeafter'); // маркер не попал в вывод
     expect(marks).toHaveLength(1);
@@ -31,45 +33,53 @@ describe('BreadcrumbParser', () => {
   });
 
   it('несёт ненулевой exit code', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const { marks } = parser.push(mk('u', 'h', '/', '1000', '127'));
     expect(marks[0]?.exitCode).toBe(127);
   });
 
   it('обычный пользователь → privilege normal', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const { marks } = parser.push(mk('ubuntu', 'srv', '/home/ubuntu', '1000'));
     expect(marks[0]?.crumb.privilege).toBe('normal');
   });
 
   it('euid=0 с SUDO_USER (sudo -i) → privilege sudo', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const { marks } = parser.push(mk('root', 'srv', '/root', '0', '0', 'nikita'));
     expect(marks[0]?.crumb.privilege).toBe('sudo');
   });
 
   it('euid=0 без SUDO_USER (root-логин, su -) → privilege root', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const { marks } = parser.push(mk('root', 'srv', '/root', '0', '0', ''));
     expect(marks[0]?.crumb.privilege).toBe('root');
   });
 
   it('SUDO_USER при euid≠0 (sudo -u www) → всё равно normal', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const { marks } = parser.push(mk('www', 'srv', '/var/www', '33', '0', 'nikita'));
     expect(marks[0]?.crumb.privilege).toBe('normal');
   });
 
-  it('маркер старого формата (5 полей, без SUDO_USER) разбирается как раньше', () => {
-    const parser = new BreadcrumbParser();
-    const legacy = `\x1b_lucidssh${US}root${US}h${US}/${US}0${US}0\x1b\\`;
-    const { marks } = parser.push(legacy);
-    expect(marks[0]?.crumb.privilege).toBe('root');
-    expect(marks[0]?.exitCode).toBe(0);
+  it('маркер без nonce сессии или с чужим — вырезан из вывода, но не считается маркером', () => {
+    const parser = new BreadcrumbParser(NONCE);
+    const noNonce = `\x1b_lucidssh${US}root${US}h${US}/fake${US}0${US}0${US}\x1b\\`;
+    const wrong = mk('root', 'h', '/fake', '0', '0', '', 'ffffffffffffffffffffffffffffffff');
+    const { cleaned, pieces, marks } = parser.push(`a${noNonce}b${wrong}c`);
+    expect(cleaned).toBe('abc');
+    expect(pieces).toEqual(['abc']);
+    expect(marks).toHaveLength(0);
+  });
+
+  it('маркер старого 5-полевого формата не принимается даже с верным nonce', () => {
+    const parser = new BreadcrumbParser(NONCE);
+    const legacy = `\x1b_lucidssh${NONCE}${US}root${US}h${US}/${US}0${US}0\x1b\\`;
+    expect(parser.push(legacy).marks).toHaveLength(0);
   });
 
   it('собирает маркер, разрезанный между двумя чанками', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const full = mk('root', 'h', '/etc', '0');
     const mid = Math.floor(full.length / 2);
     const r1 = parser.push('x' + full.slice(0, mid));
@@ -80,14 +90,14 @@ describe('BreadcrumbParser', () => {
   });
 
   it('обычный вывод без маркеров проходит как есть', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const { cleaned, marks } = parser.push('total 42\r\ndrwxr-xr-x 2 root root\r\n');
     expect(cleaned).toBe('total 42\r\ndrwxr-xr-x 2 root root\r\n');
     expect(marks).toHaveLength(0);
   });
 
   it('несколько маркеров в одном чанке', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const { cleaned, marks } = parser.push(mk('a', 'h', '/', '0') + 'mid' + mk('a', 'h', '/tmp', '1000'));
     expect(cleaned).toBe('mid');
     expect(marks).toHaveLength(2);
@@ -95,20 +105,20 @@ describe('BreadcrumbParser', () => {
   });
 
   it('pieces: текст разбит по позициям маркеров, длина = marks + 1', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const { pieces, marks } = parser.push('echo' + mk('u', 'h', '/', '1000') + 'prompt$ ');
     expect(marks).toHaveLength(1);
     expect(pieces).toEqual(['echo', 'prompt$ ']);
   });
 
   it('pieces: чанк без маркеров — один кусок', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const { pieces } = parser.push('plain output');
     expect(pieces).toEqual(['plain output']);
   });
 
   it('pieces: маркер, разрезанный между чанками, не создаёт ложных границ', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const full = mk('u', 'h', '/', '1000');
     const mid = Math.floor(full.length / 2);
     const r1 = parser.push('a' + full.slice(0, mid));
@@ -182,13 +192,17 @@ describe('EchoGate — подавление эха setup-команды (MOTD б
   });
 });
 
-describe('SHELL_INTEGRATION_SETUP', () => {
+describe('shellIntegrationSetup', () => {
+  it('nonce сессии — литералом в формате printf, сразу после префикса маркера', () => {
+    expect(SETUP).toContain(`'\\033_lucidssh${NONCE}\\037%s`);
+  });
+
   it('каждая строка короче лимита редактора строки BusyBox', () => {
     // CONFIG_FEATURE_EDITING_MAX_LEN на роутерах обычно 512: слитная строка
     // длиннее обрезается ash молча, ломая кавычки (Keenetic/Xkeen 10.07.2026).
     // Запас до 500 — на будущие правки.
-    expect(SHELL_INTEGRATION_SETUP.endsWith('\n')).toBe(true);
-    const lines = SHELL_INTEGRATION_SETUP.slice(0, -1).split('\n');
+    expect(SETUP.endsWith('\n')).toBe(true);
+    const lines = SETUP.slice(0, -1).split('\n');
     expect(lines.length).toBeGreaterThanOrEqual(2);
     for (const line of lines) {
       expect(line.length).toBeLessThan(500);
@@ -200,18 +214,18 @@ describe('SHELL_INTEGRATION_SETUP', () => {
   });
 
   it('без сырых управляющих байт: US/ESC только октавами внутри printf', () => {
-    expect(SHELL_INTEGRATION_SETUP).not.toContain('\x1f');
-    expect(SHELL_INTEGRATION_SETUP).not.toContain('\x1b');
+    expect(SETUP).not.toContain('\x1f');
+    expect(SETUP).not.toContain('\x1b');
   });
 
   it('три ветки: zsh precmd, bash PROMPT_COMMAND, POSIX-fallback через PS1', () => {
-    expect(SHELL_INTEGRATION_SETUP).toContain('ZSH_VERSION');
-    expect(SHELL_INTEGRATION_SETUP).toContain('add-zsh-hook precmd');
-    expect(SHELL_INTEGRATION_SETUP).toContain('BASH_VERSION');
+    expect(SETUP).toContain('ZSH_VERSION');
+    expect(SETUP).toContain('add-zsh-hook precmd');
+    expect(SETUP).toContain('BASH_VERSION');
     // bash — только PROMPT_COMMAND: маркер в PS1 перепечатывается readline
     // при SIGWINCH/Ctrl+L со старым $? (баг самопереоткрытия детектора)
-    expect(SHELL_INTEGRATION_SETUP).toContain('PROMPT_COMMAND="__lucidssh_mark');
-    expect(SHELL_INTEGRATION_SETUP).toContain(`PS1='$(__lucidssh_mark)'"$PS1"`);
+    expect(SETUP).toContain('PROMPT_COMMAND="__lucidssh_mark');
+    expect(SETUP).toContain(`PS1='$(__lucidssh_mark)'"$PS1"`);
   });
 });
 
@@ -406,13 +420,13 @@ describe('BreadcrumbParser — управляющие последователь
   const ALT_OFF = '[?1049l[23;0;0t';
 
   it('smcup/rmcup доходят до терминала без изменений', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const { cleaned } = parser.push(`${ALT_ON}vim screen${ALT_OFF}`);
     expect(cleaned).toBe(`${ALT_ON}vim screen${ALT_OFF}`);
   });
 
   it('ESC на границе чанков не теряется (rmcup разрезан пополам)', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     // Хвост, начинающийся с ESC, придерживается до следующего чанка — важно,
     // чтобы он вернулся целиком, а не был проглочен как недописанный маркер.
     const first = parser.push('bye');
@@ -422,14 +436,14 @@ describe('BreadcrumbParser — управляющие последователь
   });
 
   it('очистка экрана (ED2, так делает top) не вырезается вместе с маркером', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const { cleaned, marks } = parser.push(`[H[2Jtop frame${mk('u', 'h', '/root', '0', '0')}`);
     expect(cleaned).toBe('[H[2Jtop frame');
     expect(marks).toHaveLength(1);
   });
 
   it('поддельный маркер: управляющие символы из полей вырезаются', () => {
-    const parser = new BreadcrumbParser();
+    const parser = new BreadcrumbParser(NONCE);
     const forged = mk('ro\x1b[31mot', 'h\x07ost', '/srv/a\nid\r\x1b[2K\x7f\u009b1mb\tc', '1000');
     const { marks } = parser.push(forged);
     expect(marks[0]?.crumb).toMatchObject({
