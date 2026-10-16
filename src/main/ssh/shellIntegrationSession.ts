@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { Breadcrumb } from '@shared/breadcrumb';
 import type { GuardStatus } from '@shared/history';
 import type { InteractiveProgramName } from '@shared/interactivePrograms';
@@ -5,11 +6,11 @@ import {
   BreadcrumbParser,
   CommandGate,
   EchoGate,
-  SHELL_INTEGRATION_SETUP,
   detectInteractiveProgram,
   endsWithInputPrompt,
   isShellEscalationCommand,
   matchesPasswordPromptPattern,
+  shellIntegrationSetup,
   stripTerminalControls
 } from './shellIntegration';
 
@@ -86,7 +87,7 @@ function emptyResult(): ShellIntegrationResult {
 }
 
 export class ShellIntegrationSession {
-  private readonly breadcrumbParser = new BreadcrumbParser();
+  private readonly breadcrumbParser: BreadcrumbParser;
   private readonly echoGate = new EchoGate();
   private readonly commandGate = new CommandGate();
 
@@ -120,6 +121,15 @@ export class ShellIntegrationSession {
   private passwordPromptTail = '';
   /** true между «увидели запрос пароля» и следующим маркером. */
   private passwordPromptActive = false;
+
+  /**
+   * nonce маркера (тикет 14): 128 бит на каждый shell-канал. Реинжект после
+   * su/sudo -i отправляет ту же настройку — новый шелл печатает тот же nonce.
+   * Параметр — только для тестов.
+   */
+  constructor(private readonly nonce: string = randomBytes(16).toString('hex')) {
+    this.breadcrumbParser = new BreadcrumbParser(nonce);
+  }
 
   /** Разобрать очередной кусок вывода сервера. */
   feed(chunk: string): ShellIntegrationResult {
@@ -342,7 +352,7 @@ export class ShellIntegrationSession {
     this.passwordPromptTail = '';
     this.echoGate.arm();
     this.awaitingFirstMarkAfterSetup = true;
-    result.toWrite += SHELL_INTEGRATION_SETUP;
+    result.toWrite += shellIntegrationSetup(this.nonce);
     result.timerActions.push({ timer: 'echo-flush', action: 'schedule', ms: ECHO_FLUSH_TIMEOUT_MS });
   }
 

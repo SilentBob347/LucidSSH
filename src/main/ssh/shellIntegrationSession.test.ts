@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { ShellIntegrationSession } from './shellIntegrationSession';
-import { SHELL_INTEGRATION_SETUP } from './shellIntegration';
+import { shellIntegrationSetup } from './shellIntegration';
 import { excerpt, isEmptyOutput, isNonErrorExitCode } from '../errors/detector';
 import { hasBlockSecret } from '../secrets/maskers';
 
 const US = '\x1f';
-const mk = (u: string, h: string, p: string, e: string, c = '0', sudoUser = ''): string =>
-  `\x1b_lucidssh${US}${u}${US}${h}${US}${p}${US}${e}${US}${c}${US}${sudoUser}\x1b\\`;
+const NONCE = '0123456789abcdef0123456789abcdef';
+const SETUP = shellIntegrationSetup(NONCE);
+const mk = (u: string, h: string, p: string, e: string, c = '0', sudoUser = '', nonce = NONCE): string =>
+  `\x1b_lucidssh${nonce}${US}${u}${US}${h}${US}${p}${US}${e}${US}${c}${US}${sudoUser}\x1b\\`;
+/** Тот же маркер, что напечатал бы `printf` из тикета 14: без nonce. */
+const forged = (p: string, e = '0', c = '0'): string =>
+  `\x1b_lucidssh${US}x${US}y${US}${p}${US}${e}${US}${c}${US}\x1b\\`;
+/** nonce, вшитый в отправленную настройку. */
+const nonceOf = (setup: string): string => /_lucidssh([0-9a-f]+)\\037/.exec(setup)![1]!;
 
 /** Полный цикл подключения: MOTD → настройка (по таймеру тишины) → первый
  *  маркер (приветствие, тот самый, который отправляет сама настройка). После
@@ -21,14 +28,14 @@ function warmUp(box: ShellIntegrationSession): void {
 
 describe('ShellIntegrationSession.feed — MOTD и первый маркер', () => {
   it('MOTD до первой настройки виден в терминале как есть', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     const result = box.feed('Welcome to Ubuntu 24.04\r\n');
     expect(result.display).toBe('Welcome to Ubuntu 24.04\r\n');
     expect(result.timerActions).toContainEqual({ timer: 'setup-silence', action: 'schedule', ms: 300 });
   });
 
   it('первый маркер — приветствие, не порождает command-finished, но порождает breadcrumb', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     const result = box.feed(mk('nikita', 'web-01', '/home/nikita', '1000', '0'));
     expect(result.events).toEqual([
       { kind: 'breadcrumb', crumb: expect.objectContaining({ username: 'nikita' }) }
@@ -38,7 +45,7 @@ describe('ShellIntegrationSession.feed — MOTD и первый маркер', (
 
 describe('ShellIntegrationSession.feed — обычная команда', () => {
   it('команда с ненулевым кодом выхода порождает command-finished после breadcrumb', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.writeCommand('cat missing.txt');
     const result = box.feed(`cat: missing.txt: No such file or directory\r\n${mk('u', 'h', '/home/u', '1000', '1')}`);
@@ -52,7 +59,7 @@ describe('ShellIntegrationSession.feed — обычная команда', () =>
   });
 
   it('маркер-перерисовка приглашения без Enter (SIGWINCH) — без command-finished', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.writeCommand('ls');
     const first = box.feed(mk('u', 'h', '/home/u', '1000', '0'));
@@ -67,12 +74,12 @@ describe('ShellIntegrationSession.feed — обычная команда', () =>
 
 describe('ShellIntegrationSession.isBusy — WIN-04', () => {
   it('изначально не занята', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     expect(box.isBusy()).toBe(false);
   });
 
   it('writeCommand взводит busy, реальное завершение команды снимает', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.writeCommand('sleep 5');
     expect(box.isBusy()).toBe(true);
@@ -81,7 +88,7 @@ describe('ShellIntegrationSession.isBusy — WIN-04', () => {
   });
 
   it('перерисовка приглашения без Enter (SIGWINCH) не снимает busy — команда ещё не завершилась', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.writeCommand('top');
     box.feed(mk('u', 'h', '/home/u', '1000', '0')); // command-finished
@@ -95,7 +102,7 @@ describe('ShellIntegrationSession.isBusy — WIN-04', () => {
   });
 
   it('прямой ввод в терминал (sendRawInput) busy не взводит', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.sendRawInput('ls\n');
     expect(box.isBusy()).toBe(false);
@@ -104,7 +111,7 @@ describe('ShellIntegrationSession.isBusy — WIN-04', () => {
 
 describe('ShellIntegrationSession.runningCommand — WIN-04 (текст команды для диалога закрытия)', () => {
   it('null, пока сессия свободна; текст команды — пока она выполняется', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     expect(box.runningCommand()).toBeNull();
     box.writeCommand('sleep 30');
@@ -116,7 +123,7 @@ describe('ShellIntegrationSession.runningCommand — WIN-04 (текст кома
 
 describe('ShellIntegrationSession — эскалация и реинжект (фикс BRD-03/04)', () => {
   it('эскалация взводит реинжект; тишина нового шелла запускает повтор настройки', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
 
     const cmdResult = box.writeCommand('sudo -i');
@@ -128,12 +135,12 @@ describe('ShellIntegrationSession — эскалация и реинжект (ф
     expect(dataResult.timerActions).toContainEqual({ timer: 'reinject', action: 'schedule', ms: 800 });
 
     const tickResult = box.tick('reinject');
-    expect(tickResult.toWrite).toBe(SHELL_INTEGRATION_SETUP);
+    expect(tickResult.toWrite).toBe(SETUP);
     expect(tickResult.timerActions).toContainEqual({ timer: 'echo-flush', action: 'schedule', ms: 3000 });
   });
 
   it('обычный маркер во время реинжекта — отбой (эскалация сорвалась/завершилась)', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.writeCommand('su -');
 
@@ -147,7 +154,7 @@ describe('ShellIntegrationSession — эскалация и реинжект (ф
   });
 
   it('запрос пароля во время реинжекта придерживает инжект (не отправляет настройку как пароль)', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.writeCommand('sudo -i');
 
@@ -162,7 +169,7 @@ describe('ShellIntegrationSession — эскалация и реинжект (ф
 
 describe('ShellIntegrationSession — запрос пароля (TERM-09)', () => {
   it('явный запрос пароля вне эскалации порождает событие один раз, до следующего маркера', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     const first = box.feed('Password:');
     expect(first.events).toEqual([{ kind: 'password-prompt' }]);
@@ -174,7 +181,7 @@ describe('ShellIntegrationSession — запрос пароля (TERM-09)', () =
   });
 
   it('запрос пароля после маркера в том же чанке (многострочная вставка) — событие после breadcrumb', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.sendRawInput('cd /tmp\nsudo apt update\n');
     const result = box.feed(`${mk('u', 'h', '/tmp', '1000', '0')}$ sudo apt update\r\n[sudo] password for u: `);
@@ -186,14 +193,14 @@ describe('ShellIntegrationSession — запрос пароля (TERM-09)', () =
   });
 
   it('запрос пароля до маркера в том же чанке уже завершён — события нет', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     const result = box.feed(`Password: \r\nsu: Authentication failure\r\n${mk('u', 'h', '/', '1000', '1')}`);
     expect(result.events.some((e) => e.kind === 'password-prompt')).toBe(false);
   });
 
   it('ответ на запрос пароля через конвейер команд не попадает в историю и не становится командой', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     // многострочная вставка: команда уходит сырой, renderer считает себя на промпте
     box.sendRawInput('sudo apt update\n');
@@ -208,7 +215,7 @@ describe('ShellIntegrationSession — запрос пароля (TERM-09)', () =
   });
 
   it('реинжект после пароля без маркера не оставляет сессию в режиме «ответ на пароль»', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.writeCommand('sudo -i');
     box.feed('sudo -i\r\n[sudo] password for u: ');
@@ -223,7 +230,7 @@ describe('ShellIntegrationSession — запрос пароля (TERM-09)', () =
   });
 
   it('запрос пароля после набранной команды — в историю идёт команда, не пароль', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.writeCommand('sudo apt update');
     box.feed('sudo apt update\r\n[sudo] password for u: ');
@@ -239,7 +246,7 @@ describe('ShellIntegrationSession — запрос пароля (TERM-09)', () =
 
 describe('ShellIntegrationSession — ash/BusyBox (маркер через PS1, без PROMPT_COMMAND)', () => {
   it('маркер, встроенный в PS1, разбирается так же, как маркер PROMPT_COMMAND', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.writeCommand('ls /tmp');
     const result = box.feed(`file1  file2\r\n${mk('root', 'router', '/tmp', '0', '0')}`);
@@ -252,7 +259,7 @@ describe('ShellIntegrationSession — ash/BusyBox (маркер через PS1, 
 
 describe('ShellIntegrationSession.close — без единого маркера (nologin-паттерн)', () => {
   it('накопленный вывод возвращается как unmarked-output', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     box.feed('This account is currently not available.\r\n');
     const result = box.close();
     expect(result.events).toEqual([
@@ -261,7 +268,7 @@ describe('ShellIntegrationSession.close — без единого маркера
   });
 
   it('пустой/пробельный вывод — событие не порождается', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     box.feed('   \r\n');
     expect(box.close().events).toEqual([]);
   });
@@ -269,29 +276,29 @@ describe('ShellIntegrationSession.close — без единого маркера
 
 describe('ShellIntegrationSession — отправка настройки (первый ввод/таймер)', () => {
   it('первый пользовательский ввод до истечения таймера сам отправляет настройку', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     const result = box.sendRawInput('l');
-    expect(result.toWrite).toBe(SHELL_INTEGRATION_SETUP + 'l');
+    expect(result.toWrite).toBe(SETUP + 'l');
     expect(result.timerActions).toContainEqual({ timer: 'setup-silence', action: 'cancel' });
     expect(result.timerActions).toContainEqual({ timer: 'setup-cap', action: 'cancel' });
   });
 
   it('настройка отправляется один раз — повторный ввод не дублирует её', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     box.sendRawInput('l');
     const second = box.sendRawInput('s');
     expect(second.toWrite).toBe('s');
   });
 
   it('тишина после MOTD (тик setup-silence) отправляет настройку сама', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     box.feed('Welcome\r\n');
     const result = box.tick('setup-silence');
-    expect(result.toWrite).toBe(SHELL_INTEGRATION_SETUP);
+    expect(result.toWrite).toBe(SETUP);
   });
 
   it('эхо-флаш по таймауту показывает накопленное и не теряет его как вывод (ERR-01)', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     box.sendRawInput('x'); // отправляет настройку, вооружает EchoGate
     box.feed('нераспознанное эхо без маркера');
     const result = box.tick('echo-flush');
@@ -301,7 +308,7 @@ describe('ShellIntegrationSession — отправка настройки (пе�
 
 describe('ShellIntegrationSession — integration-unconfirmed (страховка без маркера)', () => {
   it('маркер не пришёл к echo-flush — событие integration-unconfirmed', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     box.sendRawInput('x'); // отправляет настройку
     box.feed('shell без PROMPT_COMMAND, эхо без маркера');
     const result = box.tick('echo-flush');
@@ -309,14 +316,14 @@ describe('ShellIntegrationSession — integration-unconfirmed (страховк�
   });
 
   it('маркер пришёл до echo-flush — события нет', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box); // отправляет настройку и уже получает первый маркер
     const result = box.tick('echo-flush');
     expect(result.events).not.toContainEqual({ kind: 'integration-unconfirmed' });
   });
 
   it('реинжект после эскалации без ответа нового шелла — тоже порождает integration-unconfirmed', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box); // firstMarkSeen уже true от исходного подключения
     box.writeCommand('sudo -i');
     box.feed('root@web-01:~# '); // тишина без маркера — взводит реинжект
@@ -331,7 +338,7 @@ describe('ShellIntegrationSession — integration-unconfirmed (страховк�
 
 describe('ShellIntegrationSession.writeCommand — эхо отправленной команды не дублируется', () => {
   it('эхо команды вырезается из следующего чанка вывода', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.writeCommand('echo hi');
     const result = box.feed('echo hi\r\nhi\r\n');
@@ -341,28 +348,28 @@ describe('ShellIntegrationSession.writeCommand — эхо отправленно
 
 describe('ShellIntegrationSession.writeCommand — запуск интерактивной программы (BRD-05)', () => {
   it('известная программа порождает событие interactive-program', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     const result = box.writeCommand('htop');
     expect(result.events).toEqual([{ kind: 'interactive-program', program: 'htop' }]);
   });
 
   it('sudo-префикс и составная команда — тоже детектируются', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     const result = box.writeCommand('cd /var && sudo less log');
     expect(result.events).toEqual([{ kind: 'interactive-program', program: 'less' }]);
   });
 
   it('обычная команда — без события', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     const result = box.writeCommand('ls -la');
     expect(result.events).toEqual([]);
   });
 
   it('до первого маркера (ещё нет firstMarkSeen) — без события', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     const result = box.writeCommand('htop');
     expect(result.events).toEqual([]);
   });
@@ -377,7 +384,7 @@ describe('ShellIntegrationSession — приглашение и escape-ы не �
   };
 
   it('команда с выводом: ровно то, что напечатала команда', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.feed(prompt);
     box.writeCommand('ls');
@@ -386,7 +393,7 @@ describe('ShellIntegrationSession — приглашение и escape-ы не �
   });
 
   it('команда без вывода и набранный ввод (sendRawInput)', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.feed(prompt);
     box.sendRawInput('false\n');
@@ -394,7 +401,7 @@ describe('ShellIntegrationSession — приглашение и escape-ы не �
   });
 
   it('приглашение, разрезанное на два чанка, не дублируется', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.feed(prompt.slice(0, 7));
     box.feed(prompt.slice(7));
@@ -403,7 +410,7 @@ describe('ShellIntegrationSession — приглашение и escape-ы не �
   });
 
   it('ввод раньше приглашения: не падает, приглашение не режется (известный потолок)', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.writeCommand('true');
     box.feed(prompt);
@@ -411,7 +418,7 @@ describe('ShellIntegrationSession — приглашение и escape-ы не �
   });
 
   it('детектор: `false` даёт пустой вывод, а не приглашение (ERR-06)', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.feed(prompt);
     box.writeCommand('false');
@@ -421,7 +428,7 @@ describe('ShellIntegrationSession — приглашение и escape-ы не �
 
   it('детектор: исключение `2>/dev/null` срабатывает на реальном потоке', () => {
     const cmd = 'true 2>/dev/null && false 2>/dev/null';
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.feed(prompt);
     box.writeCommand(cmd);
@@ -430,7 +437,7 @@ describe('ShellIntegrationSession — приглашение и escape-ы не �
   });
 
   it('детектор: excerpt ошибки без escape-ов', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.feed(prompt);
     box.writeCommand('ls /nonexist');
@@ -442,7 +449,7 @@ describe('ShellIntegrationSession — приглашение и escape-ы не �
   });
 
   it('ls --color: в output нет ESC', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.feed(prompt);
     box.writeCommand('ls --color=always');
@@ -451,7 +458,7 @@ describe('ShellIntegrationSession — приглашение и escape-ы не �
   });
 
   it('PEM с SGR-кодами: после зачистки hasBlockSecret его видит', () => {
-    const box = new ShellIntegrationSession();
+    const box = new ShellIntegrationSession(NONCE);
     warmUp(box);
     box.feed(prompt);
     box.writeCommand('cat key.pem');
@@ -459,5 +466,84 @@ describe('ShellIntegrationSession — приглашение и escape-ы не �
       box.feed(`-----\x1b[1mBEGIN OPENSSH PRIVATE KEY-----\r\nabc\r\n-----END OPENSSH PRIVATE KEY-----\r\n${mk('u', 'h', '/', '0', '0')}`)
     );
     expect(hasBlockSecret(out)).toBe(true);
+  });
+});
+
+describe('ShellIntegrationSession — подделанный маркер (тикет 14)', () => {
+  it('настоящий маркер принимается, подделанный вырезан из вывода и ничего не меняет', () => {
+    const box = new ShellIntegrationSession(NONCE);
+    warmUp(box);
+    box.writeCommand('ls');
+    const result = box.feed(`a${forged('/fake', '0', '1')}b${mk('u', 'h', '/srv', '1000', '0')}$ `);
+    expect(result.display).toBe('ab$ ');
+    expect(result.events).toEqual([
+      { kind: 'breadcrumb', crumb: expect.objectContaining({ path: '/srv', privilege: 'normal' }) },
+      expect.objectContaining({ kind: 'command-finished', command: 'ls', exitCode: 0, output: 'ab' })
+    ]);
+  });
+
+  it('подделка во время работы программы: ни breadcrumb, ни завершения команды, busy остаётся', () => {
+    const box = new ShellIntegrationSession(NONCE);
+    warmUp(box);
+    box.writeCommand('cat evil.txt');
+    const result = box.feed(`line\r\n${forged('/fake', '0', '1')}more\r\n`);
+    expect(result.display).toBe('line\r\nmore\r\n');
+    expect(result.events).toEqual([]);
+    expect(box.isBusy()).toBe(true);
+    // настоящий маркер потом получает весь вывод команды, с кодом выхода из него
+    const done = box.feed(mk('u', 'h', '/home/u', '1000', '0'));
+    expect(done.events[1]).toMatchObject({ kind: 'command-finished', exitCode: 0, output: 'line\r\nmore\r\n' });
+  });
+
+  it('подделка не завершает подавление эха настройки', () => {
+    const box = new ShellIntegrationSession(NONCE);
+    box.feed('motd\r\n');
+    box.tick('setup-silence');
+    const result = box.feed(` __lucidssh_mark() { … ${forged('/fake')}`);
+    expect(result.display).toBe('');
+    expect(result.events).toEqual([]);
+  });
+
+  it('подделка не снимает запрос пароля и не отбивает реинжект', () => {
+    const box = new ShellIntegrationSession(NONCE);
+    warmUp(box);
+    box.writeCommand('su -');
+    expect(box.feed('Password: ').events).toEqual([{ kind: 'password-prompt' }]);
+    expect(box.feed(forged('/fake')).events).toEqual([]);
+    // запрос пароля всё ещё активен: ответ уходит сырым, не командой
+    expect(box.writeCommand('secret').toWrite).toBe('secret\n');
+    expect(box.runningCommand()).toBe('su -');
+    // реинжект всё ещё взведён
+    expect(box.tick('reinject').toWrite).toBe(SETUP);
+  });
+
+  it('у каждой сессии свой nonce: маркер одной отвергается другой', () => {
+    const a = new ShellIntegrationSession();
+    const b = new ShellIntegrationSession();
+    const nonceA = nonceOf(a.tick('setup-cap').toWrite);
+    const nonceB = nonceOf(b.tick('setup-cap').toWrite);
+    expect(nonceA).toMatch(/^[0-9a-f]{32}$/);
+    expect(nonceA).not.toBe(nonceB);
+    const markerA = mk('u', 'h', '/a', '1000', '0', '', nonceA);
+    expect(b.feed(markerA).events).toEqual([]);
+    expect(a.feed(markerA).events).toEqual([
+      { kind: 'breadcrumb', crumb: expect.objectContaining({ path: '/a' }) }
+    ]);
+  });
+
+  it('реинжект после su - отправляет настройку с тем же nonce, маркер нового шелла принят', () => {
+    const box = new ShellIntegrationSession();
+    const nonce = nonceOf(box.tick('setup-cap').toWrite);
+    box.feed(mk('u', 'h', '/home/u', '1000', '0', '', nonce));
+    box.writeCommand('su -');
+    box.feed('Password: ');
+    box.sendRawInput('secret\n');
+    box.feed('\r\nroot@h:~# ');
+    expect(nonceOf(box.tick('reinject').toWrite)).toBe(nonce);
+    const result = box.feed(mk('root', 'h', '/root', '0', '0', '', nonce));
+    expect(result.events[0]).toEqual({
+      kind: 'breadcrumb',
+      crumb: expect.objectContaining({ path: '/root', privilege: 'root' })
+    });
   });
 });
